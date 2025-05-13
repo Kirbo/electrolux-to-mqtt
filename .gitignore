@@ -1,4 +1,5 @@
 node_modules
 **/tokens.json
 
+docker-compose.yml
 config.yml

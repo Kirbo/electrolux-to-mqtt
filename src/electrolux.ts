@@ -270,8 +270,7 @@ class ElectroluxClient {
       const timeLeft = this.eat.getTime() - now.getTime()
       const readableTimeLeft = timeLeft / 1000
 
-      // if (timeLeft <= 1000 * 60 * 60 * 1) { // 1 hour
-      if (timeLeft <= 43_100_000) {
+      if (timeLeft <= 1000 * 60 * 60 * 6) { // 6 hour
         logger.info(`Access token is about to expire, time left "${readableTimeLeft}", refreshing tokens...`)
         this.isLoggedIn = false
         await this.refreshTokens()

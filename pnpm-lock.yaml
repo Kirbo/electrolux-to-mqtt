@@ -8,36 +8,37 @@ importers:
 
   .:
     dependencies:
-      '@biomejs/biome':
-        specifier: ^1.9.4
-        version: 1.9.4
-      '@types/node':
-        specifier: ^22.15.17
-        version: 22.15.17
       axios:
-        specifier: ^1.9.0
+        specifier: 1.9.0
         version: 1.9.0
       mqtt:
-        specifier: ^5.13.0
+        specifier: 5.13.0
         version: 5.13.0
       pino:
-        specifier: ^9.6.0
+        specifier: 9.6.0
         version: 9.6.0
       pino-pretty:
-        specifier: ^13.0.0
+        specifier: 13.0.0
         version: 13.0.0
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
       tsx:
-        specifier: ^4.19.4
+        specifier: 4.19.4
         version: 4.19.4
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
       yaml:
-        specifier: ^2.7.1
+        specifier: 2.7.1
         version: 2.7.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@types/node':
+        specifier: 22.15.17
+        version: 22.15.17
+      rimraf:
+        specifier: 6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
 
 packages:
 

@@ -18,15 +18,23 @@
   "license": "MIT",
   "packageManager": "pnpm@10.6.3",
   "dependencies": {
-    "@types/node": "^22.15.17",
-    "@biomejs/biome": "^1.9.4",
-    "rimraf": "^6.0.1",
-    "axios": "^1.9.0",
-    "mqtt": "^5.13.0",
-    "pino": "^9.6.0",
-    "pino-pretty": "^13.0.0",
-    "typescript": "^5.8.3",
-    "tsx": "^4.19.4",
-    "yaml": "^2.7.1"
+    "axios": "1.9.0",
+    "mqtt": "5.13.0",
+    "pino": "9.6.0",
+    "pino-pretty": "13.0.0",
+    "tsx": "4.19.4",
+    "yaml": "2.7.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/node": "22.15.17",
+    "rimraf": "6.0.1",
+    "typescript": "5.8.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild"
+    ]
   }
 }
