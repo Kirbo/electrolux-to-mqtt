@@ -1,0 +1,26 @@
+mqtt:
+  # Unique client ID for the MQTT connection
+  clientId: electrolux-comfort600
+  url: mqtt://192.168.0.1:1883
+  username: mqttUser
+  password: mqttPassword
+  # Prefix for all topics
+  topicPrefix: electrolux_
+  # true = Retain the message, false = Do not retain
+  retain: false
+  # 0 = At most once, 1 = At least once, 2 = Exactly once
+  qos: 2
+
+electrolux:
+  # Get your API key from https://developer.electrolux.com/
+  apiKey: your_api_key_here
+  username: your_email_here
+  password: your_password_here
+  # e.g. FI, SE, NO, DK...
+  countryCode: your_country_code_here
+  # Refresh interval in seconds
+  refreshInterval: 10
+
+homeAssistant:
+  # Automatically discover the device in Home Assistant
+  autoDiscovery: true

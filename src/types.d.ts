@@ -1,0 +1,228 @@
+export type ApplianceStub = {
+  applianceId: string
+  applianceName: string
+  applianceType: string
+  created: string
+}
+
+export type Appliance = {
+  applianceId: string
+  connectionState: 'Connected' | 'Disconnected'
+  status: 'enabled' | 'disabled'
+  properties: {
+    reported: {
+      $version: number
+      ambientTemperatureC: number | null
+      ambientTemperatureF: number | null
+      applianceData: {
+        elc: string
+        mac: string
+        pnc: string
+        sn: string
+      }
+      applianceState: 'on' | 'off'
+      capabilities: Record<string, unknown>
+      compressorCoolingRuntime: number
+      compressorHeatingRuntime: number
+      compressorState: 'on' | 'off'
+      dataModelVersion: string
+      deviceId: string
+      evapDefrostState: 'on' | 'off'
+      fanSpeedSetting: 'low' | 'medium' | 'high' | 'auto'
+      filterRuntime: number
+      filterState: 'clean' | 'dirty'
+      fourWayValveState: 'on' | 'off'
+      hepaFilterLifeTime: number
+      logE: number
+      logW: number
+      mode: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto'
+      networkInterface: {
+        linkQualityIndicator: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR'
+        rssi: number
+      }
+      schedulerMode: 'on' | 'off'
+      schedulerSession: 'on' | 'off'
+      sleepMode: 'on' | 'off'
+      startTime: number
+      stopTime: number
+      targetTemperatureC: number
+      tasks: Record<string, unknown>
+      temperatureRepresentation: 'celsius' | 'fahrenheit'
+      TimeZoneDaylightRule: string
+      TimeZoneStandardName: string
+      totalRuntime: number
+      uiLockMode: boolean
+      upgradeState: 'idle' | 'upgrading'
+      verticalSwing: 'on' | 'off'
+      VmNo_MCU: string
+      VmNo_NIU: string
+    }
+  }
+}
+
+export type SanitizedState = {
+  ambientTemperatureC: number | null
+  ambientTemperatureF: number | null
+  applianceData: {
+    elc: string
+    mac: string
+    pnc: string
+    sn: string
+  }
+  applianceId: string
+  applianceState: 'on' | 'off'
+  capabilities: Record<string, unknown>
+  compressorCoolingRuntime: number
+  compressorHeatingRuntime: number
+  compressorState: 'on' | 'off'
+  connectionState: 'connected' | 'disconnected'
+  dataModelVersion: string
+  deviceId: string
+  evapDefrostState: 'on' | 'off'
+  fanSpeedSetting: 'low' | 'medium' | 'high' | 'auto'
+  filterRuntime: number
+  filterState: 'clean' | 'dirty'
+  fourWayValveState: 'on' | 'off'
+  hepaFilterLifeTime: number
+  logE: number
+  logW: number
+  mode: 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto'
+  networkInterface: {
+    linkQualityIndicator: 'excellent' | 'good' | 'fair' | 'poor'
+    rssi: number
+  }
+  schedulerMode: 'on' | 'off'
+  schedulerSession: 'on' | 'off'
+  sleepMode: 'on' | 'off'
+  startTime: number
+  status: 'enabled' | 'disabled'
+  stopTime: number
+  targetTemperatureC: number
+  tasks: Record<string, unknown>
+  temperatureRepresentation: 'celsius' | 'fahrenheit'
+  TimeZoneDaylightRule: string
+  TimeZoneStandardName: string
+  totalRuntime: number
+  uiLockMode: boolean
+  upgradeState: 'idle' | 'upgrading'
+  verticalSwing: 'on' | 'off'
+  version: number
+  VmNo_MCU: string
+  VmNo_NIU: string
+}
+
+export type ApplianceInfo = {
+  applianceInfo: {
+    serialNumber: string
+    pnc: string
+    brand: string
+    deviceType: string
+    model: string
+    variant: string
+    colour: string
+  }
+  capabilities: {
+    alerts: {
+      access: 'read'
+      type: 'alert'
+      values: Record<string, unknown>
+    }
+    ambientTemperatureC: {
+      access: 'read'
+      step: number
+      type: 'int'
+    }
+    applianceState: {
+      access: 'read'
+      type: 'string'
+      values: Record<string, unknown>
+    }
+    executeCommand: {
+      access: 'readwrite'
+      schedulable: boolean
+      type: 'string'
+      values: Record<string, unknown>
+    }
+    fanSpeedSetting: {
+      access: 'readwrite'
+      schedulable: boolean
+      type: 'string'
+      values: Record<string, unknown>
+    }
+    fanSpeedState: {
+      access: 'read'
+      type: 'string'
+      values: Record<string, unknown>
+    }
+    mode: {
+      access: 'readwrite'
+      schedulable: boolean
+      triggers: Array<{
+        action: Record<string, unknown>
+        condition: {
+          operand_1: string
+          operand_2: string
+          operator: string
+        }
+      }>
+      type: 'string'
+      values: Record<string, unknown>
+    }
+    networkInterface: {
+      linkQualityIndicator: {
+        access: 'read'
+        rssi: {
+          access: 'read'
+          type: 'string'
+        }
+        type: 'string'
+        values: Record<string, unknown>
+      }
+      swVersion: {
+        access: 'read'
+        type: 'string'
+      }
+    }
+    sleepMode: {
+      access: 'readwrite'
+      type: 'string'
+      values: Record<string, unknown>
+    }
+    startTime: {
+      access: 'readwrite'
+      max: number
+      min: number
+      step: number
+      type: 'number'
+      values: Record<string, unknown>
+    }
+    stopTime: {
+      access: 'readwrite'
+      max: number
+      min: number
+      step: number
+      type: 'number'
+      values: Record<string, unknown>
+    }
+    targetTemperatureC: {
+      access: 'readwrite'
+      default: number
+      max: number
+      min: number
+      schedulable: boolean
+      step: number
+      type: 'temperature'
+    }
+    uiLockMode: {
+      access: 'readwrite'
+      type: 'boolean'
+      values: Record<string, unknown>
+    }
+    verticalSwing: {
+      access: 'readwrite'
+      schedulable: boolean
+      type: 'string'
+      values: Record<string, unknown>
+    }
+  }
+}
