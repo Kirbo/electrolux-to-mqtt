@@ -30,6 +30,7 @@ docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbow
 ```bash
 docker pull kirbownz/electrolux-to-mqtt:latest
 docker run --rm \
+  # Mandatory variables \
   -e MQTT_URL=mqtt://192.168.1.1:1883 \
   -e MQTT_USERNAME=mqtt-user \
   -e MQTT_PASSWORD=mqtt-password \
@@ -37,6 +38,14 @@ docker run --rm \
   -e ELECTROLUX_USERNAME=electrolux-user@example.com \
   -e ELECTROLUX_PASSWORD=electrolux-password \
   -e ELECTROLUX_COUNTRY_CODE=FI \
+  # Optional variables \
+  # -e MQTT_TOPIC_PREFIX=electrolux_ \
+  # -e MQTT_CLIENT_ID=electrolux-comfort600 \
+  # -e MQTT_RETAIN=false \
+  # -e MQTT_QOS=2 \
+  # -e ELECTROLUX_REFRESH_INTERVAL=30 \
+  # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
+  # -e LOG_LEVEL=info \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 
@@ -53,37 +62,35 @@ docker compose pull && docker compose up -d
 
 1. Add new Stack
 2. Give it a name, e.g. `electrolux-to-mqtt`
-3. Select `Web editor`, copy the following variables and make changes accordingly:
-    ```bash
-    # docker-compose.yml
-    services:
-      electrolux-to-mqtt:
-        image: kirbownz/electrolux-to-mqtt:latest
-        mem_limit: 128mb
-        memswap_limit: 256mb
-        restart: unless-stopped
-        volumes:
-          - "/etc/localtime:/etc/localtime:ro"
-          - "/etc/timezone:/etc/timezone:ro"
-        environment:
-          - # Mandatory variables
-          - MQTT_URL=mqtt://192.168.1.1:1883
-          - MQTT_USERNAME=mqtt-user
-          - MQTT_PASSWORD=mqtt-password
-          - ELECTROLUX_API_KEY=electrolux-api-key
-          - ELECTROLUX_USERNAME=electrolux-user@example.com
-          - ELECTROLUX_PASSWORD=electrolux-password
-          - ELECTROLUX_COUNTRY_CODE=FI
-          - # Optional variables
-          - MQTT_TOPIC_PREFIX=electrolux_
-          - MQTT_CLIENT_ID=electrolux-comfort600
-          - MQTT_RETAIN=false
-          - MQTT_QOS=2
-          - ELECTROLUX_REFRESH_INTERVAL=30
-          - HOME_ASSISTANT_AUTO_DISCOVERY=true
-          - LOG_LEVEL=info
-    ```
-6. Click `Deploy the stack`
+3. Select `Web editor`, copy the following variables and make changes accordingly, finally press `Deploy the stack`:
+```bash
+services:
+  electrolux-to-mqtt:
+    image: kirbownz/electrolux-to-mqtt:latest
+    mem_limit: 128mb
+    memswap_limit: 256mb
+    restart: unless-stopped
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"
+      - "/etc/timezone:/etc/timezone:ro"
+    environment:
+      - # Mandatory variables
+      - MQTT_URL=mqtt://192.168.1.1:1883
+      - MQTT_USERNAME=mqtt-user
+      - MQTT_PASSWORD=mqtt-password
+      - ELECTROLUX_API_KEY=electrolux-api-key
+      - ELECTROLUX_USERNAME=electrolux-user@example.com
+      - ELECTROLUX_PASSWORD=electrolux-password
+      - ELECTROLUX_COUNTRY_CODE=FI
+      - # Optional variables
+      # - MQTT_TOPIC_PREFIX=electrolux_
+      # - MQTT_CLIENT_ID=electrolux-comfort600
+      # - MQTT_RETAIN=false
+      # - MQTT_QOS=2
+      # - ELECTROLUX_REFRESH_INTERVAL=30
+      # - HOME_ASSISTANT_AUTO_DISCOVERY=true
+      # - LOG_LEVEL=info
+```
 
 ## Developing locally
 

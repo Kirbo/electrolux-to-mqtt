@@ -8,6 +8,7 @@ variables:
   DOCKERHUB_REPOSITORY: kirbownz/electrolux-to-mqtt
   DOCKERHUB_USERNAME: ${CI_REGISTRY_USERNAME}
   DOCKERHUB_PASSWORD: ${CI_REGISTRY_PASSWORD}
+  README_FILEPATH: ${CI_PROJECT_DIR}/README.md
 
 initialise variables:
   stage: init
