@@ -371,11 +371,6 @@ class ElectroluxClient {
         logger.debug('State changed, publishing to MQTT')
         this.states[applianceId] = sanitizedStateStringified
         this.mqtt.publish(`${applianceId}/state`, sanitizedStateStringified)
-        const command = {
-          mode: response.data.properties.reported.mode.toUpperCase(),
-        }
-        logger.debug('Publishing command to MQTT:', command)
-        this.mqtt.publish(`${applianceId}/command`, JSON.stringify(command))
       } else {
         logger.debug('State unchanged, skip publishing to MQTT...')
       }
@@ -403,14 +398,18 @@ class ElectroluxClient {
         command.mode.toLowerCase() === 'off'
           ? { executeCommand: 'OFF' }
           : {
+              executeCommand: 'ON',
               ...command,
             }
 
+      logger.debug('Sending command to appliance:', applianceId, 'Command:', payload)
+
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
-      logger.debug('Command status', response.status)
+      logger.debug('Command response', response.status, response.data)
       const state = await this.getApplianceState(applianceId)
       const mappedPayload = {
         ...payload,
+        applianceState: payload.executeCommand.toLowerCase(),
         mode: this.utils.mapModes[command.mode.toUpperCase() as keyof typeof this.utils.mapModes],
       }
 
