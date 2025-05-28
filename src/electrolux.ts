@@ -355,7 +355,10 @@ class ElectroluxClient {
     }
   }
 
-  public async getApplianceState(applianceId: string, callback?: (state: SanitizedState) => void) {
+  public async getApplianceState(
+    applianceId: string,
+    callback?: (state: SanitizedState) => void,
+  ): Promise<Appliance | undefined> {
     const cacheKey = cache.cacheKey(applianceId).state
 
     try {
@@ -365,7 +368,7 @@ class ElectroluxClient {
       const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
 
       if (cache.matchByValue(cacheKey, response.data)) {
-        return
+        return cache.get(cacheKey) as Appliance
       }
 
       const sanitizedState = this.sanitizeStateToMqtt(response.data)
@@ -395,7 +398,7 @@ class ElectroluxClient {
       }
 
       const payload =
-        command.mode.toLowerCase() === 'off'
+        command?.mode?.toLowerCase() === 'off'
           ? { executeCommand: 'OFF' }
           : {
               executeCommand: 'ON',
@@ -412,21 +415,25 @@ class ElectroluxClient {
         return
       }
 
-      const sanitizedState = {
-        ...this.sanitizeStateToMqtt(state),
+      const sanitizedState = this.sanitizeStateToMqtt(state)
+
+      const combinedState = {
+        ...sanitizedState,
         ...payload,
         applianceState: payload.executeCommand.toLowerCase(),
-        mode: this.utils.mapModes[command.mode.toUpperCase() as keyof typeof this.utils.mapModes],
+        mode: this.utils.mapModes[
+          (command?.mode ?? sanitizedState.mode)?.toUpperCase() as keyof typeof this.utils.mapModes
+        ],
       }
 
-      if (cache.matchByValue(cacheKey, sanitizedState)) {
+      if (cache.matchByValue(cacheKey, combinedState)) {
         return
       }
 
-      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(sanitizedState))
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
       return response.data
     } catch (error) {
-      logger.error('Error sending command:', error)
+      logger.error('Error sending command:', command, error)
     }
   }
 }
