@@ -1,6 +1,11 @@
 # Electrolux Comfort 600 to MQTT
 
-Source codes can be found in [https://gitlab.com/kirbo/electrolux-to-mqtt](https://gitlab.com/kirbo/electrolux-to-mqtt).
+- [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
+- [Issues](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues) are in GitLab
+- [Pull/Merge Requests](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests) are in GitLab
+- [Dockerhub](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt)
+- [GitHub mirror](https://github.com/Kirbo/electrolux-to-mqtt)
+
 
 ## How to install
 
