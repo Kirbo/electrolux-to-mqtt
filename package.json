@@ -11,7 +11,7 @@
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
-    "start": "pnpm dev"
+    "start": "tsx src/index.ts"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
