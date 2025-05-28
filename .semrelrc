@@ -1,0 +1,19 @@
+{
+  "plugins": {
+    "commit-analyzer": {
+      "name": "default"
+    },
+    "ci-condition": {
+      "name": "default"
+    },
+    "changelog-generator": {
+      "name": "default"
+    },
+    "provider": {
+      "name": "gitlab",
+      "options": {
+        "gitlab_projectid": "69776314"
+      }
+    }
+  }
+}

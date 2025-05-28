@@ -35,7 +35,7 @@ export type Appliance = {
       hepaFilterLifeTime: number
       logE: number
       logW: number
-      mode: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto'
+      mode: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto' | 'off'
       networkInterface: {
         linkQualityIndicator: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR'
         rssi: number
@@ -86,7 +86,7 @@ export type SanitizedState = {
   hepaFilterLifeTime: number
   logE: number
   logW: number
-  mode: 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto'
+  mode: 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto' | 'off'
   networkInterface: {
     linkQualityIndicator: 'excellent' | 'good' | 'fair' | 'poor'
     rssi: number

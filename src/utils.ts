@@ -19,6 +19,7 @@ export const initializeHelpers = (mqtt: Mqtt) => {
     HIGH: 'high',
     MIDDLE: 'medium',
     LOW: 'low',
+    OFF: 'off',
   }
 
   const mapSwingModes = {

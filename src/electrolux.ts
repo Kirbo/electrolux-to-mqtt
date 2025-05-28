@@ -270,7 +270,8 @@ class ElectroluxClient {
       const timeLeft = this.eat.getTime() - now.getTime()
       const readableTimeLeft = timeLeft / 1000
 
-      if (timeLeft <= 1000 * 60 * 60 * 6) { // 6 hour
+      // 6 hour
+      if (timeLeft <= 1000 * 60 * 60 * 6) {
         logger.info(`Access token is about to expire, time left "${readableTimeLeft}", refreshing tokens...`)
         this.isLoggedIn = false
         await this.refreshTokens()
@@ -398,16 +399,19 @@ class ElectroluxClient {
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
-      const payload = {
-        ...command,
-      }
+      const payload =
+        command.mode.toLowerCase() === 'off'
+          ? { executeCommand: 'OFF' }
+          : {
+              ...command,
+            }
 
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command status', response.status)
       const state = await this.getApplianceState(applianceId)
       const mappedPayload = {
         ...payload,
-        mode: this.utils.mapModes[payload.mode.toUpperCase() as keyof typeof this.utils.mapModes],
+        mode: this.utils.mapModes[command.mode.toUpperCase() as keyof typeof this.utils.mapModes],
       }
 
       this.mqtt.publish(

@@ -7,7 +7,7 @@
   "scripts": {
     "check": "pnpm biome check --write",
     "clean": "rimraf node_modules",
-    "dev": "tsx watch src/index.ts",
+    "dev": "nodemon --watch src --ext ts --exec tsx src/index.ts",
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
@@ -28,6 +28,7 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@types/node": "22.15.17",
+    "nodemon": "3.1.10",
     "rimraf": "6.0.1",
     "typescript": "5.8.3"
   },

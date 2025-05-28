@@ -1,10 +1,5 @@
 # Electrolux Comfort 600 to MQTT
 
-‼️ Still under development ‼️
-
-For some reason the Electrolux API does not let you turn off the Air Conditioner, or at least it isn't working for my AC.
-Other than that, everything should be working.
-
 Source codes can be found in [https://gitlab.com/kirbo/electrolux-to-mqtt](https://gitlab.com/kirbo/electrolux-to-mqtt).
 
 ## How to install
