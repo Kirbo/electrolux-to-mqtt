@@ -78,7 +78,6 @@ const main = async () => {
     mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
       logger.info('Received command on topic:', topic, 'Message:', message.toString())
       const command = JSON.parse(message.toString())
-      logger.info('Command:', command)
       client.sendApplianceCommand(applianceId, command)
     })
   }
