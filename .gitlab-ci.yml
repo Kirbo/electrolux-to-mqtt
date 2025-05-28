@@ -31,8 +31,6 @@ initialise variables:
     reports:
       dotenv: variables.env
   script:
-    - echo "CI_PIPELINE_SOURCE = '${CI_PIPELINE_SOURCE}'"
-    - echo "CI_COMMIT_TAG = '${CI_COMMIT_TAG}'"
     - touch variables.env
     - echo "NODE_VERSION=$(cat .nvmrc)-alpine" >> variables.env
 
