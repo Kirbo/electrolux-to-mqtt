@@ -50,6 +50,11 @@ const main = async () => {
 
     let applianceDiscoveryCallback = undefined
     if (config.homeAssistant.autoDiscovery) {
+      mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscovery(appliance, applianceInfo)), {
+        retain: true,
+        qos: 2,
+      })
+
       applianceDiscoveryCallback = (state: SanitizedState) => {
         const cacheKey = cache.cacheKey(applianceId).autoDiscovery
         const autoDiscoveryConfig = autoDiscovery(appliance, applianceInfo, state)
@@ -65,7 +70,9 @@ const main = async () => {
         })
       }
     } else {
-      logger.info('Example config:', exampleConfig(appliance, applianceInfo))
+      await client.getApplianceState(applianceId, (state) => {
+        logger.info('Example config:', exampleConfig(appliance, applianceInfo, state))
+      })
     }
 
     setTimeout(async () => {

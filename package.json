@@ -19,6 +19,7 @@
   "packageManager": "pnpm@10.6.3",
   "dependencies": {
     "axios": "1.9.0",
+    "js-yaml": "4.1.0",
     "mqtt": "5.13.0",
     "pino": "9.6.0",
     "pino-pretty": "13.0.0",
@@ -28,11 +29,15 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "22.15.17",
     "rimraf": "6.0.1",
     "typescript": "5.8.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild"
+    ]
   }
 }

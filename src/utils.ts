@@ -1,6 +1,8 @@
-import Mqtt from './mqtt'
-import { ApplianceStub, ApplianceInfo, SanitizedState } from './types'
+import yaml from 'js-yaml'
+
 import createLogger from './logger'
+import Mqtt from './mqtt'
+import { ApplianceInfo, ApplianceStub, SanitizedState } from './types'
 
 const logger = createLogger('helpers')
 
@@ -27,65 +29,19 @@ export const initializeHelpers = (mqtt: Mqtt) => {
     OFF: 'off',
   }
 
-  const exampleConfig = (stub: ApplianceStub, info: ApplianceInfo) => {
-    const { applianceId } = stub
-
+  const exampleConfig = (stub: ApplianceStub, info: ApplianceInfo, state: SanitizedState) => {
+    // Dump the object as YAML, but remove the leading "- " from the first property
+    const discoveryObj = autoDiscovery(stub, info, state)
+    // Dump as YAML array, then fix the first line to be "- name: ''" instead of "-\n  name: ''"
+    let discoveryYaml = yaml.dump([discoveryObj], { indent: 4, lineWidth: 200 })
+    // Replace "-\n  name:" with "- name:" only at the start
+    discoveryYaml = discoveryYaml.replace(/^- *\n +name:/m, '- name:')
     return `
 climate:
-  - name: ${stub.applianceName}
-    device:
-      identifiers:
-        - '${applianceId}'
-      manufacturer: '${info.applianceInfo.brand}'
-      model: '${info.applianceInfo.model}'
-      name: '${info.applianceInfo.model}'
-
-    availability_topic: '${mqtt.topicPrefix}/${applianceId}/state'
-    availability_template: '{{ value_json.connectionState }}'
-    payload_available: 'connected'
-    payload_not_available: 'disconnected'
-
-    json_attributes_topic: '${mqtt.topicPrefix}/${applianceId}/state'
-
-    modes:
-      ${Object.values(info.capabilities.verticalSwing.values)
-        .map((mode) => `- "${mapModes[mode as keyof typeof mapModes]}"`)
-        .join('\n      ')}
-    mode_command_topic: "${mqtt.topicPrefix}/${applianceId}/command"
-    mode_command_template: '{ "mode":  "{{ "FANONLY" if value == "fan_only" else value | upper }}" }'
-    mode_state_topic: '${mqtt.topicPrefix}/${applianceId}/state'
-    mode_state_template: '{{ "off" if value_json.applianceState == "off" else ("FANONLY" if value_json.mode == "fan_only" else value_json.mode) | lower }}'
-
-    precision: 1.0
-    temperature_unit: 'C'
-    initial: ${info.capabilities.targetTemperatureC.default}
-    min_temp: ${info.capabilities.targetTemperatureC.min}
-    max_temp: ${info.capabilities.targetTemperatureC.max}
-    current_temperature_topic: '${mqtt.topicPrefix}/${applianceId}/state'
-    current_temperature_template: '{{ value_json.ambientTemperatureC }}'
-    temperature_command_topic: '${mqtt.topicPrefix}/${applianceId}/command'
-    temperature_command_template: '{ "targetTemperatureC":  {{ value }} }'
-
-    swing_modes:
-      ${Object.values(info.capabilities.fanSpeedSetting.values)
-        .map((mode) => `- "${mapSwingModes[mode as keyof typeof mapSwingModes]}"`)
-        .join('\n      ')}
-    swing_mode_command_topic: '${mqtt.topicPrefix}/${applianceId}/command'
-    swing_mode_command_template: '{ "verticalSwing":  "{{ value | upper }}" }'
-    swing_mode_state_topic: '${mqtt.topicPrefix}/${applianceId}/state'
-    swing_mode_state_template: '{{ value_json.verticalSwing }}'
-    fan_modes:
-      ${Object.values(info.capabilities.fanSpeedSetting.values)
-        .map((mode) => `- "${mapFanModes[mode as keyof typeof mapFanModes]}"`)
-        .join('\n      ')}
-    fan_mode_command_topic: '${mqtt.topicPrefix}/${applianceId}/command'
-    fan_mode_command_template: '{ "fanSpeedSetting":  "{{ "middle" if value =="medium" else value | upper }}" }'
-    fan_mode_state_topic: '${mqtt.topicPrefix}/${applianceId}/state'
-    fan_mode_state_template: '{{ value_json.fanSpeedSetting }}'
-`
+  ${discoveryYaml}`
   }
 
-  const autoDiscovery = (stub: ApplianceStub, info: ApplianceInfo, state: SanitizedState) => {
+  const autoDiscovery = (stub: ApplianceStub, info: ApplianceInfo, state?: SanitizedState) => {
     const { applianceId } = stub
 
     if (info.applianceInfo.deviceType !== 'PORTABLE_AIR_CONDITIONER') {
@@ -93,7 +49,8 @@ climate:
     }
 
     return {
-      name: stub.applianceName,
+      name: '',
+      object_id: `${info.applianceInfo.brand}_${info.applianceInfo.model}_${info.applianceInfo.serialNumber}`,
       uniq_id: `${info.applianceInfo.brand}_${info.applianceInfo.model}_${stub.applianceId}`,
       device: {
         identifiers: [stub.applianceId],
@@ -119,7 +76,7 @@ climate:
 
       precision: 1.0,
       temperature_unit: 'C',
-      initial: state.targetTemperatureC,
+      initial: state?.targetTemperatureC ?? info.capabilities.targetTemperatureC.default,
       min_temp: info.capabilities.targetTemperatureC.min,
       max_temp: info.capabilities.targetTemperatureC.max,
       current_temperature_topic: `${mqtt.topicPrefix}/${applianceId}/state`,
@@ -131,8 +88,7 @@ climate:
         .map((mode) => mapFanModes[mode as keyof typeof mapFanModes])
         .sort((a, b) => Object.values(mapFanModes).indexOf(a) - Object.values(mapFanModes).indexOf(b)),
       fan_mode_state_topic: `${mqtt.topicPrefix}/${applianceId}/state`,
-      fan_mode_state_template:
-        '{{ value_json.fanSpeedSetting if value_json.fanSpeedSetting != "middle" else "medium" }}',
+      fan_mode_state_template: `{{ value_json.fanSpeedSetting if value_json.fanSpeedSetting != "middle" else "medium" }}`,
       fan_mode_command_topic: `${mqtt.topicPrefix}/${applianceId}/command`,
       fan_mode_command_template: `{ "fanSpeedSetting": "{{ 'middle' if value == 'medium' else value | upper }}" }`,
 
