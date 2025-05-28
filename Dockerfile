@@ -7,7 +7,7 @@
 # Define build arguments
 ARG LOG_LEVEL=info
 ARG NODE_VERSION=22-alpine
-ARG APP_VERSION
+ARG APP_VERSION=development
 
 # Use the specified Node.js version
 FROM node:${NODE_VERSION}
@@ -23,6 +23,9 @@ COPY . /app
 
 # Add an entrypoint script to handle config.yml generation
 RUN chmod +x /app/entrypoint.sh
+
+# Update application version in package.json
+RUN sed -i 's/"version": "development",/"version": "'${APP_VERSION}'",/' /app/package.json
 
 # Install dependencies
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
