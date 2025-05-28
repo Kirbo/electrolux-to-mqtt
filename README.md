@@ -1,8 +1,14 @@
-# Electrolux Comfort 600 to MQTT
+# Electrolux Comfort 600 to MQTT / Home Assistant
 
+[![CI/CD Pipeline Status](https://gitlab.com/kirbo/electrolux-to-mqtt/badges/main/pipeline.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/pipelines)
+[![Latest Release](https://gitlab.com/kirbo/electrolux-to-mqtt/-/badges/release.svg?order_by=release_at)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases)
+
+Relevant links:
 - [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
 - [Issues](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues) are in GitLab
 - [Pull/Merge Requests](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests) are in GitLab
+- [Releases](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases) containing the Release Notes are in GitLab
+- [CI/CD Pipeline](https://gitlab.com/kirbo/electrolux-to-mqtt/-/pipelines) is in GitLab
 - [Dockerhub](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt)
 - [GitHub mirror](https://github.com/Kirbo/electrolux-to-mqtt)
 
