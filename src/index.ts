@@ -1,11 +1,12 @@
+import { cache } from './cache'
+import config from './config'
 import ElectroluxClient from './electrolux'
 import createLogger from './logger'
 import Mqtt from './mqtt'
-import { initializeHelpers } from './utils'
-import config from './config'
 import { SanitizedState } from './types'
+import { initializeHelpers } from './utils'
 
-const logger = createLogger('main')
+const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
 const { exampleConfig, autoDiscovery } = initializeHelpers(mqtt)
@@ -44,8 +45,15 @@ const main = async () => {
     let applianceDiscoveryCallback = undefined
     if (config.homeAssistant.autoDiscovery) {
       applianceDiscoveryCallback = (state: SanitizedState) => {
+        const cacheKey = cache.cacheKey(applianceId).autoDiscovery
+        const autoDiscoveryConfig = autoDiscovery(appliance, applianceInfo, state)
+
+        if (cache.matchByValue(cacheKey, autoDiscoveryConfig)) {
+          return
+        }
+
         logger.info('Publishing auto-discovery config for appliance:', applianceId)
-        mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscovery(appliance, applianceInfo, state)), {
+        mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscoveryConfig), {
           retain: true,
           qos: 2,
         })

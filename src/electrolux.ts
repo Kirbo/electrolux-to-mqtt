@@ -1,10 +1,11 @@
-import axios, { AxiosInstance } from 'axios'
-import config, { Tokens } from './config'
 import fs from 'node:fs'
 import path from 'node:path'
+import axios, { AxiosInstance } from 'axios'
+import { cache } from './cache'
+import config, { Tokens } from './config'
 import createLogger from './logger'
-import { Appliance, ApplianceInfo, ApplianceStub, SanitizedState } from './types'
 import iMqtt from './mqtt'
+import { Appliance, ApplianceInfo, ApplianceStub, SanitizedState } from './types'
 import { initializeHelpers } from './utils'
 
 const logger = createLogger('electrolux')
@@ -19,8 +20,6 @@ class ElectroluxClient {
   private iat: Date | undefined = config.electrolux.iat
   private mqtt: iMqtt
   private utils
-
-  private states: Record<string, string> = {}
 
   public isLoggingIn = false
   public isLoggedIn = false
@@ -357,23 +356,21 @@ class ElectroluxClient {
   }
 
   public async getApplianceState(applianceId: string, callback?: (state: SanitizedState) => void) {
+    const cacheKey = cache.cacheKey(applianceId).state
+
     try {
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
       const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
-      logger.debug('Appliance state:', response.data)
+
+      if (cache.matchByValue(cacheKey, response.data)) {
+        return
+      }
 
       const sanitizedState = this.sanitizeStateToMqtt(response.data)
-      const sanitizedStateStringified = JSON.stringify(sanitizedState)
-
-      if (sanitizedStateStringified !== this.states[applianceId]) {
-        logger.debug('State changed, publishing to MQTT')
-        this.states[applianceId] = sanitizedStateStringified
-        this.mqtt.publish(`${applianceId}/state`, sanitizedStateStringified)
-      } else {
-        logger.debug('State unchanged, skip publishing to MQTT...')
-      }
+      logger.debug('State changed, publishing to MQTT', response.data)
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(sanitizedState))
 
       if (callback) {
         callback(sanitizedState)
@@ -390,10 +387,13 @@ class ElectroluxClient {
   }
 
   public async sendApplianceCommand(applianceId: string, command: SanitizedState) {
+    const cacheKey = cache.cacheKey(applianceId).state
+
     try {
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
+
       const payload =
         command.mode.toLowerCase() === 'off'
           ? { executeCommand: 'OFF' }
@@ -407,16 +407,23 @@ class ElectroluxClient {
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)
       const state = await this.getApplianceState(applianceId)
-      const mappedPayload = {
+      if (!state) {
+        logger.error('Failed to get appliance state after sending command')
+        return
+      }
+
+      const sanitizedState = {
+        ...this.sanitizeStateToMqtt(state),
         ...payload,
         applianceState: payload.executeCommand.toLowerCase(),
         mode: this.utils.mapModes[command.mode.toUpperCase() as keyof typeof this.utils.mapModes],
       }
 
-      this.mqtt.publish(
-        `${applianceId}/state`,
-        JSON.stringify({ ...this.sanitizeStateToMqtt(state), ...mappedPayload }),
-      )
+      if (cache.matchByValue(cacheKey, sanitizedState)) {
+        return
+      }
+
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(sanitizedState))
       return response.data
     } catch (error) {
       logger.error('Error sending command:', error)
