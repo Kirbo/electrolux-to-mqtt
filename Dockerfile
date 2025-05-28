@@ -5,12 +5,14 @@
 # docker buildx build --platform linux/arm64,linux/amd64 -t kirbownz/electrolux-to-mqtt:latest -t kirbownz/electrolux-to-mqtt:$(git describe --tags --always) --push .
 
 # Define build arguments
-ARG LOG_LEVEL=info
 ARG NODE_VERSION=22-alpine
-ARG APP_VERSION=development
 
 # Use the specified Node.js version
 FROM node:${NODE_VERSION}
+
+# Define build arguments
+ARG LOG_LEVEL=info
+ARG VERSION=development
 
 # Install required packages
 RUN apk add --no-cache bash
@@ -25,7 +27,9 @@ COPY . /app
 RUN chmod +x /app/entrypoint.sh
 
 # Update application version in package.json
-RUN sed -i 's/"version": "development",/"version": "'${APP_VERSION}'",/' /app/package.json
+RUN if [ -n "${VERSION}" ]; then \
+  sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json; \
+  fi
 
 # Install dependencies
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
@@ -39,7 +43,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
 
 # Set environment variables
 ENV LOG_LEVEL=${LOG_LEVEL:-info}
-ENV APP_VERSION=${APP_VERSION}
+ENV VERSION=${VERSION:-docker}
 
 # Run entrypoint script to generate config.yml
 ENTRYPOINT ["/app/entrypoint.sh"]

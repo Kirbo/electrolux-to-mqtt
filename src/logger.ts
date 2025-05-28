@@ -1,7 +1,7 @@
 import pino from 'pino'
 import { version as packageVersion } from '../package.json'
 
-const appVersion = process.env.APP_VERSION ?? packageVersion
+const appVersion = process.env.VERSION ?? packageVersion
 
 const baseLogger = pino({
   level: process.env.LOG_LEVEL || 'info',
