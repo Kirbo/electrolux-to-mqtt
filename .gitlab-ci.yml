@@ -121,8 +121,15 @@ build and deploy docker images:
   script:
     - source build.env
     - docker buildx create --use
-    # - docker buildx build --build-arg NODE_VERSION=${NODE_VERSION} --push --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6 -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest .
-    - docker buildx build --build-arg NODE_VERSION=${NODE_VERSION} --push --platform linux/amd64,linux/arm64 -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest .
+    - >
+      docker buildx build
+        --build-arg NODE_VERSION=${NODE_VERSION}
+        --build-arg APP_VERSION=${VERSION}
+        --push
+        --platform linux/amd64,linux/arm64
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION}
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest
+        .
 
 update dockerhub description:
   stage: docs
@@ -137,4 +144,3 @@ update dockerhub description:
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
   script:
     - "--pipeline"
-

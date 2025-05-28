@@ -7,6 +7,7 @@
 # Define build arguments
 ARG LOG_LEVEL=info
 ARG NODE_VERSION=22-alpine
+ARG APP_VERSION
 
 # Use the specified Node.js version
 FROM node:${NODE_VERSION}
@@ -29,12 +30,13 @@ RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
   PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2) && \
   echo "Using package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
   if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then \
-    npm install -g ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}; \
+  npm install -g ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}; \
   fi && \
   ${PACKAGE_MANAGER_NAME} install --prod --config.scripts-prepend-node-path=true
 
 # Set environment variables
 ENV LOG_LEVEL=${LOG_LEVEL:-info}
+ENV APP_VERSION=${APP_VERSION}
 
 # Run entrypoint script to generate config.yml
 ENTRYPOINT ["/app/entrypoint.sh"]

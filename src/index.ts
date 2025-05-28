@@ -1,3 +1,4 @@
+import { version as packageVersion } from '../package.json'
 import { cache } from './cache'
 import config from './config'
 import ElectroluxClient from './electrolux'
@@ -6,6 +7,7 @@ import Mqtt from './mqtt'
 import { SanitizedState } from './types'
 import { initializeHelpers } from './utils'
 
+const appVersion = process.env.APP_VERSION ?? packageVersion
 const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
@@ -14,6 +16,10 @@ const { exampleConfig, autoDiscovery } = initializeHelpers(mqtt)
 const refreshInterval = (client.refreshInterval ?? 60) * 1000
 
 const main = async () => {
+  logger.info(
+    `Starting Electrolux to MQTT version: "${appVersion}", with refresh interval: ${refreshInterval / 1000} seconds`,
+  )
+
   while (!client.isLoggedIn) {
     if (!client.isLoggingIn) {
       try {

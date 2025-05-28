@@ -20,9 +20,25 @@ const client = mqtt.connect(config.mqtt.url, {
   clean: true,
 })
 
-client.on('connect', () => {
-  logger.info(`Connected to MQTT broker: ${config.mqtt.url}`)
-})
+client
+  .on('connect', () => {
+    logger.info(`Connected to MQTT broker: ${config.mqtt.url}`)
+  })
+  .on('error', (error) => {
+    logger.error('MQTT connection error:', error)
+  })
+  .on('reconnect', () => {
+    logger.info('Reconnecting to MQTT broker...')
+  })
+  .on('close', () => {
+    logger.info('MQTT connection closed')
+  })
+  .on('offline', () => {
+    logger.warn('MQTT client is offline')
+  })
+  .on('end', () => {
+    logger.info('MQTT client has ended')
+  })
 
 export interface iMqtt {
   client: mqtt.MqttClient
@@ -59,7 +75,6 @@ class Mqtt {
       }
     })
   }
-
 
   public resolveApplianceTopic(applianceId: string) {
     return `${this.topicPrefix}/${applianceId}`
