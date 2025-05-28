@@ -3,7 +3,3 @@ node_modules
 
 docker-compose.yml
 config.yml
-semantic-release
-CHANGELOG
-.version-unreleased
-.semrel
