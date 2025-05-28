@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "eamodio.gitlens",
+    "editorconfig.editorconfig",
+    "ezforo.copy-relative-path-and-line-numbers",
+    "foxundermoon.shell-format",
+    "gitlab.gitlab-workflow",
+    "mikestead.dotenv",
+    "sonarsource.sonarlint-vscode",
+    "shakram02.bash-beautify",
+    "timonwong.shellcheck"
+  ]
+}
