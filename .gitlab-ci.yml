@@ -34,8 +34,8 @@ initialise variables:
     - touch variables.env
     - echo "NODE_VERSION=$(cat .nvmrc)-alpine" >> variables.env
 
-create gitlab release:
-  stage: release
+bump version:
+  stage: init
   image:
     name: registry.gitlab.com/go-semantic-release/semantic-release:latest
     entrypoint: [""]
@@ -55,13 +55,41 @@ create gitlab release:
   cache: []
   artifacts:
     paths:
+      - .version-unreleased
       - build.env
       - CHANGELOG
     expire_in: never
   script:
-    - semantic-release --version-file --allow-no-changes --changelog CHANGELOG --show-progress
+    - semantic-release --version-file --allow-no-changes --changelog CHANGELOG --dry
     - export VERSION=$(cat .version-unreleased)
     - echo "VERSION=${VERSION}" > build.env
+
+create gitlab release:
+  stage: release
+  image:
+    name: registry.gitlab.com/go-semantic-release/semantic-release:latest
+    entrypoint: [""]
+  interruptible: true
+  rules:
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+      changes:
+        - .gitlab-ci.yml
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - docker-compose*.yml
+        - Dockerfile
+        - entrypoint.sh
+      when: always
+    - when: never
+  cache: []
+  needs:
+    - job: initialise variables
+      artifacts: false
+    - job: bump version
+      artifacts: true
+  script:
+    - semantic-release
 
 build and deploy docker images:
   stage: release
@@ -83,7 +111,7 @@ build and deploy docker images:
   needs:
     - job: initialise variables
       artifacts: true
-    - job: create gitlab release
+    - job: bump version
       artifacts: true
   services:
     - docker:dind
