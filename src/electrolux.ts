@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { Buffer } from 'buffer'
 import axios, { AxiosInstance } from 'axios'
 import { cache } from './cache'
 import config, { Tokens } from './config'
@@ -314,11 +315,15 @@ class ElectroluxClient {
         iat: this.iat.getTime() / 1000,
       }
 
-      logger.debug('Refreshed tokens', this.retainTokensForOutput(tokens))
+      logger.info('Refreshed tokens', this.retainTokensForOutput(tokens))
 
       const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
       fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
       logger.debug('Tokens saved to', filePath)
+
+      // Recreate API client with new access token
+      await this.createApiClient()
+
       this.isLoggingIn = false
       this.isLoggedIn = true
     } catch (error) {
