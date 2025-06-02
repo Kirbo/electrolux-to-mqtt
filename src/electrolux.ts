@@ -197,6 +197,8 @@ class ElectroluxClient {
 
   private sanitizeStateToMqtt = (rawState: Appliance) => {
     const mode = rawState.properties.reported.mode.toLowerCase()
+    const fanSpeedSetting = rawState.properties.reported.fanSpeedSetting?.toLowerCase();
+    const applianceData = rawState.properties.reported.applianceData
 
     const state = {
       applianceId: rawState.applianceId,
@@ -205,16 +207,18 @@ class ElectroluxClient {
       mode: (mode === 'fanonly' ? 'fan_only' : mode) as 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto',
       ambientTemperatureC: rawState.properties.reported.ambientTemperatureC,
       targetTemperatureC: rawState.properties.reported.targetTemperatureC,
-      fanSpeedSetting: rawState.properties.reported.fanSpeedSetting,
+      fanSpeedSetting: (fanSpeedSetting === 'middle' ? 'medium' : fanSpeedSetting) as 'low' | 'medium' | 'high' | 'auto',
       verticalSwing: rawState.properties.reported.verticalSwing,
 
       ambientTemperatureF: rawState.properties.reported.ambientTemperatureF,
-      applianceData: {
-        elc: rawState.properties.reported.applianceData.elc,
-        mac: rawState.properties.reported.applianceData.mac,
-        pnc: rawState.properties.reported.applianceData.pnc,
-        sn: rawState.properties.reported.applianceData.sn,
-      },
+      applianceData: applianceData
+        ? {
+            elc: applianceData.elc,
+            mac: applianceData.mac,
+            pnc: applianceData.pnc,
+            sn: applianceData.sn,
+          }
+        : null,
       capabilities: rawState.properties.reported.capabilities,
       compressorCoolingRuntime: rawState.properties.reported.compressorCoolingRuntime,
       compressorHeatingRuntime: rawState.properties.reported.compressorHeatingRuntime,
@@ -222,10 +226,10 @@ class ElectroluxClient {
       connectionState: rawState.connectionState.toLowerCase() as 'connected' | 'disconnected',
       dataModelVersion: rawState.properties.reported.dataModelVersion,
       deviceId: rawState.properties.reported.deviceId,
-      evapDefrostState: rawState.properties.reported.evapDefrostState.toLowerCase() as 'on' | 'off',
+      evapDefrostState: rawState.properties.reported.evapDefrostState?.toLowerCase() as 'on' | 'off' | null,
       filterRuntime: rawState.properties.reported.filterRuntime,
       filterState: rawState.properties.reported.filterState.toLowerCase() as 'clean' | 'dirty',
-      fourWayValveState: rawState.properties.reported.fourWayValveState.toLowerCase() as 'on' | 'off',
+      fourWayValveState: rawState.properties.reported.fourWayValveState?.toLowerCase() as 'on' | 'off' | null,
       hepaFilterLifeTime: rawState.properties.reported.hepaFilterLifeTime,
       logE: rawState.properties.reported.logE,
       logW: rawState.properties.reported.logW,
@@ -237,8 +241,8 @@ class ElectroluxClient {
           | 'poor',
         rssi: rawState.properties.reported.networkInterface.rssi,
       },
-      schedulerMode: rawState.properties.reported.schedulerMode.toLowerCase() as 'on' | 'off',
-      schedulerSession: rawState.properties.reported.schedulerSession.toLowerCase() as 'on' | 'off',
+      schedulerMode: rawState.properties.reported.schedulerMode?.toLowerCase() as 'on' | 'off' | null,
+      schedulerSession: rawState.properties.reported.schedulerSession?.toLowerCase() as 'on' | 'off' | null,
       sleepMode: rawState.properties.reported.sleepMode.toLowerCase() as 'on' | 'off',
       startTime: rawState.properties.reported.startTime,
       stopTime: rawState.properties.reported.stopTime,
@@ -250,7 +254,7 @@ class ElectroluxClient {
       TimeZoneStandardName: rawState.properties.reported.TimeZoneStandardName,
       totalRuntime: rawState.properties.reported.totalRuntime,
       uiLockMode: rawState.properties.reported.uiLockMode,
-      upgradeState: rawState.properties.reported.upgradeState.toLowerCase() as 'idle' | 'upgrading',
+      upgradeState: rawState.properties.reported.upgradeState?.toLowerCase() as 'idle' | 'upgrading' | null,
       version: rawState.properties.reported.$version,
       VmNo_MCU: rawState.properties.reported.VmNo_MCU,
       VmNo_NIU: rawState.properties.reported.VmNo_NIU,
