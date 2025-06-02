@@ -1,6 +1,6 @@
+import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Buffer } from 'buffer'
 import axios, { AxiosInstance } from 'axios'
 import { cache } from './cache'
 import config, { Tokens } from './config'
@@ -197,7 +197,7 @@ class ElectroluxClient {
 
   private sanitizeStateToMqtt = (rawState: Appliance) => {
     const mode = rawState.properties.reported.mode.toLowerCase()
-    const fanSpeedSetting = rawState.properties.reported.fanSpeedSetting?.toLowerCase();
+    const fanSpeedSetting = rawState.properties.reported.fanSpeedSetting?.toLowerCase()
     const applianceData = rawState.properties.reported.applianceData
 
     const state = {
@@ -207,7 +207,11 @@ class ElectroluxClient {
       mode: (mode === 'fanonly' ? 'fan_only' : mode) as 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto',
       ambientTemperatureC: rawState.properties.reported.ambientTemperatureC,
       targetTemperatureC: rawState.properties.reported.targetTemperatureC,
-      fanSpeedSetting: (fanSpeedSetting === 'middle' ? 'medium' : fanSpeedSetting) as 'low' | 'medium' | 'high' | 'auto',
+      fanSpeedSetting: (fanSpeedSetting === 'middle' ? 'medium' : fanSpeedSetting) as
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'auto',
       verticalSwing: rawState.properties.reported.verticalSwing,
 
       ambientTemperatureF: rawState.properties.reported.ambientTemperatureF,
@@ -412,6 +416,12 @@ class ElectroluxClient {
           : {
               executeCommand: 'ON',
               ...command,
+              ...(command.fanSpeedSetting
+                ? {
+                    fanSpeedSetting:
+                      command.fanSpeedSetting === 'medium' ? 'MIDDLE' : command.fanSpeedSetting.toUpperCase(),
+                  }
+                : {}),
             }
 
       logger.info('Sending command to appliance:', applianceId, 'Command:', JSON.stringify(payload))
@@ -433,6 +443,7 @@ class ElectroluxClient {
         mode: this.utils.mapModes[
           (command?.mode ?? sanitizedState.mode)?.toUpperCase() as keyof typeof this.utils.mapModes
         ],
+        ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting } : {}),
       }
 
       if (cache.matchByValue(cacheKey, combinedState)) {
