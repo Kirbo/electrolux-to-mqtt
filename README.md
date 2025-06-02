@@ -106,6 +106,13 @@ Either running natively locally:
 cp config.example.yml config.yml
 # Modify as needed
 code config.yml
+# Make sure you have correct NodeJS version
+# If you don't have nvm installed, follow installation guide from https://github.com/nvm-sh/nvm?tab=readme-ov-file#installing-and-updating
+nvm use
+# Install correct pnpm version if not installed already
+npm install -g $(node -p "require('./package.json').packageManager")
+# Install the dependencies
+pnpm install
 # Run the app in development mode
 pnpm dev
 ```
@@ -121,5 +128,5 @@ docker compose -f docker-compose.local.yml down ; docker compose -f docker-compo
 
 ## Epilogue
 
-Heavily inspired and thanks to [Dannyyy](https://github.com/dannyyy) for making the [Electrolux to MQTT](https://github.com/dannyyy/electrolux_mqtt) repository.
+Inspired and thanks to [Dannyyy](https://github.com/dannyyy) for making the [Electrolux to MQTT](https://github.com/dannyyy/electrolux_mqtt) repository.
 As I constantly had some issues with it, I decided to make my own implementation, based on [Public Electrolux API](https://developer.electrolux.one/documentation).
