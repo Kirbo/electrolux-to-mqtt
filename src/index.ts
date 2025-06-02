@@ -36,6 +36,11 @@ const main = async () => {
 
   const appliances = await client.getAppliances()
 
+  if (!appliances || appliances.length === 0) {
+    logger.error('No appliances found or failed to retrieve appliances.')
+    return
+  }
+
   const totalAppliances = appliances.length
   const intervalDelay = refreshInterval / totalAppliances
 
