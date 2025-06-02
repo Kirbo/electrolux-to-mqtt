@@ -19,7 +19,7 @@ export type Appliance = {
         mac: string
         pnc: string
         sn: string
-      }
+      } | null
       applianceState: 'on' | 'off'
       capabilities: Record<string, unknown>
       compressorCoolingRuntime: number
@@ -27,35 +27,35 @@ export type Appliance = {
       compressorState: 'on' | 'off'
       dataModelVersion: string
       deviceId: string
-      evapDefrostState: 'on' | 'off'
-      fanSpeedSetting: 'low' | 'medium' | 'high' | 'auto'
+      evapDefrostState: 'on' | 'off' | null
+      fanSpeedSetting: 'low' | 'medium' | 'middle' | 'high' | 'auto'
       filterRuntime: number
-      filterState: 'clean' | 'dirty'
-      fourWayValveState: 'on' | 'off'
-      hepaFilterLifeTime: number
-      logE: number
-      logW: number
+      filterState: 'clean' | 'dirty' | 'good'
+      fourWayValveState: 'on' | 'off' | null
+      hepaFilterLifeTime: number | null
+      logE: number | null
+      logW: number | null
       mode: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto' | 'off'
       networkInterface: {
-        linkQualityIndicator: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR'
+        linkQualityIndicator: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'VERY_GOOD'
         rssi: number
       }
-      schedulerMode: 'on' | 'off'
-      schedulerSession: 'on' | 'off'
+      schedulerMode: 'on' | 'off' | null
+      schedulerSession: 'on' | 'off' | null
       sleepMode: 'on' | 'off'
       startTime: number
       stopTime: number
       targetTemperatureC: number
       tasks: Record<string, unknown>
       temperatureRepresentation: 'celsius' | 'fahrenheit'
-      TimeZoneDaylightRule: string
-      TimeZoneStandardName: string
+      TimeZoneDaylightRule: string | null
+      TimeZoneStandardName: string | null
       totalRuntime: number
       uiLockMode: boolean
-      upgradeState: 'idle' | 'upgrading'
+      upgradeState: 'idle' | 'upgrading' | null
       verticalSwing: 'on' | 'off'
-      VmNo_MCU: string
-      VmNo_NIU: string
+      VmNo_MCU: string | null
+      VmNo_NIU: string | null
     }
   }
 }
@@ -68,7 +68,7 @@ export type SanitizedState = {
     mac: string
     pnc: string
     sn: string
-  }
+  } | null
   applianceId: string
   applianceState: 'on' | 'off'
   capabilities: Record<string, unknown>
@@ -78,21 +78,21 @@ export type SanitizedState = {
   connectionState: 'connected' | 'disconnected'
   dataModelVersion: string
   deviceId: string
-  evapDefrostState: 'on' | 'off'
+  evapDefrostState: 'on' | 'off' | null
   fanSpeedSetting: 'low' | 'medium' | 'high' | 'auto'
   filterRuntime: number
   filterState: 'clean' | 'dirty'
-  fourWayValveState: 'on' | 'off'
-  hepaFilterLifeTime: number
-  logE: number
-  logW: number
+  fourWayValveState: 'on' | 'off' | null
+  hepaFilterLifeTime: number | null
+  logE: number | null
+  logW: number | null
   mode: 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto' | 'off'
   networkInterface: {
     linkQualityIndicator: 'excellent' | 'good' | 'fair' | 'poor'
     rssi: number
   }
-  schedulerMode: 'on' | 'off'
-  schedulerSession: 'on' | 'off'
+  schedulerMode: 'on' | 'off' | null
+  schedulerSession: 'on' | 'off' | null
   sleepMode: 'on' | 'off'
   startTime: number
   status: 'enabled' | 'disabled'
@@ -100,15 +100,15 @@ export type SanitizedState = {
   targetTemperatureC: number
   tasks: Record<string, unknown>
   temperatureRepresentation: 'celsius' | 'fahrenheit'
-  TimeZoneDaylightRule: string
-  TimeZoneStandardName: string
+  TimeZoneDaylightRule: string | null
+  TimeZoneStandardName: string | null
   totalRuntime: number
   uiLockMode: boolean
-  upgradeState: 'idle' | 'upgrading'
+  upgradeState: 'idle' | 'upgrading' | null
   verticalSwing: 'on' | 'off'
   version: number
-  VmNo_MCU: string
-  VmNo_NIU: string
+  VmNo_MCU: string | null
+  VmNo_NIU: string | null
 }
 
 export type ApplianceInfo = {
