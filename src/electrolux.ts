@@ -424,7 +424,7 @@ class ElectroluxClient {
           : {}),
       }
 
-      logger.info('Sending command to appliance:', applianceId, 'Command:', JSON.stringify(payload))
+      logger.info('Sending command to appliance:', applianceId, 'Command:', payload)
 
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)

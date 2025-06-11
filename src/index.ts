@@ -91,8 +91,8 @@ const main = async () => {
     }, appliances.indexOf(appliance) * intervalDelay)
 
     mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
-      logger.info('Received command on topic:', topic, 'Message:', message.toString())
       const command = JSON.parse(message.toString())
+      logger.info('Received command on topic:', topic, 'Message:', command)
       client.sendApplianceCommand(applianceId, command)
     })
   }
