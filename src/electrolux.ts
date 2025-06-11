@@ -402,7 +402,7 @@ class ElectroluxClient {
     }
   }
 
-  public async sendApplianceCommand(applianceId: string, command: SanitizedState) {
+  public async sendApplianceCommand(applianceId: string, rawCommand: SanitizedState) {
     const cacheKey = cache.cacheKey(applianceId).state
 
     try {
@@ -410,19 +410,19 @@ class ElectroluxClient {
         throw new Error('API client is not initialized')
       }
 
-      const payload =
-        command?.mode?.toLowerCase() === 'off'
-          ? { executeCommand: 'OFF' }
-          : {
-              executeCommand: 'ON',
-              ...command,
-              ...(command.fanSpeedSetting
-                ? {
-                    fanSpeedSetting:
-                      command.fanSpeedSetting === 'medium' ? 'MIDDLE' : command.fanSpeedSetting.toUpperCase(),
-                  }
-                : {}),
+      const { mode, ...command } = rawCommand
+
+      const executeCommand = mode?.toLowerCase() === 'off' ? 'OFF' : 'ON'
+
+      const payload = {
+        ...command,
+        ...(mode ? { executeCommand } : { executeCommand: 'OFF' }),
+        ...(command.fanSpeedSetting
+          ? {
+              fanSpeedSetting: command.fanSpeedSetting === 'medium' ? 'MIDDLE' : command.fanSpeedSetting.toUpperCase(),
             }
+          : {}),
+      }
 
       logger.info('Sending command to appliance:', applianceId, 'Command:', JSON.stringify(payload))
 
@@ -439,10 +439,8 @@ class ElectroluxClient {
       const combinedState = {
         ...sanitizedState,
         ...payload,
-        applianceState: payload.executeCommand.toLowerCase(),
-        mode: this.utils.mapModes[
-          (command?.mode ?? sanitizedState.mode)?.toUpperCase() as keyof typeof this.utils.mapModes
-        ],
+        ...(mode ? { applianceState: executeCommand.toLowerCase() } : {}),
+        mode: this.utils.mapModes[(mode ?? sanitizedState.mode)?.toUpperCase() as keyof typeof this.utils.mapModes],
         ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting } : {}),
       }
 
@@ -453,7 +451,7 @@ class ElectroluxClient {
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
       return response.data
     } catch (error) {
-      logger.error('Error sending command:', command, error)
+      logger.error('Error sending command:', rawCommand, error)
     }
   }
 }
