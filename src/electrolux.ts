@@ -416,7 +416,8 @@ class ElectroluxClient {
 
       const payload = {
         ...command,
-        ...(mode ? { executeCommand } : { executeCommand: 'OFF' }),
+        executeCommand,
+        ...(executeCommand !== 'OFF' ? { mode: mode.toUpperCase() } : {}),
         ...(command.fanSpeedSetting
           ? {
               fanSpeedSetting: command.fanSpeedSetting === 'medium' ? 'MIDDLE' : command.fanSpeedSetting.toUpperCase(),
@@ -439,7 +440,7 @@ class ElectroluxClient {
       const combinedState = {
         ...sanitizedState,
         ...payload,
-        ...(mode ? { applianceState: executeCommand.toLowerCase() } : {}),
+        applianceState: executeCommand.toLowerCase(),
         mode: this.utils.mapModes[(mode ?? sanitizedState.mode)?.toUpperCase() as keyof typeof this.utils.mapModes],
         ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting } : {}),
       }
