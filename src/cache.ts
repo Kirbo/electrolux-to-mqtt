@@ -46,7 +46,7 @@ export class Cache<T = unknown> {
   set(key: string, value: T): this {
     const toStore = typeof value === 'string' ? value : JSON.stringify(value)
     this.lru.set(key, toStore, false, true)
-    logger.debug(`Set "${key}" value:`, toStore)
+    logger.debug(`Set "${key}" value:`, value)
     return this
   }
 

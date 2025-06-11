@@ -1,7 +1,5 @@
+import util from 'node:util'
 import pino from 'pino'
-import { version as packageVersion } from '../package.json'
-
-const appVersion = process.env.VERSION ?? packageVersion
 
 const baseLogger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -9,24 +7,35 @@ const baseLogger = pino({
     target: 'pino-pretty',
     options: {
       colorize: true,
+      ignore: 'pid,hostname',
     },
   },
-}).child({})
-
-const prefix = (name: string) => {
-  const versionPrefix = appVersion !== 'development' ? `v${appVersion} :: ` : ''
-  return `${versionPrefix}[${name.toUpperCase()}]`
-}
-
-const createLogger = (name: string) => ({
-  info: (...args: unknown[]) => baseLogger.info({ msg: `${prefix(name)} :: ${stringifyArgs(args)}` }),
-  error: (...args: unknown[]) => baseLogger.error({ msg: `${prefix(name)} :: ${stringifyArgs(args)}` }),
-  warn: (...args: unknown[]) => baseLogger.warn({ msg: `${prefix(name)} :: ${stringifyArgs(args)}` }),
-  debug: (...args: unknown[]) => baseLogger.debug({ msg: `${prefix(name)} :: ${stringifyArgs(args)}` }),
 })
 
 const stringifyArgs = (args: unknown[]): string => {
-  return args.map((arg) => (typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg))).join(' ')
+  return args
+    .map((arg) => {
+      if (typeof arg === 'object' && arg !== null) {
+        // Colorize JSON using util.inspect
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        return util.inspect(arg, { colors: true, depth: null })
+      }
+      return String(arg)
+    })
+    .join(' ')
+}
+
+const createLogger = (name: string) => {
+  const logger = baseLogger.child({
+    name: name.toUpperCase(),
+  })
+
+  return {
+    info: (...args: unknown[]) => logger.info(stringifyArgs(args)),
+    error: (...args: unknown[]) => logger.error(stringifyArgs(args)),
+    warn: (...args: unknown[]) => logger.warn(stringifyArgs(args)),
+    debug: (...args: unknown[]) => logger.debug(stringifyArgs(args)),
+  }
 }
 
 export default createLogger

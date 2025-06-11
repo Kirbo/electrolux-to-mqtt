@@ -62,7 +62,7 @@ class Mqtt {
   }
 
   private _publish(topic: string, message: string, options?: mqtt.IClientPublishOptions) {
-    logger.debug('Publishing to topic:', topic, 'Message:', message)
+    logger.debug('Publishing to topic:', topic, 'Message:', JSON.parse(message))
     const publishOptions = {
       ...defaultOptions,
       ...options,
@@ -71,7 +71,7 @@ class Mqtt {
       if (error) {
         logger.error('Error publishing message:', error)
       } else {
-        logger.info(`Message published to topic "${topic}" successfully`, JSON.stringify(publishOptions, undefined, 0))
+        logger.info(`Message published to topic "${topic}" successfully`, publishOptions)
       }
     })
   }
