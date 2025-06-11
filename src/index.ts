@@ -37,7 +37,10 @@ const main = async () => {
   const appliances = await client.getAppliances()
 
   if (!appliances || appliances.length === 0) {
-    logger.error('No appliances found or failed to retrieve appliances.')
+    logger.error(
+      `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
+    )
+    setTimeout(() => main(), refreshInterval)
     return
   }
 
