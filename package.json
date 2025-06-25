@@ -11,33 +11,31 @@
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "update-deps": "pnpm update"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
   "license": "MIT",
   "packageManager": "pnpm@10.6.3",
   "dependencies": {
-    "axios": "1.9.0",
-    "js-yaml": "4.1.0",
-    "mqtt": "5.13.0",
-    "pino": "9.6.0",
-    "pino-pretty": "13.0.0",
-    "tiny-lru": "11.3.2",
-    "tsx": "4.19.4",
-    "yaml": "2.7.1"
+    "axios": "^1.10.0",
+    "js-yaml": "^4.1.0",
+    "mqtt": "^5.13.1",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
+    "tiny-lru": "^11.3.3",
+    "tsx": "^4.20.3",
+    "yaml": "^2.8.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.9.4",
-    "@types/js-yaml": "4.0.9",
-    "@types/node": "22.15.17",
-    "rimraf": "6.0.1",
-    "typescript": "5.8.3"
+    "@biomejs/biome": "^1.9.4",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.33",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.8.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "@biomejs/biome",
-      "esbuild"
-    ]
+    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
   }
 }
