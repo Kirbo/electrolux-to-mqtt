@@ -417,7 +417,7 @@ class ElectroluxClient {
       const payload = {
         ...command,
         executeCommand,
-        ...(executeCommand !== 'OFF' ? { mode: (mode ?? 'ON').toUpperCase() } : {}),
+        ...(executeCommand !== 'OFF' && mode ? { mode: mode?.toUpperCase() } : {}),
         ...(command?.fanSpeedSetting
           ? {
               fanSpeedSetting: ['medium', 'middle'].includes(command?.fanSpeedSetting?.toLowerCase())
