@@ -417,10 +417,12 @@ class ElectroluxClient {
       const payload = {
         ...command,
         executeCommand,
-        ...(executeCommand !== 'OFF' ? { mode: mode.toUpperCase() } : {}),
-        ...(command.fanSpeedSetting
+        ...(executeCommand !== 'OFF' ? { mode: (mode ?? 'ON').toUpperCase() } : {}),
+        ...(command?.fanSpeedSetting
           ? {
-              fanSpeedSetting: command.fanSpeedSetting === 'medium' ? 'MIDDLE' : command.fanSpeedSetting.toUpperCase(),
+              fanSpeedSetting: ['medium', 'middle'].includes(command?.fanSpeedSetting?.toLowerCase())
+                ? 'MIDDLE'
+                : command?.fanSpeedSetting?.toUpperCase(),
             }
           : {}),
       }
@@ -441,7 +443,13 @@ class ElectroluxClient {
         ...sanitizedState,
         ...payload,
         applianceState: executeCommand.toLowerCase(),
-        mode: this.utils.mapModes[(mode ?? sanitizedState.mode)?.toUpperCase() as keyof typeof this.utils.mapModes],
+        ...(mode || sanitizedState?.mode
+          ? {
+              mode: this.utils.mapModes[
+                (mode ?? sanitizedState?.mode)?.toUpperCase() as keyof typeof this.utils.mapModes
+              ],
+            }
+          : {}),
         ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting } : {}),
       }
 
