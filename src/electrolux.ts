@@ -11,14 +11,13 @@ import { initializeHelpers } from './utils'
 
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
-// const fiveMinutes = 1000 * 60 * 5
 
 class ElectroluxClient {
-  private client: AxiosInstance | undefined
-  private accessToken: string | undefined = config.electrolux.accessToken
-  private refreshToken: string | undefined = config.electrolux.refreshToken
-  private eat: Date | undefined = config.electrolux.eat
-  private iat: Date | undefined = config.electrolux.iat
+  private client?: AxiosInstance
+  private accessToken?: string = config.electrolux.accessToken
+  private refreshToken?: string = config.electrolux.refreshToken
+  private eat?: Date = config.electrolux.eat
+  private iat?: Date = config.electrolux.iat
   private mqtt: iMqtt
   private utils
 
