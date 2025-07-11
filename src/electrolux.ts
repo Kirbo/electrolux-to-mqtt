@@ -195,14 +195,14 @@ class ElectroluxClient {
   }
 
   private sanitizeStateToMqtt = (rawState: Appliance) => {
-    const mode = rawState.properties.reported.mode.toLowerCase()
+    const mode = rawState.properties.reported.mode?.toLowerCase()
     const fanSpeedSetting = rawState.properties.reported.fanSpeedSetting?.toLowerCase()
     const applianceData = rawState.properties.reported.applianceData
 
     const state = {
       applianceId: rawState.applianceId,
-      status: rawState.status.toLowerCase() as 'enabled' | 'disabled',
-      applianceState: rawState.properties.reported.applianceState.toLowerCase() as 'on' | 'off',
+      status: rawState.status?.toLowerCase() as 'enabled' | 'disabled',
+      applianceState: rawState.properties.reported.applianceState?.toLowerCase() as 'on' | 'off',
       mode: (mode === 'fanonly' ? 'fan_only' : mode) as 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto',
       ambientTemperatureC: rawState.properties.reported.ambientTemperatureC,
       targetTemperatureC: rawState.properties.reported.targetTemperatureC,
@@ -225,32 +225,32 @@ class ElectroluxClient {
       capabilities: rawState.properties.reported.capabilities,
       compressorCoolingRuntime: rawState.properties.reported.compressorCoolingRuntime,
       compressorHeatingRuntime: rawState.properties.reported.compressorHeatingRuntime,
-      compressorState: rawState.properties.reported.compressorState.toLowerCase() as 'on' | 'off',
+      compressorState: rawState.properties.reported.compressorState?.toLowerCase() as 'on' | 'off',
       connectionState: rawState.connectionState?.toLowerCase() as 'connected' | 'disconnected',
       dataModelVersion: rawState.properties.reported.dataModelVersion,
       deviceId: rawState.properties.reported.deviceId,
       evapDefrostState: rawState.properties.reported.evapDefrostState?.toLowerCase() as 'on' | 'off' | null,
       filterRuntime: rawState.properties.reported.filterRuntime,
-      filterState: rawState.properties.reported.filterState.toLowerCase() as 'clean' | 'dirty',
+      filterState: rawState.properties.reported.filterState?.toLowerCase() as 'clean' | 'dirty',
       fourWayValveState: rawState.properties.reported.fourWayValveState?.toLowerCase() as 'on' | 'off' | null,
       hepaFilterLifeTime: rawState.properties.reported.hepaFilterLifeTime,
       logE: rawState.properties.reported.logE,
       logW: rawState.properties.reported.logW,
       networkInterface: {
-        linkQualityIndicator: rawState.properties.reported.networkInterface.linkQualityIndicator.toLowerCase() as
+        linkQualityIndicator: rawState.properties.reported.networkInterface?.linkQualityIndicator?.toLowerCase() as
           | 'excellent'
           | 'good'
           | 'fair'
           | 'poor',
-        rssi: rawState.properties.reported.networkInterface.rssi,
+        rssi: rawState.properties.reported.networkInterface?.rssi,
       },
       schedulerMode: rawState.properties.reported.schedulerMode?.toLowerCase() as 'on' | 'off' | null,
       schedulerSession: rawState.properties.reported.schedulerSession?.toLowerCase() as 'on' | 'off' | null,
-      sleepMode: rawState.properties.reported.sleepMode.toLowerCase() as 'on' | 'off',
+      sleepMode: rawState.properties.reported.sleepMode?.toLowerCase() as 'on' | 'off',
       startTime: rawState.properties.reported.startTime,
       stopTime: rawState.properties.reported.stopTime,
       tasks: rawState.properties.reported.tasks,
-      temperatureRepresentation: rawState.properties.reported.temperatureRepresentation.toLowerCase() as
+      temperatureRepresentation: rawState.properties.reported.temperatureRepresentation?.toLowerCase() as
         | 'celsius'
         | 'fahrenheit',
       TimeZoneDaylightRule: rawState.properties.reported.TimeZoneDaylightRule,
