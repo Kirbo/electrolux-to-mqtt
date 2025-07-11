@@ -226,7 +226,7 @@ class ElectroluxClient {
       compressorCoolingRuntime: rawState.properties.reported.compressorCoolingRuntime,
       compressorHeatingRuntime: rawState.properties.reported.compressorHeatingRuntime,
       compressorState: rawState.properties.reported.compressorState.toLowerCase() as 'on' | 'off',
-      connectionState: rawState.connectionState.toLowerCase() as 'connected' | 'disconnected',
+      connectionState: rawState.connectionState?.toLowerCase() as 'connected' | 'disconnected',
       dataModelVersion: rawState.properties.reported.dataModelVersion,
       deviceId: rawState.properties.reported.deviceId,
       evapDefrostState: rawState.properties.reported.evapDefrostState?.toLowerCase() as 'on' | 'off' | null,
