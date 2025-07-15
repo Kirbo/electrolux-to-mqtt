@@ -63,8 +63,8 @@ docker run --rm \
 
 ### Using `docker compose`
 
-1. Copy [`docker-compose.example.yml`](./docker-compose.example.yml) as `docker-compose.yml`
-2. Modify the [`docker-compose.yml](./docker-compose.yml) accordingly
+1. Copy [`docker-compose.example.yml`](./docker-compose.example.yml) as `docker-compose.yml` (`cp docker-compose.example.yml docker-compose.yml`)
+2. Modify the `docker-compose.yml` accordingly (`code docker-compose.yml`) and save changes
 3. Run:
 ```bash
 docker compose pull && docker compose up -d
