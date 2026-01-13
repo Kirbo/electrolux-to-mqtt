@@ -157,7 +157,7 @@ build and deploy docker images:
 
 update dockerhub description:
   stage: docs
-  image: peterevans/dockerhub-description:latest
+  image: peterevans/dockerhub-description:4
   interruptible: true
   rules:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
