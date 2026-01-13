@@ -12,6 +12,38 @@ import { initializeHelpers } from './utils'
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
+
+function formatAxiosError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status
+    const statusText = error.response?.statusText
+    const method = error.config?.method?.toUpperCase()
+    const url = error.config?.url
+    const message = error.message
+
+    let formatted = message
+    if (status) {
+      formatted += ` (${status}${statusText ? ' ' + statusText : ''})`
+    }
+    if (method && url) {
+      // Extract just the path part for readability
+      const urlPath = new URL(url).pathname
+      formatted += ` [${method} ${urlPath}]`
+    }
+
+    // Add response data if available and not too large
+    if (error.response?.data && typeof error.response.data === 'object') {
+      const responseStr = JSON.stringify(error.response.data)
+      if (responseStr.length < 200) {
+        formatted += ` - ${responseStr}`
+      }
+    }
+
+    return formatted
+  }
+  return String(error)
+}
+
 class ElectroluxClient {
   private client?: AxiosInstance
   private accessToken?: string = config.electrolux.accessToken
@@ -86,18 +118,22 @@ class ElectroluxClient {
 
       return { xcsrfToken, csrfSecret }
     } catch (error) {
-      logger.error('Error getting X-CSRF token:', error)
+      logger.error(`Error getting X-CSRF token: ${formatAxiosError(error)}`)
     }
   }
 
   public async login() {
     this.isLoggingIn = true
     this.isLoggedIn = false
+    logger.info('Attempting to fetch access token...')
+    
     const tokenData = await this.getXcsrfToken()
     if (!tokenData) {
       throw new Error('Failed to retrieve X-CSRF token data')
     }
     const { xcsrfToken, csrfSecret } = tokenData
+    logger.debug('CSRF token retrieved successfully')
+    
     try {
       const body = {
         email: config.electrolux.username,
@@ -126,7 +162,9 @@ class ElectroluxClient {
         redirectUri: 'https://developer.electrolux.one/loggedin',
       }
 
+      logger.debug('Exchanging authorization code for tokens...')
       const cookies = await axios.post('https://api.developer.electrolux.one/api/v1/token', tokenBody)
+      logger.debug(`Token exchange response status: ${cookies.status}`)
 
       const setCookieHeader = cookies.headers['set-cookie']
       if (setCookieHeader && Array.isArray(setCookieHeader)) {
@@ -174,7 +212,7 @@ class ElectroluxClient {
     } catch (error) {
       this.isLoggedIn = false
       this.isLoggingIn = false
-      logger.error('Error logging in:', error)
+      logger.error(`Error logging in: ${formatAxiosError(error)}`)
       setTimeout(async () => {
         await this.login()
       }, 1000 * 5) // Retry after 5 seconds
@@ -286,7 +324,7 @@ class ElectroluxClient {
         logger.debug(`Access token is valid, time left "${readableTimeLeft}"`)
       }
     } catch (error) {
-      logger.error('Error ensuring valid token:', error)
+      logger.error(`Error ensuring valid token: ${formatAxiosError(error)}`)
     }
   }
 
@@ -334,7 +372,7 @@ class ElectroluxClient {
       this.isLoggingIn = false
       this.isLoggedIn = true
     } catch (error) {
-      logger.error('Error refreshing access token:', error)
+      logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
       setTimeout(async () => {
         await this.refreshTokens()
       }, 1000 * 5) // Retry after 5 seconds
@@ -350,7 +388,7 @@ class ElectroluxClient {
       logger.debug('Appliances:', response.data)
       return response.data satisfies ApplianceStub[]
     } catch (error) {
-      logger.error('Error getting appliances:', error)
+      logger.error(`Error getting appliances: ${formatAxiosError(error)}`)
     }
   }
 
@@ -363,7 +401,7 @@ class ElectroluxClient {
       logger.debug('Appliance info:', response.data)
       return response.data as ApplianceInfo
     } catch (error) {
-      logger.error('Error getting appliance info:', error)
+      logger.error(`Error getting appliance info: ${formatAxiosError(error)}`)
     }
   }
 
@@ -393,7 +431,7 @@ class ElectroluxClient {
 
       return response.data
     } catch (error) {
-      logger.error('Error getting appliance state:', error)
+      logger.error(`Error getting appliance state: ${formatAxiosError(error)}`)
       this.mqtt.publish(
         `${applianceId}/state`,
         JSON.stringify({ applianceId, connectionState: 'disconnected', applianceState: 'off' }),
@@ -459,7 +497,7 @@ class ElectroluxClient {
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
       return response.data
     } catch (error) {
-      logger.error('Error sending command:', rawCommand, error)
+      logger.error(`Error sending command: ${formatAxiosError(error)}`)
     }
   }
 }
