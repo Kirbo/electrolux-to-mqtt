@@ -33,14 +33,20 @@ RUN if [ -n "${VERSION}" ]; then \
   PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
   PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1) && \
   PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2) && \
-  echo "Using package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
   if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then \
+  echo "Installing package manager ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"; \
   npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}; \
   fi && \
-  ${PACKAGE_MANAGER_NAME} install --config.scripts-prepend-node-path=true && \
-  ${PACKAGE_MANAGER_NAME} build && \
-  echo "${PACKAGE_MANAGER_NAME}" > /tmp/package-manager-name.txt && \
-  echo "${PACKAGE_MANAGER_VERSION}" > /tmp/package-manager-version.txt
+  echo "$(which ${PACKAGE_MANAGER_NAME})" > /tmp/package-manager.txt && \
+  PACKAGE_MANAGER_BIN=$(cat /tmp/package-manager.txt) && \
+  echo "====================================================================================" && \
+  echo "                Application Version:          ${VERSION}" && \
+  echo "                Node Image:                   ${NODE_IMAGE}" && \
+  echo "                Package manager:              ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
+  echo "                Package manager binary:       ${PACKAGE_MANAGER_BIN}" && \
+  echo "====================================================================================" && \
+  ${PACKAGE_MANAGER_BIN} install --config.scripts-prepend-node-path=true && \
+  ${PACKAGE_MANAGER_BIN} run build
 
 
 
@@ -49,28 +55,8 @@ RUN if [ -n "${VERSION}" ]; then \
 ################## Create the purge image
 FROM builder AS purge
 
-# Define build arguments for this stage
-ARG VERSION
-ARG NODE_IMAGE
-
-# Set environment variables from build args (baked in at build time)
-ENV VERSION=${VERSION}
-ENV NODE_IMAGE=${NODE_IMAGE}
-
-# Set working directory
-WORKDIR /app
-
 # Remove dev dependencies
-RUN PACKAGE_MANAGER_NAME=$(cat /tmp/package-manager-name.txt) && \
-  PACKAGE_MANAGER_VERSION=$(cat /tmp/package-manager-version.txt) && \
-  echo "===================" && \
-  echo "Purge stage info:" && \
-  echo "Package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
-  echo "Package manager location: $(which ${PACKAGE_MANAGER_NAME})" && \
-  echo "Application Version: ${VERSION}" && \
-  echo "Node Image: ${NODE_IMAGE}" && \
-  echo "===================" && \
-  ${PACKAGE_MANAGER_NAME} install --prod --config.scripts-prepend-node-path=true
+RUN $(cat /tmp/package-manager.txt) install --prod --config.scripts-prepend-node-path=true
 
 
 
