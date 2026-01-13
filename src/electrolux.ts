@@ -12,6 +12,39 @@ import { initializeHelpers } from './utils'
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
+/**
+ * Compare two states and log the differences
+ */
+function getStateDifferences(oldState: SanitizedState | null, newState: SanitizedState): Record<string, { from: any; to: any }> {
+  const differences: Record<string, { from: any; to: any }> = {}
+
+  if (!oldState) {
+    return differences
+  }
+
+  // Compare all keys in newState
+  for (const key of Object.keys(newState)) {
+    const oldValue = (oldState as any)[key]
+    const newValue = (newState as any)[key]
+
+    // Skip applianceId and complex objects
+    if (key === 'applianceId' || typeof newValue === 'object' || typeof oldValue === 'object') {
+      continue
+    }
+
+    // If values differ, record the change
+    if (oldValue !== newValue) {
+      differences[key] = { from: oldValue, to: newValue }
+    }
+  }
+
+  return differences
+}
+
+function formatStateDifferences(differences: Record<string, { from: any; to: any }>): string {
+  const changes = Object.entries(differences).map(([key, { from, to }]) => `${key}: ${from} → ${to}`).join(', ')
+  return changes
+}
 
 function formatAxiosError(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -135,14 +168,16 @@ class ElectroluxClient {
     logger.debug('CSRF token retrieved successfully')
     
     try {
-      const body = {
+      // Try first payload structure (with state parameter)
+      let body: Record<string, any> = {
         email: config.electrolux.username,
         password: config.electrolux.password,
         postAuthAction: 'authorization',
         params: {
           response_type: 'code',
           client_id: 'HeiOpenApi',
-          redirect_uri: 'https://developer.electrolux.one/loggedin',
+          redirect_uri: 'https://developer.electrolux.one/generateToken',
+          state: 'electrolux-mqtt-client', // Add state parameter
         },
         countryCode: config.electrolux.countryCode,
       }
@@ -154,12 +189,43 @@ class ElectroluxClient {
         },
       }
 
-      const response = await axios.post('https://api.account.electrolux.one/api/v1/password/login', body, headers)
-      const code = response.data.redirectUrl.match(/code=([^&]*)/)?.[1]
+      logger.debug(`Sending login request to account.electrolux.one`)
+      let response = await axios.post('https://api.account.electrolux.one/api/v1/password/login', body, headers)
+      logger.debug(`Password login response status: ${response.status}`)
+      
+      // Check if we got an error redirect
+      let redirectUrl = response.data.redirectUrl
+      if (redirectUrl?.includes('error=invalid_request')) {
+        logger.warn('Received invalid_request error, trying flattened payload structure...')
+        
+        // Try second structure (flattened params with state)
+        body = {
+          email: config.electrolux.username,
+          password: config.electrolux.password,
+          postAuthAction: 'authorization',
+          response_type: 'code',
+          client_id: 'HeiOpenApi',
+          redirect_uri: 'https://developer.electrolux.one/generateToken',
+          state: 'electrolux-mqtt-client',
+          countryCode: config.electrolux.countryCode,
+        }
+        
+        response = await axios.post('https://api.account.electrolux.one/api/v1/password/login', body, headers)
+        logger.debug(`Password login with flattened payload response status: ${response.status}`)
+        redirectUrl = response.data.redirectUrl
+      }
+      
+      const code = redirectUrl.match(/code=([^&]*)/)?.[1]
+      if (!code) {
+        logger.error(`Failed to extract code from redirectUrl: ${redirectUrl}`)
+        throw new Error('Authorization code not found in login response')
+      }
+      
+      logger.info('Successfully extracted authorization code')
 
       const tokenBody = {
         code,
-        redirectUri: 'https://developer.electrolux.one/loggedin',
+        redirectUri: 'https://developer.electrolux.one/generateToken',
       }
 
       logger.debug('Exchanging authorization code for tokens...')
@@ -422,7 +488,19 @@ class ElectroluxClient {
       }
 
       const sanitizedState = this.sanitizeStateToMqtt(response.data)
-      logger.debug('State changed, publishing to MQTT', response.data)
+      const cachedState = cache.get(cacheKey) as Appliance | null
+      const cachedSanitized = cachedState ? this.sanitizeStateToMqtt(cachedState) : null
+
+      const differences = getStateDifferences(cachedSanitized, sanitizedState)
+      const hasChanges = Object.keys(differences).length > 0
+
+      if (hasChanges) {
+        const changesSummary = formatStateDifferences(differences)
+        logger.info(`State changed for appliance ${applianceId}: ${changesSummary}`)
+      } else {
+        logger.debug('State checked, no changes detected')
+      }
+
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(sanitizedState))
 
       if (callback) {
