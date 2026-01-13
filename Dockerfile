@@ -4,6 +4,8 @@
 # docker compose -f docker-compose.local.yml down ; docker compose -f docker-compose.local.yml up --build
 # docker buildx build --platform linux/arm64,linux/amd64 -t kirbownz/electrolux-to-mqtt:latest -t kirbownz/electrolux-to-mqtt:$(git describe --tags --always) --push .
 
+# Check the base images from: https://hub.docker.com/hardened-images/catalog/dhi/node/images
+
 # Define build arguments
 ARG NODE_VERSION=24-alpine3.23
 
@@ -70,8 +72,8 @@ LABEL description="Electrolux to MQTT bridge"
 WORKDIR /app
 
 COPY --from=purge /app/node_modules /app/node_modules
-COPY --from=builder /app/package.json /app/package.json
-COPY --from=builder /app/dist /app/dist
+COPY --from=purge /app/package.json /app/package.json
+COPY --from=purge /app/dist /app/dist
 
 # Set environment variables from build args
 ENV LOG_LEVEL=${LOG_LEVEL}
