@@ -137,4 +137,4 @@ docker compose -f docker-compose.local.yml down ; docker compose -f docker-compo
 ## Epilogue
 
 Inspired and thanks to [Dannyyy](https://github.com/dannyyy) for making the [Electrolux to MQTT](https://github.com/dannyyy/electrolux_mqtt) repository.
-As I constantly had some issues with it, I decided to make my own implementation, based on [Public Electrolux API](https://developer.electrolux.one/documentation).
+As I constantly had some issues with other implementations, I decided to make my own, based on [Public Electrolux API](https://developer.electrolux.one/documentation).
