@@ -702,6 +702,7 @@ class ElectroluxClient {
             }
           : {}),
         ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting.toLowerCase() } : {}),
+        ...(command?.verticalSwing ? { verticalSwing: command.verticalSwing.toLowerCase() } : {}),
       }
 
       if (cache.matchByValue(cacheKey, combinedState)) {
