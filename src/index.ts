@@ -7,7 +7,7 @@ import Mqtt from './mqtt.js'
 import { SanitizedState } from './types.js'
 import { initializeHelpers } from './utils.js'
 
-const appVersion = process.env.APP_VERSION ?? packageJson.version
+const appVersion = packageJson.version
 const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)

@@ -9,11 +9,10 @@
 # Define build arguments
 ARG NODE_VERSION=24-alpine3.23
 
-# Define build arguments
-ARG VERSION=development
-
 ################## Create the build image
 FROM dhi.io/node:${NODE_VERSION}-dev AS builder
+
+ARG VERSION=development
 
 ENV VERSION=${VERSION}
 
@@ -43,6 +42,10 @@ RUN if [ -n "${VERSION}" ]; then \
 ################## Create the purge image
 FROM builder AS purge
 
+ARG VERSION=development
+
+ENV VERSION=${VERSION}
+
 WORKDIR /app
 
 # Remove dev dependencies
@@ -53,6 +56,9 @@ RUN PACKAGE_MANAGER_NAME=$(cat /tmp/package-manager-name.txt) && \
   echo "Package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
   echo "pnpm version: $(${PACKAGE_MANAGER_NAME} --version)" && \
   echo "pnpm location: $(which ${PACKAGE_MANAGER_NAME})" && \
+  echo "Version: ${VERSION}" && \
+  echo "package.json contents:" && \
+  cat package.json && \
   echo "===================" && \
   ${PACKAGE_MANAGER_NAME} install --prod --config.scripts-prepend-node-path=true
 
@@ -65,7 +71,6 @@ FROM dhi.io/node:${NODE_VERSION} AS runner
 
 # Define build arguments for this stage
 ARG LOG_LEVEL=info
-ARG VERSION=development
 
 LABEL maintainer="@kirbownz"
 LABEL description="Electrolux to MQTT bridge"
@@ -78,7 +83,6 @@ COPY --from=purge /app/dist /app/dist
 
 # Set environment variables from build args (baked in at build time)
 ENV LOG_LEVEL=${LOG_LEVEL}
-ENV APP_VERSION=${VERSION}
 
 # Run the application
 CMD ["node" , "dist/index.js"]

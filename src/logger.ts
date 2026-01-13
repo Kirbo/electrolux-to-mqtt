@@ -1,6 +1,10 @@
 import fs from 'node:fs'
 import util from 'node:util'
 import pino from 'pino'
+import packageJson from '../package.json' with { type: 'json' }
+import config from './config.js'
+
+const appVersion = packageJson.version
 
 const getTimezone = () => {
   if (process.env.TZ) {
@@ -15,7 +19,7 @@ const getTimezone = () => {
     // Try macOS fallback: check /etc/localtime symlink
     try {
       const localtime = fs.readlinkSync('/etc/localtime')
-      const match = localtime.match(/zoneinfo\/(.*)/)
+      const match = new RegExp(/zoneinfo\/(.*)/).exec(localtime)
       if (match) {
         const tz = match[1]
         console.log(`Using timezone from /etc/localtime symlink: ${tz}`)
@@ -47,6 +51,12 @@ const baseLogger = pino({
   },
 })
 
+const prefix = () => {
+  const versionPrefix = appVersion === 'development' ? '' : `v${appVersion} :: `
+  const showVersionNumber = config.logging?.showVersionNumber ?? true
+  return showVersionNumber ? `${versionPrefix}` : ''
+}
+
 const stringifyArgs = (args: unknown[]): string => {
   return args
     .map((arg) => {
@@ -61,15 +71,16 @@ const stringifyArgs = (args: unknown[]): string => {
 }
 
 const createLogger = (name: string) => {
+  const logPrefix = prefix()
   const logger = baseLogger.child({
     name: name.toUpperCase(),
   })
 
   return {
-    info: (...args: unknown[]) => logger.info(stringifyArgs(args)),
-    error: (...args: unknown[]) => logger.error(stringifyArgs(args)),
-    warn: (...args: unknown[]) => logger.warn(stringifyArgs(args)),
-    debug: (...args: unknown[]) => logger.debug(stringifyArgs(args)),
+    info: (...args: unknown[]) => logger.info(`${logPrefix}${stringifyArgs(args)}`),
+    error: (...args: unknown[]) => logger.error(`${logPrefix}${stringifyArgs(args)}`),
+    warn: (...args: unknown[]) => logger.warn(`${logPrefix}${stringifyArgs(args)}`),
+    debug: (...args: unknown[]) => logger.debug(`${logPrefix}${stringifyArgs(args)}`),
   }
 }
 

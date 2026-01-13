@@ -30,3 +30,4 @@ services:
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                      # Enable Home Assistant auto discovery
       # - LOGGING_SHOW_CHANGES=true                               # Log appliance state changes
       # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime      # Comma-separated list of keys to ignore in state change logs
+      # - LOGGING_SHOW_VERSION_NUMBER=true                        # Show version number in logs

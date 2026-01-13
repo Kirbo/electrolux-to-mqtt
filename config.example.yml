@@ -34,3 +34,5 @@ logging:
     - totalRuntime
   #   - logE
   #   - logW
+  # Show version number in logs
+  showVersionNumber: true

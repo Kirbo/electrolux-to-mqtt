@@ -1,9 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import yaml from 'yaml'
-import createLogger from './logger.js'
-
-const logger = createLogger('config')
 
 export interface AppConfig {
   mqtt: {
@@ -32,6 +29,7 @@ export interface AppConfig {
   logging?: {
     showChanges?: boolean
     ignoredKeys?: string[]
+    showVersionNumber?: boolean
   }
 }
 
@@ -61,6 +59,7 @@ interface EnvVars {
   HOME_ASSISTANT_AUTO_DISCOVERY?: string
   LOGGING_SHOW_CHANGES?: string
   LOGGING_IGNORED_KEYS?: string
+  LOGGING_SHOW_VERSION_NUMBER?: string
 }
 
 function createConfigFromEnv(): void {
@@ -91,7 +90,7 @@ function createConfigFromEnv(): void {
     process.exit(1)
   }
 
-  logger.info('Config file not found. Creating from environment variables...')
+  console.info('Config file not found. Creating from environment variables...')
 
   // Format LOGGING_IGNORED_KEYS: "key1,key2" -> "key1, key2"
   const formattedIgnoredKeys = env.LOGGING_IGNORED_KEYS ? env.LOGGING_IGNORED_KEYS.split(',').join(', ') : ''
@@ -118,10 +117,11 @@ homeAssistant:
 logging:
   showChanges: ${env.LOGGING_SHOW_CHANGES || 'true'}
   ignoredKeys: [${formattedIgnoredKeys}]
+  showVersionNumber: ${env.LOGGING_SHOW_VERSION_NUMBER || 'true'}
 `
 
   fs.writeFileSync(configPath, configContent, 'utf8')
-  logger.info('Config file created successfully.')
+  console.info('Config file created successfully.')
 }
 
 const configPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../config.yml')
@@ -139,10 +139,10 @@ try {
   const tokensPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
   if (fs.existsSync(tokensPath)) {
     tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'))
-    logger.debug('tokens.json loaded')
+    console.debug('tokens.json loaded')
   }
 } catch (error) {
-  logger.error('Error reading tokens.json:', error)
+  console.error('Error reading tokens.json:', error)
 }
 
 export default {
