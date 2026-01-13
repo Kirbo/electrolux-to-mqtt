@@ -8,14 +8,21 @@
 
 # Define build arguments
 ARG NODE_VERSION=24-alpine3.23
-
-################## Create the build image
-FROM dhi.io/node:${NODE_VERSION}-dev AS builder
-
+ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION}
 ARG VERSION=development
 
-ENV VERSION=${VERSION}
+################## Create the build image
+FROM ${NODE_IMAGE}-dev AS builder
 
+# Define build arguments for this stage
+ARG VERSION
+ARG NODE_IMAGE
+
+# Set environment variables from build args (baked in at build time)
+ENV VERSION=${VERSION}
+ENV NODE_IMAGE=${NODE_IMAGE}
+
+# Set working directory and copy source files
 WORKDIR /app
 COPY . /app
 
@@ -42,10 +49,15 @@ RUN if [ -n "${VERSION}" ]; then \
 ################## Create the purge image
 FROM builder AS purge
 
-ARG VERSION=development
+# Define build arguments for this stage
+ARG VERSION
+ARG NODE_IMAGE
 
+# Set environment variables from build args (baked in at build time)
 ENV VERSION=${VERSION}
+ENV NODE_IMAGE=${NODE_IMAGE}
 
+# Set working directory
 WORKDIR /app
 
 # Remove dev dependencies
@@ -54,11 +66,9 @@ RUN PACKAGE_MANAGER_NAME=$(cat /tmp/package-manager-name.txt) && \
   echo "===================" && \
   echo "Purge stage info:" && \
   echo "Package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
-  echo "pnpm version: $(${PACKAGE_MANAGER_NAME} --version)" && \
-  echo "pnpm location: $(which ${PACKAGE_MANAGER_NAME})" && \
-  echo "Version: ${VERSION}" && \
-  echo "package.json contents:" && \
-  cat package.json && \
+  echo "Package manager location: $(which ${PACKAGE_MANAGER_NAME})" && \
+  echo "Application Version: ${VERSION}" && \
+  echo "Node Image: ${NODE_IMAGE}" && \
   echo "===================" && \
   ${PACKAGE_MANAGER_NAME} install --prod --config.scripts-prepend-node-path=true
 
@@ -67,22 +77,25 @@ RUN PACKAGE_MANAGER_NAME=$(cat /tmp/package-manager-name.txt) && \
 
 
 ################## Create the runtime image
-FROM dhi.io/node:${NODE_VERSION} AS runner
+FROM ${NODE_IMAGE} AS runner
 
 # Define build arguments for this stage
 ARG LOG_LEVEL=info
 
+# Set environment variables from build args (baked in at build time)
+ENV LOG_LEVEL=${LOG_LEVEL}
+
+# Metadata
 LABEL maintainer="@kirbownz"
 LABEL description="Electrolux to MQTT bridge"
 
+# Set working directory
 WORKDIR /app
 
+# Copy only the necessary files from the purge stage
 COPY --from=purge /app/node_modules /app/node_modules
 COPY --from=purge /app/package.json /app/package.json
 COPY --from=purge /app/dist /app/dist
-
-# Set environment variables from build args (baked in at build time)
-ENV LOG_LEVEL=${LOG_LEVEL}
 
 # Run the application
 CMD ["node" , "dist/index.js"]
