@@ -10,11 +10,12 @@
 ARG NODE_VERSION=24-alpine3.23
 
 # Define build arguments
-ARG LOG_LEVEL=info
 ARG VERSION=development
 
 ################## Create the build image
 FROM dhi.io/node:${NODE_VERSION}-dev AS builder
+
+ENV VERSION=${VERSION}
 
 WORKDIR /app
 COPY . /app
@@ -62,9 +63,9 @@ RUN PACKAGE_MANAGER_NAME=$(cat /tmp/package-manager-name.txt) && \
 ################## Create the runtime image
 FROM dhi.io/node:${NODE_VERSION} AS runner
 
-# Define build arguments with defaults for this stage
+# Define build arguments for this stage
 ARG LOG_LEVEL=info
-ARG VERSION=docker
+ARG VERSION=development
 
 LABEL maintainer="@kirbownz"
 LABEL description="Electrolux to MQTT bridge"
@@ -75,9 +76,9 @@ COPY --from=purge /app/node_modules /app/node_modules
 COPY --from=purge /app/package.json /app/package.json
 COPY --from=purge /app/dist /app/dist
 
-# Set environment variables from build args
+# Set environment variables from build args (baked in at build time)
 ENV LOG_LEVEL=${LOG_LEVEL}
-ENV VERSION=${VERSION}
+ENV APP_VERSION=${VERSION}
 
 # Run the application
 CMD ["node" , "dist/index.js"]
