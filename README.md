@@ -58,6 +58,7 @@ docker run --rm \
   # -e ELECTROLUX_REFRESH_INTERVAL=30 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e LOG_LEVEL=info \
+  # -e LOGGING_SHOW_CHANGES=false \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 
@@ -102,6 +103,7 @@ services:
       # - ELECTROLUX_REFRESH_INTERVAL=30
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - LOG_LEVEL=info
+      # - LOGGING_SHOW_CHANGES=false
 ```
 
 ## Developing locally

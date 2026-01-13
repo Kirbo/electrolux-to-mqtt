@@ -53,6 +53,9 @@ electrolux:
 
 homeAssistant:
   autoDiscovery: ${HOME_ASSISTANT_AUTO_DISCOVERY:-true}
+
+logging:
+  showChanges: ${LOGGING_SHOW_CHANGES:-true}
 EOF
 else
   echo "Config file already exists. Skipping creation."

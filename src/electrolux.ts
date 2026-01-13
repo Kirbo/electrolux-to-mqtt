@@ -17,6 +17,7 @@ const baseUrl = 'https://api.developer.electrolux.one'
  */
 function getStateDifferences(oldState: SanitizedState | null, newState: SanitizedState): Record<string, { from: any; to: any }> {
   const differences: Record<string, { from: any; to: any }> = {}
+  const ignoredKeys = ['networkInterface', 'rssi']
 
   if (!oldState) {
     return differences
@@ -27,8 +28,8 @@ function getStateDifferences(oldState: SanitizedState | null, newState: Sanitize
     const oldValue = (oldState as any)[key]
     const newValue = (newState as any)[key]
 
-    // Skip applianceId and complex objects
-    if (key === 'applianceId' || typeof newValue === 'object' || typeof oldValue === 'object') {
+    // Skip ignored keys and complex objects
+    if (ignoredKeys.includes(key) || typeof newValue === 'object' || typeof oldValue === 'object') {
       continue
     }
 
@@ -42,7 +43,7 @@ function getStateDifferences(oldState: SanitizedState | null, newState: Sanitize
 }
 
 function formatStateDifferences(differences: Record<string, { from: any; to: any }>): string {
-  const changes = Object.entries(differences).map(([key, { from, to }]) => `${key}: ${from} → ${to}`).join(', ')
+  const changes = Object.entries(differences).map(([key, { from, to }]) => `\n  ${key}: ${from} → ${to}`).join('')
   return changes
 }
 
@@ -483,12 +484,14 @@ class ElectroluxClient {
       }
       const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
 
+      // Get the cached state BEFORE checking if the new response matches
+      const cachedState = cache.get(cacheKey) as Appliance | null
+      
       if (cache.matchByValue(cacheKey, response.data)) {
         return cache.get(cacheKey) as Appliance
       }
 
       const sanitizedState = this.sanitizeStateToMqtt(response.data)
-      const cachedState = cache.get(cacheKey) as Appliance | null
       const cachedSanitized = cachedState ? this.sanitizeStateToMqtt(cachedState) : null
 
       const differences = getStateDifferences(cachedSanitized, sanitizedState)
@@ -496,10 +499,17 @@ class ElectroluxClient {
 
       if (hasChanges) {
         const changesSummary = formatStateDifferences(differences)
-        logger.info(`State changed for appliance ${applianceId}: ${changesSummary}`)
+        if (config.logging?.showChanges) {
+          logger.info(`Publishing state change for appliance ${applianceId}: ${changesSummary}`)
+        } else {
+          logger.info(`State changed for appliance ${applianceId}: ${changesSummary}`)
+        }
       } else {
         logger.debug('State checked, no changes detected')
       }
+
+      // Update the cache with the new state
+      cache.set(cacheKey, response.data)
 
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(sanitizedState))
 

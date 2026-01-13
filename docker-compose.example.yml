@@ -26,3 +26,4 @@ services:
       # - MQTT_QOS=2                                          # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
       # - ELECTROLUX_REFRESH_INTERVAL=30                      # Electrolux refresh interval in seconds
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                  # Enable Home Assistant auto discovery
+      # - LOGGING_SHOW_CHANGES=true                           # Log appliance state changes

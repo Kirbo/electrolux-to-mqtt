@@ -29,6 +29,9 @@ export interface AppConfig {
   homeAssistant: {
     autoDiscovery: boolean
   }
+  logging?: {
+    showChanges?: boolean
+  }
 }
 
 export interface Tokens {

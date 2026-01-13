@@ -85,6 +85,7 @@ class Mqtt {
   }
 
   public autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {
+    logger.info(`Publishing auto-discovery config for appliance: ${applianceId}`)
     this._publish(`homeassistant/climate/${applianceId}/config`, message, {
       ...options,
       retain: true,

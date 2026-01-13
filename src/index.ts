@@ -71,7 +71,6 @@ const main = async () => {
           return
         }
 
-        logger.info('Publishing auto-discovery config for appliance:', applianceId)
         mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscoveryConfig), {
           retain: true,
           qos: 2,

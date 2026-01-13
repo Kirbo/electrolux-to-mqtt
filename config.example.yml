@@ -24,3 +24,7 @@ electrolux:
 homeAssistant:
   # Automatically discover the device in Home Assistant
   autoDiscovery: true
+
+logging:
+  # Should we output the changes detected in appliance state
+  showChanges: true
