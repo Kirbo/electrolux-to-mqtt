@@ -12,20 +12,21 @@ services:
       - "/etc/timezone:/etc/timezone:ro"
       - ./config.yml:/app/config.yml
     environment:
-      - LOG_LEVEL=info                                        # Log level (debug, info, warn, error)
+      - LOG_LEVEL=info                                            # Log level (debug, info, warn, error)
       # ## Mandatory variables
-      # - MQTT_URL=mqtt://192.168.1.1:1883                    # MQTT broker URL
-      # - MQTT_USERNAME=mqtt-user                             # MQTT broker username
-      # - MQTT_PASSWORD=mqtt-password                         # MQTT broker password
-      # - ELECTROLUX_API_KEY=electrolux-api-key               # Electrolux API key
-      # - ELECTROLUX_USERNAME=electrolux-user@example.com     # Electrolux account username
-      # - ELECTROLUX_PASSWORD=electrolux-password             # Electrolux account password
-      # - ELECTROLUX_COUNTRY_CODE=FI                          # Electrolux country code (FI, SE, NO, DK)
+      # - MQTT_URL=mqtt://192.168.1.1:1883                        # MQTT broker URL
+      # - MQTT_USERNAME=mqtt-user                                 # MQTT broker username
+      # - MQTT_PASSWORD=mqtt-password                             # MQTT broker password
+      # - ELECTROLUX_API_KEY=electrolux-api-key                   # Electrolux API key
+      # - ELECTROLUX_USERNAME=electrolux-user@example.com         # Electrolux account username
+      # - ELECTROLUX_PASSWORD=electrolux-password                 # Electrolux account password
+      # - ELECTROLUX_COUNTRY_CODE=FI                              # Electrolux country code (FI, SE, NO, DK)
       # ## Optional variables
-      # - MQTT_TOPIC_PREFIX=electrolux_                       # MQTT topic prefix
-      # - MQTT_CLIENT_ID=electrolux-comfort600                # MQTT client ID
-      # - MQTT_RETAIN=false                                   # MQTT retain flag
-      # - MQTT_QOS=2                                          # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
-      # - ELECTROLUX_REFRESH_INTERVAL=30                      # Electrolux refresh interval in seconds
-      # - HOME_ASSISTANT_AUTO_DISCOVERY=true                  # Enable Home Assistant auto discovery
-      # - LOGGING_SHOW_CHANGES=true                           # Log appliance state changes
+      # - MQTT_TOPIC_PREFIX=electrolux_                           # MQTT topic prefix
+      # - MQTT_CLIENT_ID=electrolux-comfort600                    # MQTT client ID
+      # - MQTT_RETAIN=false                                       # MQTT retain flag
+      # - MQTT_QOS=2                                              # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
+      # - ELECTROLUX_REFRESH_INTERVAL=30                          # Electrolux refresh interval in seconds
+      # - HOME_ASSISTANT_AUTO_DISCOVERY=true                      # Enable Home Assistant auto discovery
+      # - LOGGING_SHOW_CHANGES=true                               # Log appliance state changes
+      # - LOGGING_IGNORED_KEYS=networkInterface.rssi              # Comma-separated list of keys to ignore in state change logs

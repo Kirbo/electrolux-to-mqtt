@@ -1,12 +1,12 @@
 import yaml from 'js-yaml'
 
 import createLogger from './logger'
-import Mqtt from './mqtt'
+import { IMqtt } from './mqtt'
 import { ApplianceInfo, ApplianceStub, SanitizedState } from './types'
 
 const logger = createLogger('helpers')
 
-export const initializeHelpers = (mqtt: Mqtt) => {
+export const initializeHelpers = (mqtt: IMqtt) => {
   const mapModes = {
     AUTO: 'auto',
     COOL: 'cool',
@@ -74,7 +74,7 @@ climate:
       mode_command_topic: `${mqtt.topicPrefix}/${applianceId}/command`,
       mode_command_template: `{ "mode": "{{ 'FANONLY' if value == 'fan_only' else value | upper }}" }`,
 
-      precision: 1.0,
+      precision: 1,
       temperature_unit: 'C',
       initial: state?.targetTemperatureC ?? info.capabilities.targetTemperatureC.default,
       min_temp: info.capabilities.targetTemperatureC.min,

@@ -31,6 +31,7 @@ export interface AppConfig {
   }
   logging?: {
     showChanges?: boolean
+    ignoredKeys?: string[]
   }
 }
 

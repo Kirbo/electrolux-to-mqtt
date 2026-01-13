@@ -20,17 +20,20 @@ const main = async () => {
     `Starting Electrolux to MQTT version: "${appVersion}", with refresh interval: ${refreshInterval / 1000} seconds`,
   )
 
+  // Initialize the client
+  await client.initialize()
+
   while (!client.isLoggedIn) {
-    if (!client.isLoggingIn) {
+    if (client.isLoggingIn) {
+      logger.debug('Already logging in, waiting for login to complete...')
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    } else {
       try {
         await client.login()
       } catch (error) {
         logger.error('Login failed:', error)
         await new Promise((resolve) => setTimeout(resolve, 10000))
       }
-    } else {
-      logger.debug('Already logging in, waiting for login to complete...')
-      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
   }
 

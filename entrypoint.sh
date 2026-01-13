@@ -56,6 +56,7 @@ homeAssistant:
 
 logging:
   showChanges: ${LOGGING_SHOW_CHANGES:-true}
+  ignoredKeys: [${LOGGING_IGNORED_KEYS:+${LOGGING_IGNORED_KEYS//,/,\ }}]
 EOF
 else
   echo "Config file already exists. Skipping creation."

@@ -28,3 +28,8 @@ homeAssistant:
 logging:
   # Should we output the changes detected in appliance state
   showChanges: true
+  # Optional: keys to ignore when detecting state changes (e.g., networkInterface.rssi)
+  # ignoredKeys:
+  #   - networkInterface.rssi
+  #   - logE
+  #   - logW

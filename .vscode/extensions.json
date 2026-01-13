@@ -9,6 +9,7 @@
     "mikestead.dotenv",
     "sonarsource.sonarlint-vscode",
     "shakram02.bash-beautify",
-    "timonwong.shellcheck"
+    "timonwong.shellcheck",
+    "ms-azuretools.vscode-docker"
   ]
 }

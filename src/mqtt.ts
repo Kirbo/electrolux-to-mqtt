@@ -1,5 +1,4 @@
-import mqtt, { IClientPublishOptions } from 'mqtt'
-import { QoS } from '../node_modules/.pnpm/mqtt-packet@9.0.2/node_modules/mqtt-packet/types/index.d'
+import mqtt, { IClientPublishOptions, QoS } from 'mqtt'
 import config from './config'
 import createLogger from './logger'
 
@@ -40,7 +39,7 @@ client
     logger.info('MQTT client has ended')
   })
 
-export interface iMqtt {
+export interface IMqtt {
   client: mqtt.MqttClient
   topicPrefix: string
   resolveApplianceTopic(applianceId: string): string

@@ -5,45 +5,115 @@ import axios, { AxiosInstance } from 'axios'
 import { cache } from './cache'
 import config, { Tokens } from './config'
 import createLogger from './logger'
-import iMqtt from './mqtt'
+import { IMqtt } from './mqtt'
 import { Appliance, ApplianceInfo, ApplianceStub, SanitizedState } from './types'
 import { initializeHelpers } from './utils'
 
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
+// Type aliases
+type OnOffState = 'on' | 'off'
+type OnOffNullState = 'on' | 'off' | null
+type UpgradeState = 'idle' | 'upgrading' | null
+type LinkQuality = 'excellent' | 'good' | 'fair' | 'poor'
+
 /**
  * Compare two states and log the differences
  */
-function getStateDifferences(oldState: SanitizedState | null, newState: SanitizedState): Record<string, { from: any; to: any }> {
-  const differences: Record<string, { from: any; to: any }> = {}
-  const ignoredKeys = ['networkInterface', 'rssi']
+type StateDifference = { from: unknown; to: unknown }
+
+function getStateDifferences(
+  oldState: SanitizedState | null,
+  newState: SanitizedState,
+): Record<string, StateDifference> {
+  const differences: Record<string, StateDifference> = {}
+  const ignoredKeys = config.logging?.ignoredKeys || []
 
   if (!oldState) {
     return differences
   }
 
+  // Helper to check if a path should be ignored (exact match or parent match)
+  const shouldIgnore = (path: string): boolean => {
+    // Check exact match
+    if (ignoredKeys.includes(path)) {
+      return true
+    }
+    // Check if any parent path is ignored (e.g., "networkInterface" ignores "networkInterface.rssi")
+    const parts = path.split('.')
+    for (let i = 1; i < parts.length; i++) {
+      const parentPath = parts.slice(0, i).join('.')
+      if (ignoredKeys.includes(parentPath)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // Helper function to recursively compare objects and return flattened differences
+  const compareValues = (oldVal: unknown, newVal: unknown, path = ''): Record<string, StateDifference> => {
+    const diffs: Record<string, StateDifference> = {}
+
+    // Normalize null/undefined
+    const normalizedOld = oldVal ?? null
+    const normalizedNew = newVal ?? null
+
+    // If both are null/undefined after normalization, no change
+    if (JSON.stringify(normalizedOld) === JSON.stringify(normalizedNew)) {
+      return diffs
+    }
+
+    // If both are objects, recurse into them
+    if (
+      typeof normalizedOld === 'object' &&
+      normalizedOld !== null &&
+      typeof normalizedNew === 'object' &&
+      normalizedNew !== null
+    ) {
+      const allKeys = new Set([...Object.keys(normalizedOld), ...Object.keys(normalizedNew)])
+      for (const key of allKeys) {
+        const fullPath = path ? `${path}.${key}` : key
+
+        // Skip if this path or any parent is ignored
+        if (shouldIgnore(fullPath)) {
+          continue
+        }
+
+        const oldObj = normalizedOld as Record<string, unknown>
+        const newObj = normalizedNew as Record<string, unknown>
+        const nested = compareValues(oldObj[key], newObj[key], fullPath)
+        Object.assign(diffs, nested)
+      }
+      return diffs
+    }
+
+    // Scalar value changed
+    diffs[path] = { from: oldVal, to: newVal }
+    return diffs
+  }
+
   // Compare all keys in newState
   for (const key of Object.keys(newState)) {
-    const oldValue = (oldState as any)[key]
-    const newValue = (newState as any)[key]
+    const oldValue = (oldState as Record<string, unknown>)[key]
+    const newValue = (newState as Record<string, unknown>)[key]
 
-    // Skip ignored keys and complex objects
-    if (ignoredKeys.includes(key) || typeof newValue === 'object' || typeof oldValue === 'object') {
+    // Skip if this key is ignored
+    if (shouldIgnore(key)) {
       continue
     }
 
-    // If values differ, record the change
-    if (oldValue !== newValue) {
-      differences[key] = { from: oldValue, to: newValue }
-    }
+    const nestedDiffs = compareValues(oldValue, newValue, key)
+    Object.assign(differences, nestedDiffs)
   }
 
   return differences
 }
 
-function formatStateDifferences(differences: Record<string, { from: any; to: any }>): string {
-  const changes = Object.entries(differences).map(([key, { from, to }]) => `\n  ${key}: ${from} → ${to}`).join('')
+function formatStateDifferences(differences: Record<string, StateDifference>): string {
+  const changes = Object.entries(differences)
+    .map(([key, { from, to }]) => `\n  ${key}: ${from} → ${to}`)
+    .join('')
   return changes
 }
 
@@ -84,19 +154,21 @@ class ElectroluxClient {
   private refreshToken?: string = config.electrolux.refreshToken
   private eat?: Date = config.electrolux.eat
   private iat?: Date = config.electrolux.iat
-  private mqtt: iMqtt
-  private utils
+  private readonly mqtt: IMqtt
+  private readonly utils: ReturnType<typeof initializeHelpers>
+  private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
 
   public isLoggingIn = false
   public isLoggedIn = false
   public refreshInterval: number = config.electrolux.refreshInterval ?? 30
 
-  constructor(mqtt: iMqtt) {
+  constructor(mqtt: IMqtt) {
     this.mqtt = mqtt
-
     this.utils = initializeHelpers(this.mqtt)
+  }
 
-    this.createApiClient()
+  public async initialize() {
+    await this.createApiClient()
   }
 
   private async createApiClient() {
@@ -160,17 +232,17 @@ class ElectroluxClient {
     this.isLoggingIn = true
     this.isLoggedIn = false
     logger.info('Attempting to fetch access token...')
-    
+
     const tokenData = await this.getXcsrfToken()
     if (!tokenData) {
       throw new Error('Failed to retrieve X-CSRF token data')
     }
     const { xcsrfToken, csrfSecret } = tokenData
     logger.debug('CSRF token retrieved successfully')
-    
+
     try {
       // Try first payload structure (with state parameter)
-      let body: Record<string, any> = {
+      let body: Record<string, string | Record<string, string>> = {
         email: config.electrolux.username,
         password: config.electrolux.password,
         postAuthAction: 'authorization',
@@ -193,12 +265,12 @@ class ElectroluxClient {
       logger.debug(`Sending login request to account.electrolux.one`)
       let response = await axios.post('https://api.account.electrolux.one/api/v1/password/login', body, headers)
       logger.debug(`Password login response status: ${response.status}`)
-      
+
       // Check if we got an error redirect
       let redirectUrl = response.data.redirectUrl
       if (redirectUrl?.includes('error=invalid_request')) {
         logger.warn('Received invalid_request error, trying flattened payload structure...')
-        
+
         // Try second structure (flattened params with state)
         body = {
           email: config.electrolux.username,
@@ -210,18 +282,18 @@ class ElectroluxClient {
           state: 'electrolux-mqtt-client',
           countryCode: config.electrolux.countryCode,
         }
-        
+
         response = await axios.post('https://api.account.electrolux.one/api/v1/password/login', body, headers)
         logger.debug(`Password login with flattened payload response status: ${response.status}`)
         redirectUrl = response.data.redirectUrl
       }
-      
+
       const code = redirectUrl.match(/code=([^&]*)/)?.[1]
       if (!code) {
         logger.error(`Failed to extract code from redirectUrl: ${redirectUrl}`)
         throw new Error('Authorization code not found in login response')
       }
-      
+
       logger.info('Successfully extracted authorization code')
 
       const tokenBody = {
@@ -287,11 +359,11 @@ class ElectroluxClient {
     }
   }
 
-  private sanitizeToken = (token: string) => {
+  private readonly sanitizeToken = (token: string) => {
     return token.replace('s%3A', '')
   }
 
-  private retainTokensForOutput = (tokens: Partial<Tokens>) => {
+  private readonly retainTokensForOutput = (tokens: Partial<Tokens>) => {
     return {
       ...tokens,
       accessToken: `${this.accessToken?.slice(0, 10)}...token length ${this.accessToken?.length}...${this.accessToken?.slice(-10)}`,
@@ -299,26 +371,32 @@ class ElectroluxClient {
     }
   }
 
-  private sanitizeStateToMqtt = (rawState: Appliance) => {
-    const mode = rawState.properties.reported.mode?.toLowerCase()
-    const fanSpeedSetting = rawState.properties.reported.fanSpeedSetting?.toLowerCase()
-    const applianceData = rawState.properties.reported.applianceData
+  private readonly sanitizeStateToMqtt = (rawState: Appliance) => {
+    // Handle both nested structure (properties.reported) and flat structure
+    const reported = rawState?.properties?.reported || rawState
+
+    const mode = (reported?.mode ?? rawState.properties?.reported?.mode)?.toLowerCase()
+    const fanSpeedSetting = (reported?.fanSpeedSetting ?? rawState.properties?.reported?.fanSpeedSetting)?.toLowerCase()
+    const applianceData = reported?.applianceData ?? rawState.properties?.reported?.applianceData
+    const applianceStateRaw = (reported?.applianceState ?? rawState.properties?.reported?.applianceState)?.toLowerCase()
+    // Normalize "running" to "on" since they mean the same thing
+    const applianceState = applianceStateRaw === 'running' ? 'on' : applianceStateRaw
 
     const state = {
       applianceId: rawState.applianceId,
-      status: rawState.status?.toLowerCase() as 'enabled' | 'disabled',
-      applianceState: rawState.properties.reported.applianceState?.toLowerCase() as 'on' | 'off',
+      status: rawState?.status?.toLowerCase() as 'enabled' | 'disabled',
+      applianceState: applianceState as 'on' | 'off',
       mode: (mode === 'fanonly' ? 'fan_only' : mode) as 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto',
-      ambientTemperatureC: rawState.properties.reported.ambientTemperatureC,
-      targetTemperatureC: rawState.properties.reported.targetTemperatureC,
+      ambientTemperatureC: reported?.ambientTemperatureC ?? rawState.properties?.reported?.ambientTemperatureC,
+      targetTemperatureC: reported?.targetTemperatureC ?? rawState.properties?.reported?.targetTemperatureC,
       fanSpeedSetting: (fanSpeedSetting === 'middle' ? 'medium' : fanSpeedSetting) as
         | 'low'
         | 'medium'
         | 'high'
         | 'auto',
-      verticalSwing: rawState.properties.reported.verticalSwing,
+      verticalSwing: reported?.verticalSwing ?? rawState.properties?.reported?.verticalSwing,
 
-      ambientTemperatureF: rawState.properties.reported.ambientTemperatureF,
+      ambientTemperatureF: reported?.ambientTemperatureF ?? rawState.properties?.reported?.ambientTemperatureF,
       applianceData: applianceData
         ? {
             elc: applianceData.elc,
@@ -327,45 +405,60 @@ class ElectroluxClient {
             sn: applianceData.sn,
           }
         : null,
-      capabilities: rawState.properties.reported.capabilities,
-      compressorCoolingRuntime: rawState.properties.reported.compressorCoolingRuntime,
-      compressorHeatingRuntime: rawState.properties.reported.compressorHeatingRuntime,
-      compressorState: rawState.properties.reported.compressorState?.toLowerCase() as 'on' | 'off',
+      capabilities: reported?.capabilities ?? rawState.properties?.reported?.capabilities,
+      compressorCoolingRuntime:
+        reported?.compressorCoolingRuntime ?? rawState.properties?.reported?.compressorCoolingRuntime,
+      compressorHeatingRuntime:
+        reported?.compressorHeatingRuntime ?? rawState.properties?.reported?.compressorHeatingRuntime,
+      compressorState: (reported?.compressorState ?? rawState.properties?.reported?.compressorState)?.toLowerCase() as
+        | 'on'
+        | 'off',
       connectionState: rawState.connectionState?.toLowerCase() as 'connected' | 'disconnected',
-      dataModelVersion: rawState.properties.reported.dataModelVersion,
-      deviceId: rawState.properties.reported.deviceId,
-      evapDefrostState: rawState.properties.reported.evapDefrostState?.toLowerCase() as 'on' | 'off' | null,
-      filterRuntime: rawState.properties.reported.filterRuntime,
-      filterState: rawState.properties.reported.filterState?.toLowerCase() as 'clean' | 'dirty',
-      fourWayValveState: rawState.properties.reported.fourWayValveState?.toLowerCase() as 'on' | 'off' | null,
-      hepaFilterLifeTime: rawState.properties.reported.hepaFilterLifeTime,
-      logE: rawState.properties.reported.logE,
-      logW: rawState.properties.reported.logW,
+      dataModelVersion: reported?.dataModelVersion ?? rawState.properties?.reported?.dataModelVersion,
+      deviceId: reported?.deviceId ?? rawState.properties?.reported?.deviceId,
+      evapDefrostState: (
+        reported?.evapDefrostState ?? rawState.properties?.reported?.evapDefrostState
+      )?.toLowerCase() as OnOffNullState,
+      filterRuntime: reported?.filterRuntime ?? rawState.properties?.reported?.filterRuntime,
+      filterState: (reported?.filterState ?? rawState.properties?.reported?.filterState)?.toLowerCase() as
+        | 'clean'
+        | 'dirty',
+      fourWayValveState: (
+        reported?.fourWayValveState ?? rawState.properties?.reported?.fourWayValveState
+      )?.toLowerCase() as OnOffNullState,
+      hepaFilterLifeTime: reported?.hepaFilterLifeTime ?? rawState.properties?.reported?.hepaFilterLifeTime,
+      logE: reported?.logE ?? rawState.properties?.reported?.logE,
+      logW: reported?.logW ?? rawState.properties?.reported?.logW,
       networkInterface: {
-        linkQualityIndicator: rawState.properties.reported.networkInterface?.linkQualityIndicator?.toLowerCase() as
-          | 'excellent'
-          | 'good'
-          | 'fair'
-          | 'poor',
-        rssi: rawState.properties.reported.networkInterface?.rssi,
+        linkQualityIndicator: (
+          reported?.networkInterface?.linkQualityIndicator ??
+          rawState.properties?.reported?.networkInterface?.linkQualityIndicator
+        )?.toLowerCase() as LinkQuality,
+        rssi: reported?.networkInterface?.rssi ?? rawState.properties?.reported?.networkInterface?.rssi,
       },
-      schedulerMode: rawState.properties.reported.schedulerMode?.toLowerCase() as 'on' | 'off' | null,
-      schedulerSession: rawState.properties.reported.schedulerSession?.toLowerCase() as 'on' | 'off' | null,
-      sleepMode: rawState.properties.reported.sleepMode?.toLowerCase() as 'on' | 'off',
-      startTime: rawState.properties.reported.startTime,
-      stopTime: rawState.properties.reported.stopTime,
-      tasks: rawState.properties.reported.tasks,
-      temperatureRepresentation: rawState.properties.reported.temperatureRepresentation?.toLowerCase() as
-        | 'celsius'
-        | 'fahrenheit',
-      TimeZoneDaylightRule: rawState.properties.reported.TimeZoneDaylightRule,
-      TimeZoneStandardName: rawState.properties.reported.TimeZoneStandardName,
-      totalRuntime: rawState.properties.reported.totalRuntime,
-      uiLockMode: rawState.properties.reported.uiLockMode,
-      upgradeState: rawState.properties.reported.upgradeState?.toLowerCase() as 'idle' | 'upgrading' | null,
-      version: rawState.properties.reported.$version,
-      VmNo_MCU: rawState.properties.reported.VmNo_MCU,
-      VmNo_NIU: rawState.properties.reported.VmNo_NIU,
+      schedulerMode: (
+        reported?.schedulerMode ?? rawState.properties?.reported?.schedulerMode
+      )?.toLowerCase() as OnOffNullState,
+      schedulerSession: (
+        reported?.schedulerSession ?? rawState.properties?.reported?.schedulerSession
+      )?.toLowerCase() as OnOffNullState,
+      sleepMode: (reported?.sleepMode ?? rawState.properties?.reported?.sleepMode)?.toLowerCase() as OnOffState,
+      startTime: reported?.startTime ?? rawState.properties?.reported?.startTime,
+      stopTime: reported?.stopTime ?? rawState.properties?.reported?.stopTime,
+      tasks: reported?.tasks ?? rawState.properties?.reported?.tasks,
+      temperatureRepresentation: (
+        reported?.temperatureRepresentation ?? rawState.properties?.reported?.temperatureRepresentation
+      )?.toLowerCase() as 'celsius' | 'fahrenheit',
+      TimeZoneDaylightRule: reported?.TimeZoneDaylightRule ?? rawState.properties?.reported?.TimeZoneDaylightRule,
+      TimeZoneStandardName: reported?.TimeZoneStandardName ?? rawState.properties?.reported?.TimeZoneStandardName,
+      totalRuntime: reported?.totalRuntime ?? rawState.properties?.reported?.totalRuntime,
+      uiLockMode: reported?.uiLockMode ?? rawState.properties?.reported?.uiLockMode,
+      upgradeState: (
+        reported?.upgradeState ?? rawState.properties?.reported?.upgradeState
+      )?.toLowerCase() as UpgradeState,
+      version: reported?.$version ?? rawState.properties?.reported?.$version,
+      VmNo_MCU: reported?.VmNo_MCU ?? rawState.properties?.reported?.VmNo_MCU,
+      VmNo_NIU: reported?.VmNo_NIU ?? rawState.properties?.reported?.VmNo_NIU,
     } as SanitizedState
 
     return state
@@ -478,6 +571,18 @@ class ElectroluxClient {
   ): Promise<Appliance | undefined> {
     const cacheKey = cache.cacheKey(applianceId).state
 
+    // Skip fetching state if a command was sent recently (within 30 seconds) to avoid stale API cache
+    const lastCommandTime = this.lastCommandTime.get(applianceId) ?? 0
+    const timeSinceCommand = Date.now() - lastCommandTime
+    const commandDelay = 30_000 // 30 seconds
+
+    if (timeSinceCommand < commandDelay) {
+      logger.debug(
+        `Skipping state fetch for ${applianceId}: only ${Math.round(timeSinceCommand / 1000)}s since command was sent (waiting ${Math.round((commandDelay - timeSinceCommand) / 1000)}s more)`,
+      )
+      return cache.get(cacheKey) as Appliance
+    }
+
     try {
       if (!this.client) {
         throw new Error('API client is not initialized')
@@ -486,32 +591,48 @@ class ElectroluxClient {
 
       // Get the cached state BEFORE checking if the new response matches
       const cachedState = cache.get(cacheKey) as Appliance | null
-      
+
       if (cache.matchByValue(cacheKey, response.data)) {
         return cache.get(cacheKey) as Appliance
       }
 
       const sanitizedState = this.sanitizeStateToMqtt(response.data)
+
+      // If new state is incomplete, use cached sanitized state for publishing
+      // but DON'T cache the incomplete response
+      let stateToPublish = sanitizedState
+      if (!sanitizedState && cachedState) {
+        logger.debug(`Using cached state for appliance ${applianceId} due to incomplete API response`)
+        stateToPublish = this.sanitizeStateToMqtt(cachedState)
+      }
+
+      if (!stateToPublish) {
+        return response.data
+      }
+
+      // Compare sanitized states
       const cachedSanitized = cachedState ? this.sanitizeStateToMqtt(cachedState) : null
 
-      const differences = getStateDifferences(cachedSanitized, sanitizedState)
+      const differences = getStateDifferences(cachedSanitized, stateToPublish)
       const hasChanges = Object.keys(differences).length > 0
 
       if (hasChanges) {
         const changesSummary = formatStateDifferences(differences)
         if (config.logging?.showChanges) {
-          logger.info(`Publishing state change for appliance ${applianceId}: ${changesSummary}`)
+          logger.info(`State changed for appliance ${applianceId} via API: ${changesSummary}`)
         } else {
-          logger.info(`State changed for appliance ${applianceId}: ${changesSummary}`)
+          logger.info(`State changed for appliance ${applianceId} via API`)
         }
       } else {
         logger.debug('State checked, no changes detected')
       }
 
-      // Update the cache with the new state
-      cache.set(cacheKey, response.data)
+      // Only update the cache with the new state if it's complete
+      if (sanitizedState) {
+        cache.set(cacheKey, response.data)
+      }
 
-      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(sanitizedState))
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(stateToPublish))
 
       if (callback) {
         callback(sanitizedState)
@@ -554,6 +675,9 @@ class ElectroluxClient {
 
       logger.info('Sending command to appliance:', applianceId, 'Command:', payload)
 
+      // Record the time the command was sent to avoid fetching stale state
+      this.lastCommandTime.set(applianceId, Date.now())
+
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)
       const state = await this.getApplianceState(applianceId)
@@ -564,18 +688,20 @@ class ElectroluxClient {
 
       const sanitizedState = this.sanitizeStateToMqtt(state)
 
+      const resolvedMode = mode ?? sanitizedState?.mode
+
+      const { executeCommand: _, ...sanitizedWithoutCommand } = payload
+
       const combinedState = {
         ...sanitizedState,
-        ...payload,
+        ...sanitizedWithoutCommand,
         applianceState: executeCommand.toLowerCase(),
-        ...(mode || sanitizedState?.mode
+        ...(resolvedMode && resolvedMode.toLowerCase() !== 'off'
           ? {
-              mode: this.utils.mapModes[
-                (mode ?? sanitizedState?.mode)?.toUpperCase() as keyof typeof this.utils.mapModes
-              ],
+              mode: this.utils.mapModes[resolvedMode?.toUpperCase() as keyof typeof this.utils.mapModes],
             }
           : {}),
-        ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting } : {}),
+        ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting.toLowerCase() } : {}),
       }
 
       if (cache.matchByValue(cacheKey, combinedState)) {
@@ -583,6 +709,10 @@ class ElectroluxClient {
       }
 
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
+
+      // Update cache with the combined state so comparisons after the command delay work correctly
+      cache.set(cacheKey, combinedState)
+
       return response.data
     } catch (error) {
       logger.error(`Error sending command: ${formatAxiosError(error)}`)

@@ -59,6 +59,7 @@ docker run --rm \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e LOG_LEVEL=info \
   # -e LOGGING_SHOW_CHANGES=false \
+  # -e LOGGING_IGNORED_KEYS=networkInterface.rssi \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 
@@ -104,6 +105,7 @@ services:
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - LOG_LEVEL=info
       # - LOGGING_SHOW_CHANGES=false
+      # - LOGGING_IGNORED_KEYS=networkInterface.rssi
 ```
 
 ## Developing locally
