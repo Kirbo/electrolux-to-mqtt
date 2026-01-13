@@ -1,49 +1,7 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import yaml from 'yaml'
-import createLogger from './logger.js'
+import { existsSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-const logger = createLogger('config')
-
-export interface AppConfig {
-  mqtt: {
-    url: string
-    clientId?: string
-    username: string
-    password: string
-    topicPrefix?: string
-    retain?: boolean
-    qos?: number
-  }
-  electrolux: {
-    apiKey: string
-    username: string
-    password: string
-    countryCode: string
-    accessToken?: string
-    refreshToken?: string
-    eat?: Date
-    iat?: Date
-    refreshInterval?: number
-  }
-  homeAssistant: {
-    autoDiscovery: boolean
-  }
-  logging?: {
-    showChanges?: boolean
-    ignoredKeys?: string[]
-  }
-}
-
-export interface Tokens {
-  accessToken: string
-  expiresIn: number
-  tokenType: string
-  refreshToken: string
-  scope: string
-  eat: number
-  iat: number
-}
+const CONFIG_FILE = resolve(process.cwd(), 'config.yml')
 
 interface EnvVars {
   MQTT_URL?: string
@@ -63,7 +21,12 @@ interface EnvVars {
   LOGGING_IGNORED_KEYS?: string
 }
 
-function createConfigFromEnv(): void {
+export function initializeConfig(): void {
+  if (existsSync(CONFIG_FILE)) {
+    console.log('Config file already exists. Skipping creation.')
+    return
+  }
+
   const env = process.env as EnvVars
   const MANDATORY_VARS = [
     'MQTT_URL',
@@ -91,7 +54,7 @@ function createConfigFromEnv(): void {
     process.exit(1)
   }
 
-  logger.info('Config file not found. Creating from environment variables...')
+  console.log(`Config file not found. Creating ${CONFIG_FILE}...`)
 
   // Format LOGGING_IGNORED_KEYS: "key1,key2" -> "key1, key2"
   const formattedIgnoredKeys = env.LOGGING_IGNORED_KEYS ? env.LOGGING_IGNORED_KEYS.split(',').join(', ') : ''
@@ -120,37 +83,6 @@ logging:
   ignoredKeys: [${formattedIgnoredKeys}]
 `
 
-  fs.writeFileSync(configPath, configContent, 'utf8')
-  logger.info('Config file created successfully.')
-}
-
-const configPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../config.yml')
-
-// Create config from environment variables if it doesn't exist
-if (!fs.existsSync(configPath)) {
-  createConfigFromEnv()
-}
-
-const file = fs.readFileSync(configPath, 'utf8')
-const config = yaml.parse(file) as AppConfig
-
-let tokens: Partial<Tokens> = {}
-try {
-  const tokensPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
-  if (fs.existsSync(tokensPath)) {
-    tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'))
-    logger.debug('tokens.json loaded')
-  }
-} catch (error) {
-  logger.error('Error reading tokens.json:', error)
-}
-
-export default {
-  ...config,
-  electrolux: {
-    ...config.electrolux,
-    ...tokens,
-    eat: tokens.eat ? new Date(tokens.eat * 1000) : undefined,
-    iat: tokens.iat ? new Date(tokens.iat * 1000) : undefined,
-  },
+  writeFileSync(CONFIG_FILE, configContent, 'utf8')
+  console.log('Config file created successfully.')
 }

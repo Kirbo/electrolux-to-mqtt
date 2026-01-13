@@ -27,4 +27,4 @@ services:
       # - ELECTROLUX_REFRESH_INTERVAL=30                          # Electrolux refresh interval in seconds
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                      # Enable Home Assistant auto discovery
       # - LOGGING_SHOW_CHANGES=true                               # Log appliance state changes
-      # - LOGGING_IGNORED_KEYS=networkInterface.rssi              # Comma-separated list of keys to ignore in state change logs
+      # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime      # Comma-separated list of keys to ignore in state change logs

@@ -1,5 +1,5 @@
 import { LRU } from 'tiny-lru'
-import createLogger from './logger'
+import createLogger from './logger.js'
 
 const logger = createLogger('cache')
 
@@ -13,7 +13,7 @@ type CacheKeys = {
 }
 
 export class Cache<T = unknown> {
-  private lru: LRU<string>
+  private readonly lru: LRU<string>
 
   constructor(max = maxItems, ttl = defaultTtl, resetTtl = defaultResetTtl) {
     this.lru = new LRU<string>(max, ttl, resetTtl)
@@ -40,7 +40,10 @@ export class Cache<T = unknown> {
 
   get(key: string, parsed = true): T | undefined {
     const value = this.lru.get(key)
-    return value === undefined ? undefined : parsed ? (JSON.parse(value) as T) : (value as unknown as T)
+    if (value === undefined) {
+      return undefined
+    }
+    return parsed ? (JSON.parse(value) as T) : (value as unknown as T)
   }
 
   set(key: string, value: T): this {

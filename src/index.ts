@@ -1,13 +1,13 @@
-import { version as packageVersion } from '../package.json'
-import { cache } from './cache'
-import config from './config'
-import ElectroluxClient from './electrolux'
-import createLogger from './logger'
-import Mqtt from './mqtt'
-import { SanitizedState } from './types'
-import { initializeHelpers } from './utils'
+import packageJson from '../package.json' with { type: 'json' }
+import { cache } from './cache.js'
+import config from './config.js'
+import ElectroluxClient from './electrolux.js'
+import createLogger from './logger.js'
+import Mqtt from './mqtt.js'
+import { SanitizedState } from './types.js'
+import { initializeHelpers } from './utils.js'
 
-const appVersion = process.env.APP_VERSION ?? packageVersion
+const appVersion = process.env.APP_VERSION ?? packageJson.version
 const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)

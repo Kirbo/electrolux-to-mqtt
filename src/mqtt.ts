@@ -1,6 +1,8 @@
-import mqtt, { IClientPublishOptions, QoS } from 'mqtt'
-import config from './config'
-import createLogger from './logger'
+import mqtt, { IClientPublishOptions } from 'mqtt'
+import config from './config.js'
+import createLogger from './logger.js'
+
+type QoS = 0 | 1 | 2
 
 const logger = createLogger('mqtt')
 

@@ -1,8 +1,8 @@
 import yaml from 'js-yaml'
 
-import createLogger from './logger'
-import { IMqtt } from './mqtt'
-import { ApplianceInfo, ApplianceStub, SanitizedState } from './types'
+import createLogger from './logger.js'
+import { IMqtt } from './mqtt.js'
+import { ApplianceInfo, ApplianceStub, SanitizedState } from './types.js'
 
 const logger = createLogger('helpers')
 

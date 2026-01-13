@@ -33,7 +33,7 @@ initialise variables:
       dotenv: variables.env
   script:
     - touch variables.env
-    - echo "NODE_VERSION=$(cat .nvmrc)-alpine" >> variables.env
+    - echo "NODE_VERSION=$(cat .nvmrc)-alpine3.23" >> variables.env
 
 bump version:
   stage: init
@@ -150,6 +150,7 @@ build and deploy docker images:
   before_script:
     - apk add --no-cache qemu qemu-system-x86_64
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
+    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - docker buildx create --use

@@ -2,7 +2,7 @@
   "name": "electrolux-to-mqtt",
   "version": "development",
   "description": "",
-  "main": "dist/index.ts",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "check": "pnpm biome check --write",
@@ -12,7 +12,8 @@
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
     "start": "tsx src/index.ts",
-    "update-deps": "pnpm update"
+    "update-deps": "pnpm update",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
