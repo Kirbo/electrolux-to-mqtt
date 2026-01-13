@@ -113,8 +113,8 @@ cp config.example.yml config.yml
 # Modify as needed
 code config.yml
 # Make sure you have correct NodeJS version
-# If you don't have nvm installed, follow installation guide from https://github.com/nvm-sh/nvm?tab=readme-ov-file#installing-and-updating
-nvm use
+# If you don't have fnm installed, follow installation guide from https://github.com/Schniz/fnm?tab=readme-ov-file#installation
+fnm use
 # Install correct pnpm version if not installed already
 npm install -g $(node -p "require('./package.json').packageManager")
 # Install the dependencies
