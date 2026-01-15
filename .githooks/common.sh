@@ -2,6 +2,39 @@
 
 # Common functions for git hooks
 
+# ANSI color codes
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Print status with consistent formatting
+print_status() {
+  color="$1"
+  status="$2"
+  message="$3"
+  printf "${color}[%s]${NC} %s\n" "$status" "$message"
+}
+
+# Status helper functions
+step_exec() {
+  printf "${BLUE}[ EXEC ]${NC} %s" "$1"
+}
+
+step_done() {
+  printf "\r\033[K" # Clear line
+  print_status "$GREEN" " DONE " "$1"
+}
+
+step_ok() { print_status "$GREEN" "  OK  " "$1"; }
+step_skip() { print_status "$YELLOW" " SKIP " "$1"; }
+step_fail() {
+  printf "\r\033[K" # Clear line
+  print_status "$RED" " FAIL " "$1"
+  exit 1
+}
+
 # Find node executable (for GUI apps that don't have it in PATH)
 find_node() {
   # First try if node is already in PATH
