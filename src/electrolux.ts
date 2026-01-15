@@ -131,7 +131,14 @@ function formatAxiosError(error: unknown): string {
     }
     if (method && url) {
       // Extract just the path part for readability
-      const urlPath = new URL(url).pathname
+      // Handle both absolute URLs and relative paths
+      let urlPath: string
+      try {
+        urlPath = new URL(url).pathname
+      } catch {
+        // If url is a relative path, use it directly
+        urlPath = url
+      }
       formatted += ` [${method} ${urlPath}]`
     }
 
