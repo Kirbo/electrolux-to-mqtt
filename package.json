@@ -5,15 +5,16 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
+    "build": "tsc",
     "check": "pnpm biome check --write",
     "clean": "rimraf node_modules",
     "dev": "tsx watch src/index.ts",
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
+    "postinstall": "[ -f /.dockerenv ] || [ -n \"$CI\" ] || [ -n \"$DOCKER_BUILD\" ] && exit 0; bash postinstall.sh || exit 0",
     "start": "tsx src/index.ts",
-    "update-deps": "pnpm update",
-    "build": "tsc"
+    "update-deps": "pnpm update"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",

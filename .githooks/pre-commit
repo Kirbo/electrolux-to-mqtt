@@ -1,0 +1,70 @@
+#!/bin/sh
+
+# Pre-commit hook to run format and lint on staged files only
+
+# Get the repository root directory
+REPO_ROOT=$(git rev-parse --show-toplevel)
+BIOME="$REPO_ROOT/node_modules/.bin/biome"
+
+# Source common functions
+# shellcheck disable=SC1091
+. "$REPO_ROOT/.githooks/common.sh"
+
+# Setup node environment
+if ! setup_node; then
+  exit 1
+fi
+
+# Check if biome is installed
+if [ ! -f "$BIOME" ]; then
+  echo "⚠️  Biome not found in node_modules. Run 'pnpm install' first."
+  exit 1
+fi
+
+# Stash unstaged changes to avoid formatting/linting them
+echo "Stashing unstaged changes..."
+git stash push --keep-index --include-untracked --message "pre-commit-stash" > /dev/null 2>&1
+STASH_RESULT=$?
+
+# Get list of staged files that Biome supports
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx|json|jsonc)$')
+
+if [ -n "$STAGED_FILES" ]; then
+  echo "Running format and lint on staged files..."
+  
+  # Run format on staged files
+  echo "$STAGED_FILES" | xargs "$BIOME" format --write
+  FORMAT_EXIT=$?
+  
+  # Run lint on staged files
+  echo "$STAGED_FILES" | xargs "$BIOME" lint --write
+  LINT_EXIT=$?
+  
+  # Add formatted/linted files back to staging
+  echo "$STAGED_FILES" | xargs git add
+  
+  # Check if format or lint failed
+  if [ $FORMAT_EXIT -ne 0 ] || [ $LINT_EXIT -ne 0 ]; then
+    echo "❌ Format or lint failed. Please fix the issues and try again."
+    
+    # Pop stash if it was created
+    if [ $STASH_RESULT -eq 0 ]; then
+      echo "Restoring unstaged changes..."
+      git stash pop > /dev/null 2>&1
+    fi
+    
+    exit 1
+  fi
+  
+  echo "✅ Format and lint completed successfully."
+else
+  echo "No Biome-supported files staged (skipping format/lint)."
+fi
+
+# Pop stash to restore unstaged changes
+if [ $STASH_RESULT -eq 0 ]; then
+  echo "Restoring unstaged changes..."
+  git stash pop > /dev/null 2>&1
+fi
+
+exit 0
