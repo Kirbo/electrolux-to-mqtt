@@ -134,6 +134,45 @@ if (!fs.existsSync(configPath)) {
 const file = fs.readFileSync(configPath, 'utf8')
 const config = yaml.parse(file) as AppConfig
 
+// Validate configuration
+function validateConfig(cfg: AppConfig): void {
+  const errors: string[] = []
+
+  // Validate refresh interval
+  if (cfg.electrolux.refreshInterval !== undefined) {
+    if (cfg.electrolux.refreshInterval < 10) {
+      errors.push(
+        'electrolux.refreshInterval must be at least 10 seconds (current: ' + cfg.electrolux.refreshInterval + ')',
+      )
+    }
+    if (cfg.electrolux.refreshInterval > 3600) {
+      errors.push(
+        'electrolux.refreshInterval should not exceed 3600 seconds (current: ' + cfg.electrolux.refreshInterval + ')',
+      )
+    }
+  }
+
+  // Validate QoS
+  if (cfg.mqtt.qos !== undefined && ![0, 1, 2].includes(cfg.mqtt.qos)) {
+    errors.push('mqtt.qos must be 0, 1, or 2 (current: ' + cfg.mqtt.qos + ')')
+  }
+
+  // Validate MQTT URL format
+  if (cfg.mqtt.url && !/^mqtts?:\/\/.+/.exec(cfg.mqtt.url)) {
+    errors.push('mqtt.url must start with mqtt:// or mqtts:// (current: ' + cfg.mqtt.url + ')')
+  }
+
+  if (errors.length > 0) {
+    console.error('Configuration validation failed:')
+    for (const error of errors) {
+      console.error('  - ' + error)
+    }
+    process.exit(1)
+  }
+}
+
+validateConfig(config)
+
 let tokens: Partial<Tokens> = {}
 try {
   const tokensPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')

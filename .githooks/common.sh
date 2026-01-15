@@ -4,19 +4,18 @@
 
 # ANSI color codes - only use colors if output is a TTY
 if [ -t 1 ]; then
-  GREEN='\033[0;32m'
-  RED='\033[0;31m'
-  YELLOW='\033[0;33m'
-  BLUE='\033[0;34m'
-  NC='\033[0m' # No Color
-  CLEAR_LINE='\r\033[K' # Carriage return + clear line
+  GREEN=$(printf '\033[0;32m')
+  RED=$(printf '\033[0;31m')
+  YELLOW=$(printf '\033[0;33m')
+  BLUE=$(printf '\033[0;34m')
+  NC=$(printf '\033[0m') # No Color
+  CLEAR_LINE=$(printf '\r\033[K') # Carriage return + clear line
 else
   GREEN=''
   RED=''
   YELLOW=''
   BLUE=''
   NC=''
-  CLEAR_LINE='\n' # Just newline in non-TTY
 fi
 
 # Print status with consistent formatting
@@ -41,7 +40,7 @@ step_exec() {
 step_done() {
   if [ -t 1 ]; then
     # TTY: clear the line and rewrite
-    printf '\r\033[K'
+    printf '%s' "$CLEAR_LINE"
   fi
   print_status "$GREEN" " DONE " "$1"
 }
@@ -51,7 +50,7 @@ step_skip() { print_status "$YELLOW" " SKIP " "$1"; }
 step_fail() {
   if [ -t 1 ]; then
     # TTY: clear the line and rewrite
-    printf '\r\033[K'
+    printf '%s' "$CLEAR_LINE"
   fi
   print_status "$RED" " FAIL " "$1"
   exit 1
@@ -134,7 +133,7 @@ find_node() {
 setup_node() {
   NODE_BIN=$(find_node)
   if [ -z "$NODE_BIN" ]; then
-    echo "⚠️  Node.js not found. Please install Node.js or check your PATH."
+    echo "⚠️ Node.js not found. Please install Node.js or check your PATH."
     return 1
   fi
   

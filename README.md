@@ -77,7 +77,7 @@ docker compose pull && docker compose up -d
 1. Add new Stack
 2. Give it a name, e.g. `electrolux-to-mqtt`
 3. Select `Web editor`, copy the following variables and make changes accordingly, finally press `Deploy the stack`:
-```bash
+```yaml
 services:
   electrolux-to-mqtt:
     image: kirbownz/electrolux-to-mqtt:latest
@@ -88,7 +88,7 @@ services:
       - "/etc/localtime:/etc/localtime:ro"
       - "/etc/timezone:/etc/timezone:ro"
     environment:
-      - # Mandatory variables
+      # Mandatory variables
       - MQTT_URL=mqtt://192.168.1.1:1883
       - MQTT_USERNAME=mqtt-user
       - MQTT_PASSWORD=mqtt-password
@@ -96,7 +96,7 @@ services:
       - ELECTROLUX_USERNAME=electrolux-user@example.com
       - ELECTROLUX_PASSWORD=electrolux-password
       - ELECTROLUX_COUNTRY_CODE=FI
-      - # Optional variables
+      # Optional variables (uncomment as needed)
       # - MQTT_TOPIC_PREFIX=electrolux_
       # - MQTT_CLIENT_ID=electrolux-comfort600
       # - MQTT_RETAIN=false

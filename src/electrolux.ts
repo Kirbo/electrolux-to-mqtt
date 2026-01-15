@@ -12,6 +12,13 @@ import { initializeHelpers } from './utils.js'
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
+// Configuration constants
+const TOKEN_REFRESH_THRESHOLD_HOURS = 6
+const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
+const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
+const LOGIN_RETRY_DELAY_MS = 5_000 // Retry login after 5s on failure
+const TOKEN_REFRESH_RETRY_DELAY_MS = 5_000 // Retry token refresh after 5s on failure
+
 // Type aliases
 type OnOffState = 'on' | 'off'
 type OnOffNullState = 'on' | 'off' | null
@@ -117,6 +124,18 @@ function formatStateDifferences(differences: Record<string, StateDifference>): s
   return changes
 }
 
+// Helper to extract URL path from absolute or relative URLs
+function extractUrlPath(url: string | undefined): string {
+  if (!url) return ''
+
+  try {
+    return new URL(url).pathname
+  } catch {
+    // If url is a relative path, use it directly
+    return url
+  }
+}
+
 function formatAxiosError(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status
@@ -130,22 +149,14 @@ function formatAxiosError(error: unknown): string {
       formatted += ` (${status}${statusText ? ' ' + statusText : ''})`
     }
     if (method && url) {
-      // Extract just the path part for readability
-      // Handle both absolute URLs and relative paths
-      let urlPath: string
-      try {
-        urlPath = new URL(url).pathname
-      } catch {
-        // If url is a relative path, use it directly
-        urlPath = url
-      }
+      const urlPath = extractUrlPath(url)
       formatted += ` [${method} ${urlPath}]`
     }
 
     // Add response data if available and not too large
     if (error.response?.data && typeof error.response.data === 'object') {
       const responseStr = JSON.stringify(error.response.data)
-      if (responseStr.length < 200) {
+      if (responseStr.length < ERROR_RESPONSE_MAX_LENGTH) {
         formatted += ` - ${responseStr}`
       }
     }
@@ -361,7 +372,7 @@ class ElectroluxClient {
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
       setTimeout(async () => {
         await this.login()
-      }, 1000 * 5) // Retry after 5 seconds
+      }, LOGIN_RETRY_DELAY_MS)
       return false
     }
   }
@@ -382,10 +393,9 @@ class ElectroluxClient {
     // Handle both nested structure (properties.reported) and flat structure
     const reported = rawState?.properties?.reported || rawState
 
-    const mode = (reported?.mode ?? rawState.properties?.reported?.mode)?.toLowerCase()
-    const fanSpeedSetting = (reported?.fanSpeedSetting ?? rawState.properties?.reported?.fanSpeedSetting)?.toLowerCase()
-    const applianceData = reported?.applianceData ?? rawState.properties?.reported?.applianceData
-    const applianceStateRaw = (reported?.applianceState ?? rawState.properties?.reported?.applianceState)?.toLowerCase()
+    const mode = reported.mode?.toLowerCase()
+    const fanSpeedSetting = reported.fanSpeedSetting?.toLowerCase()
+    const applianceStateRaw = reported.applianceState?.toLowerCase()
     // Normalize "running" to "on" since they mean the same thing
     const applianceState = applianceStateRaw === 'running' ? 'on' : applianceStateRaw
 
@@ -394,78 +404,57 @@ class ElectroluxClient {
       status: rawState?.status?.toLowerCase() as 'enabled' | 'disabled',
       applianceState: applianceState as 'on' | 'off',
       mode: (mode === 'fanonly' ? 'fan_only' : mode) as 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto',
-      ambientTemperatureC: reported?.ambientTemperatureC ?? rawState.properties?.reported?.ambientTemperatureC,
-      targetTemperatureC: reported?.targetTemperatureC ?? rawState.properties?.reported?.targetTemperatureC,
+      ambientTemperatureC: reported.ambientTemperatureC,
+      targetTemperatureC: reported.targetTemperatureC,
       fanSpeedSetting: (fanSpeedSetting === 'middle' ? 'medium' : fanSpeedSetting) as
         | 'low'
         | 'medium'
         | 'high'
         | 'auto',
-      verticalSwing: reported?.verticalSwing ?? rawState.properties?.reported?.verticalSwing,
+      verticalSwing: reported.verticalSwing,
 
-      ambientTemperatureF: reported?.ambientTemperatureF ?? rawState.properties?.reported?.ambientTemperatureF,
-      applianceData: applianceData
+      ambientTemperatureF: reported.ambientTemperatureF,
+      applianceData: reported.applianceData
         ? {
-            elc: applianceData.elc,
-            mac: applianceData.mac,
-            pnc: applianceData.pnc,
-            sn: applianceData.sn,
+            elc: reported.applianceData.elc,
+            mac: reported.applianceData.mac,
+            pnc: reported.applianceData.pnc,
+            sn: reported.applianceData.sn,
           }
         : null,
-      capabilities: reported?.capabilities ?? rawState.properties?.reported?.capabilities,
-      compressorCoolingRuntime:
-        reported?.compressorCoolingRuntime ?? rawState.properties?.reported?.compressorCoolingRuntime,
-      compressorHeatingRuntime:
-        reported?.compressorHeatingRuntime ?? rawState.properties?.reported?.compressorHeatingRuntime,
-      compressorState: (reported?.compressorState ?? rawState.properties?.reported?.compressorState)?.toLowerCase() as
-        | 'on'
-        | 'off',
+      capabilities: reported.capabilities,
+      compressorCoolingRuntime: reported.compressorCoolingRuntime,
+      compressorHeatingRuntime: reported.compressorHeatingRuntime,
+      compressorState: reported.compressorState?.toLowerCase() as 'on' | 'off',
       connectionState: rawState.connectionState?.toLowerCase() as 'connected' | 'disconnected',
-      dataModelVersion: reported?.dataModelVersion ?? rawState.properties?.reported?.dataModelVersion,
-      deviceId: reported?.deviceId ?? rawState.properties?.reported?.deviceId,
-      evapDefrostState: (
-        reported?.evapDefrostState ?? rawState.properties?.reported?.evapDefrostState
-      )?.toLowerCase() as OnOffNullState,
-      filterRuntime: reported?.filterRuntime ?? rawState.properties?.reported?.filterRuntime,
-      filterState: (reported?.filterState ?? rawState.properties?.reported?.filterState)?.toLowerCase() as
-        | 'clean'
-        | 'dirty',
-      fourWayValveState: (
-        reported?.fourWayValveState ?? rawState.properties?.reported?.fourWayValveState
-      )?.toLowerCase() as OnOffNullState,
-      hepaFilterLifeTime: reported?.hepaFilterLifeTime ?? rawState.properties?.reported?.hepaFilterLifeTime,
-      logE: reported?.logE ?? rawState.properties?.reported?.logE,
-      logW: reported?.logW ?? rawState.properties?.reported?.logW,
+      dataModelVersion: reported.dataModelVersion,
+      deviceId: reported.deviceId,
+      evapDefrostState: reported.evapDefrostState?.toLowerCase() as OnOffNullState,
+      filterRuntime: reported.filterRuntime,
+      filterState: reported.filterState?.toLowerCase() as 'clean' | 'dirty',
+      fourWayValveState: reported.fourWayValveState?.toLowerCase() as OnOffNullState,
+      hepaFilterLifeTime: reported.hepaFilterLifeTime,
+      logE: reported.logE,
+      logW: reported.logW,
       networkInterface: {
-        linkQualityIndicator: (
-          reported?.networkInterface?.linkQualityIndicator ??
-          rawState.properties?.reported?.networkInterface?.linkQualityIndicator
-        )?.toLowerCase() as LinkQuality,
-        rssi: reported?.networkInterface?.rssi ?? rawState.properties?.reported?.networkInterface?.rssi,
+        linkQualityIndicator: reported.networkInterface?.linkQualityIndicator?.toLowerCase() as LinkQuality,
+        rssi: reported.networkInterface?.rssi,
       },
-      schedulerMode: (
-        reported?.schedulerMode ?? rawState.properties?.reported?.schedulerMode
-      )?.toLowerCase() as OnOffNullState,
-      schedulerSession: (
-        reported?.schedulerSession ?? rawState.properties?.reported?.schedulerSession
-      )?.toLowerCase() as OnOffNullState,
-      sleepMode: (reported?.sleepMode ?? rawState.properties?.reported?.sleepMode)?.toLowerCase() as OnOffState,
-      startTime: reported?.startTime ?? rawState.properties?.reported?.startTime,
-      stopTime: reported?.stopTime ?? rawState.properties?.reported?.stopTime,
-      tasks: reported?.tasks ?? rawState.properties?.reported?.tasks,
-      temperatureRepresentation: (
-        reported?.temperatureRepresentation ?? rawState.properties?.reported?.temperatureRepresentation
-      )?.toLowerCase() as 'celsius' | 'fahrenheit',
-      TimeZoneDaylightRule: reported?.TimeZoneDaylightRule ?? rawState.properties?.reported?.TimeZoneDaylightRule,
-      TimeZoneStandardName: reported?.TimeZoneStandardName ?? rawState.properties?.reported?.TimeZoneStandardName,
-      totalRuntime: reported?.totalRuntime ?? rawState.properties?.reported?.totalRuntime,
-      uiLockMode: reported?.uiLockMode ?? rawState.properties?.reported?.uiLockMode,
-      upgradeState: (
-        reported?.upgradeState ?? rawState.properties?.reported?.upgradeState
-      )?.toLowerCase() as UpgradeState,
-      version: reported?.$version ?? rawState.properties?.reported?.$version,
-      VmNo_MCU: reported?.VmNo_MCU ?? rawState.properties?.reported?.VmNo_MCU,
-      VmNo_NIU: reported?.VmNo_NIU ?? rawState.properties?.reported?.VmNo_NIU,
+      schedulerMode: reported.schedulerMode?.toLowerCase() as OnOffNullState,
+      schedulerSession: reported.schedulerSession?.toLowerCase() as OnOffNullState,
+      sleepMode: reported.sleepMode?.toLowerCase() as OnOffState,
+      startTime: reported.startTime,
+      stopTime: reported.stopTime,
+      tasks: reported.tasks,
+      temperatureRepresentation: reported.temperatureRepresentation?.toLowerCase() as 'celsius' | 'fahrenheit',
+      TimeZoneDaylightRule: reported.TimeZoneDaylightRule,
+      TimeZoneStandardName: reported.TimeZoneStandardName,
+      totalRuntime: reported.totalRuntime,
+      uiLockMode: reported.uiLockMode,
+      upgradeState: reported.upgradeState?.toLowerCase() as UpgradeState,
+      version: reported.$version,
+      VmNo_MCU: reported.VmNo_MCU,
+      VmNo_NIU: reported.VmNo_NIU,
     } as SanitizedState
 
     return state
@@ -482,8 +471,7 @@ class ElectroluxClient {
       const timeLeft = this.eat.getTime() - now.getTime()
       const readableTimeLeft = timeLeft / 1000
 
-      // 6 hour
-      if (timeLeft <= 1000 * 60 * 60 * 6) {
+      if (timeLeft <= 1000 * 60 * 60 * TOKEN_REFRESH_THRESHOLD_HOURS) {
         logger.info(`Access token is about to expire, time left "${readableTimeLeft}", refreshing tokens...`)
         this.isLoggedIn = false
         await this.refreshTokens()
@@ -542,7 +530,7 @@ class ElectroluxClient {
       logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
       setTimeout(async () => {
         await this.refreshTokens()
-      }, 1000 * 5) // Retry after 5 seconds
+      }, TOKEN_REFRESH_RETRY_DELAY_MS)
     }
   }
 
@@ -584,6 +572,23 @@ class ElectroluxClient {
     }
   }
 
+  private handleStateChanges(applianceId: string, stateToPublish: SanitizedState, cachedState: Appliance | null): void {
+    const cachedSanitized = cachedState ? this.sanitizeStateToMqtt(cachedState) : null
+    const differences = getStateDifferences(cachedSanitized, stateToPublish)
+    const hasChanges = Object.keys(differences).length > 0
+
+    if (hasChanges) {
+      const changesSummary = formatStateDifferences(differences)
+      if (config.logging?.showChanges) {
+        logger.info(`State changed for appliance ${applianceId} via API: ${changesSummary}`)
+      } else {
+        logger.info(`State changed for appliance ${applianceId} via API`)
+      }
+    } else {
+      logger.debug('State checked, no changes detected')
+    }
+  }
+
   public async getApplianceState(
     applianceId: string,
     callback?: (state: SanitizedState) => void,
@@ -593,11 +598,10 @@ class ElectroluxClient {
     // Skip fetching state if a command was sent recently (within 30 seconds) to avoid stale API cache
     const lastCommandTime = this.lastCommandTime.get(applianceId) ?? 0
     const timeSinceCommand = Date.now() - lastCommandTime
-    const commandDelay = 30_000 // 30 seconds
 
-    if (timeSinceCommand < commandDelay) {
+    if (timeSinceCommand < COMMAND_STATE_DELAY_MS) {
       logger.debug(
-        `Skipping state fetch for ${applianceId}: only ${Math.round(timeSinceCommand / 1000)}s since command was sent (waiting ${Math.round((commandDelay - timeSinceCommand) / 1000)}s more)`,
+        `Skipping state fetch for ${applianceId}: only ${Math.round(timeSinceCommand / 1000)}s since command was sent (waiting ${Math.round((COMMAND_STATE_DELAY_MS - timeSinceCommand) / 1000)}s more)`,
       )
       return cache.get(cacheKey) as Appliance
     }
@@ -629,22 +633,8 @@ class ElectroluxClient {
         return response.data
       }
 
-      // Compare sanitized states
-      const cachedSanitized = cachedState ? this.sanitizeStateToMqtt(cachedState) : null
-
-      const differences = getStateDifferences(cachedSanitized, stateToPublish)
-      const hasChanges = Object.keys(differences).length > 0
-
-      if (hasChanges) {
-        const changesSummary = formatStateDifferences(differences)
-        if (config.logging?.showChanges) {
-          logger.info(`State changed for appliance ${applianceId} via API: ${changesSummary}`)
-        } else {
-          logger.info(`State changed for appliance ${applianceId} via API`)
-        }
-      } else {
-        logger.debug('State checked, no changes detected')
-      }
+      // Compare sanitized states and log changes
+      this.handleStateChanges(applianceId, stateToPublish, cachedState)
 
       // Only update the cache with the new state if it's complete
       if (sanitizedState) {
@@ -653,7 +643,8 @@ class ElectroluxClient {
 
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(stateToPublish))
 
-      if (callback) {
+      // Only call callback if we have a valid sanitized state
+      if (callback && sanitizedState) {
         callback(sanitizedState)
       }
 

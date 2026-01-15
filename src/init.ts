@@ -83,6 +83,25 @@ logging:
   ignoredKeys: [${formattedIgnoredKeys}]
 `
 
+  // Validate refresh interval from env
+  const refreshInterval = Number.parseInt(env.ELECTROLUX_REFRESH_INTERVAL || '30', 10)
+  if (refreshInterval < 10) {
+    console.error('ELECTROLUX_REFRESH_INTERVAL must be at least 10 seconds (current: ' + refreshInterval + ')')
+    process.exit(1)
+  }
+  if (refreshInterval > 3600) {
+    console.warn(
+      'Warning: ELECTROLUX_REFRESH_INTERVAL is very high (' + refreshInterval + 's). Consider using a lower value.',
+    )
+  }
+
+  // Validate QoS
+  const qos = Number.parseInt(env.MQTT_QOS || '2', 10)
+  if (![0, 1, 2].includes(qos)) {
+    console.error('MQTT_QOS must be 0, 1, or 2 (current: ' + qos + ')')
+    process.exit(1)
+  }
+
   writeFileSync(CONFIG_FILE, configContent, 'utf8')
   console.log('Config file created successfully.')
 }

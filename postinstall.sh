@@ -1,37 +1,23 @@
 #!/bin/bash
 
-# ANSI color codes
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Get the script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Print status with consistent formatting
-print_status() {
-  color="$1"
-  status="$2"
-  message="$3"
-  printf "${color}[%s]${NC} %s\n" "$status" "$message"
-}
-
-# Status helper functions
-step_exec() {
-  printf "${BLUE}[ EXEC ]${NC} %s" "$1"
-}
-
-step_done() {
-  printf "\r\033[K" # Clear line
-  print_status "$GREEN" " DONE " "$1"
-}
-
-step_ok() { print_status "$GREEN" "  OK  " "$1"; }
-step_skip() { print_status "$YELLOW" " SKIP " "$1"; }
-step_fail() {
-  printf "\r\033[K" # Clear line
-  print_status "$RED" " FAIL " "$1"
-  exit 1
-}
+# Source common functions if available (in git repo)
+if [ -f "$SCRIPT_DIR/.githooks/common.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$SCRIPT_DIR/.githooks/common.sh"
+else
+  # Fallback: define minimal functions if common.sh not available
+  print_status() {
+    printf "[%s] %s\n" "$2" "$3"
+  }
+  step_exec() { printf "[ EXEC ] %s" "$1"; }
+  step_done() { printf '\r\033[K'; print_status "" " DONE " "$1"; }
+  step_ok() { print_status "" "  OK  " "$1"; }
+  step_skip() { print_status "" " SKIP " "$1"; }
+  step_fail() { printf '\r\033[K'; print_status "" " FAIL " "$1"; exit 1; }
+fi
 
 # Check if we're in a git repository
 if [ ! -d .git ]; then

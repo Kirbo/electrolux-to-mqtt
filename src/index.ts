@@ -15,14 +15,35 @@ const { exampleConfig, autoDiscovery } = initializeHelpers(mqtt)
 
 const refreshInterval = (client.refreshInterval ?? 60) * 1000
 
-const main = async () => {
-  logger.info(
-    `Starting Electrolux to MQTT version: "${appVersion}", with refresh interval: ${refreshInterval / 1000} seconds`,
-  )
+// Track all intervals for cleanup
+const activeIntervals = new Set<NodeJS.Timeout>()
+let isShuttingDown = false
 
-  // Initialize the client
-  await client.initialize()
+// Graceful shutdown handler
+const shutdown = async () => {
+  if (isShuttingDown) return
+  isShuttingDown = true
 
+  logger.info('Shutting down gracefully...')
+
+  // Clear all intervals
+  for (const interval of activeIntervals) {
+    clearInterval(interval)
+  }
+  activeIntervals.clear()
+
+  // Disconnect MQTT
+  mqtt.disconnect()
+
+  logger.info('Shutdown complete')
+  process.exit(0)
+}
+
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)
+
+// Wait for client login with retry logic
+const waitForLogin = async () => {
   while (!client.isLoggedIn) {
     if (client.isLoggingIn) {
       logger.debug('Already logging in, waiting for login to complete...')
@@ -36,6 +57,16 @@ const main = async () => {
       }
     }
   }
+}
+
+const main = async () => {
+  logger.info(
+    `Starting Electrolux to MQTT version: "${appVersion}", with refresh interval: ${refreshInterval / 1000} seconds`,
+  )
+
+  // Initialize the client
+  await client.initialize()
+  await waitForLogin()
 
   const appliances = await client.getAppliances()
 
@@ -43,7 +74,9 @@ const main = async () => {
     logger.error(
       `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
     )
-    setTimeout(() => main(), refreshInterval)
+    if (!isShuttingDown) {
+      setTimeout(() => main(), refreshInterval)
+    }
     return
   }
 
@@ -87,10 +120,19 @@ const main = async () => {
     }
 
     setTimeout(async () => {
+      if (isShuttingDown) return
+
       await client.getApplianceState(applianceId, applianceDiscoveryCallback)
-      setInterval(async () => {
+
+      const intervalId = setInterval(async () => {
+        if (isShuttingDown) {
+          clearInterval(intervalId)
+          return
+        }
         await client.getApplianceState(applianceId, applianceDiscoveryCallback)
       }, refreshInterval)
+
+      activeIntervals.add(intervalId)
     }, i * intervalDelay)
 
     mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
