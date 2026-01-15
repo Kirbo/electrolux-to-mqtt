@@ -129,10 +129,12 @@ pnpm dev
 
 ..or if you want to use Docker instead:
 ```bash
+# Make a copy of the docker-compose.local.example.yml
+cp docker-compose.local.example.yml docker-compose.local.yml
 # Modify as needed
 code docker-compose.local.yml
-# Run the stack
-docker compose -f docker-compose.local.yml down ; docker compose -f docker-compose.local.yml up --build
+# Run the stack (automatically uses Node version from .nvmrc)
+pnpm dev:docker
 ```
 
 
