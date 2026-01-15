@@ -2,12 +2,22 @@
 
 # Common functions for git hooks
 
-# ANSI color codes
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# ANSI color codes - only use colors if output is a TTY
+if [ -t 1 ]; then
+  GREEN='\033[0;32m'
+  RED='\033[0;31m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  NC='\033[0m' # No Color
+  CLEAR_LINE='\r\033[K' # Carriage return + clear line
+else
+  GREEN=''
+  RED=''
+  YELLOW=''
+  BLUE=''
+  NC=''
+  CLEAR_LINE='\n' # Just newline in non-TTY
+fi
 
 # Print status with consistent formatting
 print_status() {
@@ -19,18 +29,30 @@ print_status() {
 
 # Status helper functions
 step_exec() {
-  printf "${BLUE}[ EXEC ]${NC} %s" "$1"
+  if [ -t 1 ]; then
+    # TTY: no newline, will be overwritten by step_done
+    printf "${BLUE}[ EXEC ]${NC} %s" "$1"
+  else
+    # Non-TTY: add newline so EXEC and DONE are on separate lines
+    printf "${BLUE}[ EXEC ]${NC} %s\n" "$1"
+  fi
 }
 
 step_done() {
-  printf "\r\033[K" # Clear line
+  if [ -t 1 ]; then
+    # TTY: clear the line and rewrite
+    printf '\r\033[K'
+  fi
   print_status "$GREEN" " DONE " "$1"
 }
 
 step_ok() { print_status "$GREEN" "  OK  " "$1"; }
 step_skip() { print_status "$YELLOW" " SKIP " "$1"; }
 step_fail() {
-  printf "\r\033[K" # Clear line
+  if [ -t 1 ]; then
+    # TTY: clear the line and rewrite
+    printf '\r\033[K'
+  fi
   print_status "$RED" " FAIL " "$1"
   exit 1
 }

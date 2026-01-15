@@ -57,15 +57,16 @@ if [ -n "$STAGED_FILES" ]; then
 else
   step_skip "No Biome-supported files staged"
 fi
-if git stash pop > /dev/null 2>&1; then
-    step_done "Restored unstaged changes"
-  else
-    step_fail "Failed to restore unstaged changes"
-  fi
+
+# Pop stash to restore unstaged changes
 if [ $STASH_RESULT -eq 0 ]; then
   step_exec "Restoring unstaged changes..."
-  git stash pop > /dev/null 2>&1
-  step_done "Restored unstaged changes"
+  if git stash pop > /dev/null 2>&1; then
+    step_done "Restored unstaged changes"
+  else
+    # Only warn if stash pop fails - don't fail the commit
+    step_skip "No unstaged changes to restore (stash may be empty)"
+  fi
 fi
 
 exit 0
