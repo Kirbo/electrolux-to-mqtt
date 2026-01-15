@@ -545,8 +545,20 @@ class ElectroluxClient {
         throw new Error('API client is not initialized')
       }
       const response = await this.client.get('/api/v1/appliances')
-      logger.debug('Appliances:', response.data)
-      return response.data satisfies ApplianceStub[]
+      const appliances = response.data satisfies ApplianceStub[]
+
+      // Show detailed debug info or summary info based on log level
+      const logLevel = process.env.LOG_LEVEL || 'info'
+      if (logLevel === 'debug') {
+        logger.debug('Appliances:', response.data)
+      } else {
+        logger.info(`Found ${appliances.length} appliance${appliances.length === 1 ? '' : 's'}:`)
+        for (const appliance of appliances) {
+          logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
+        }
+      }
+
+      return appliances
     } catch (error) {
       logger.error(`Error getting appliances: ${formatAxiosError(error)}`)
     }

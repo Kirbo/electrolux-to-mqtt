@@ -50,7 +50,8 @@ const main = async () => {
   const totalAppliances = appliances.length
   const intervalDelay = refreshInterval / totalAppliances
 
-  for (const appliance of appliances) {
+  for (let i = 0; i < appliances.length; i++) {
+    const appliance = appliances[i]
     const { applianceId } = appliance
 
     const applianceInfo = await client.getApplianceInfo(applianceId)
@@ -59,7 +60,7 @@ const main = async () => {
       continue
     }
 
-    let applianceDiscoveryCallback = undefined
+    let applianceDiscoveryCallback: ((state: SanitizedState) => void) | undefined
     if (config.homeAssistant.autoDiscovery) {
       mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscovery(appliance, applianceInfo)), {
         retain: true,
@@ -90,7 +91,7 @@ const main = async () => {
       setInterval(async () => {
         await client.getApplianceState(applianceId, applianceDiscoveryCallback)
       }, refreshInterval)
-    }, appliances.indexOf(appliance) * intervalDelay)
+    }, i * intervalDelay)
 
     mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
       const command = JSON.parse(message.toString())
