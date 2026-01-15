@@ -21,6 +21,9 @@ const client = mqtt.connect(config.mqtt.url, {
   clean: true,
 })
 
+// Exact-topic router: topic -> handler(topic, payload)
+const topicHandlers = new Map<string, (topic: string, message: Buffer) => void>()
+
 client
   .on('connect', () => {
     logger.info(`Connected to MQTT broker: ${config.mqtt.url}`)
@@ -39,6 +42,17 @@ client
   })
   .on('end', () => {
     logger.info('MQTT client has ended')
+  })
+  .on('message', (incomingTopic, message) => {
+    const handler = topicHandlers.get(incomingTopic)
+    if (!handler) return
+
+    logger.debug('Received message on topic:', incomingTopic, 'Message:', message.toString())
+    try {
+      handler(incomingTopic, message)
+    } catch (e) {
+      logger.error('Handler error for topic', incomingTopic, e)
+    }
   })
 
 export interface IMqtt {
@@ -94,26 +108,25 @@ class Mqtt {
     })
   }
 
-  public subscribe(applianceId: string, callback: (applianceId: string, message: Buffer) => void) {
+  public subscribe(applianceId: string, callback: (topic: string, message: Buffer) => void) {
     const topic = `${this.topicPrefix}/${applianceId}`
     logger.debug('Subscribing to topic:', topic)
+
     this.client.subscribe(topic, (error) => {
       if (error) {
         logger.error('Error subscribing to topic:', error)
-      } else {
-        logger.info(`Subscribed to topic "${topic}" successfully`)
+        return
       }
-    })
 
-    this.client.on('message', (topic, message) => {
-      logger.debug('Received message on topic:', topic, 'Message:', message.toString())
-      callback(topic, message)
+      logger.info(`Subscribed to topic "${topic}" successfully`)
+      topicHandlers.set(topic, callback)
     })
   }
 
   public unsubscribe(applianceId: string) {
     const topic = `${this.topicPrefix}/${applianceId}`
     logger.debug('Unsubscribing from topic:', topic)
+
     this.client.unsubscribe(topic, (error) => {
       if (error) {
         logger.error('Error unsubscribing from topic:', error)
@@ -121,6 +134,8 @@ class Mqtt {
         logger.info(`Unsubscribed from topic "${topic}" successfully`)
       }
     })
+
+    topicHandlers.delete(topic)
   }
 
   public disconnect() {
