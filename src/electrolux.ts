@@ -175,6 +175,7 @@ export class ElectroluxClient {
   private readonly mqtt: IMqtt
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
+  private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
 
   public isLoggingIn = false
   public isLoggedIn = false
@@ -486,15 +487,36 @@ export class ElectroluxClient {
       const response = await this.client.get('/api/v1/appliances')
       const appliances = response.data satisfies ApplianceStub[]
 
-      // Show detailed debug info or summary info based on log level
-      const logLevel = process.env.LOG_LEVEL || 'info'
-      if (logLevel === 'debug') {
-        logger.debug('Appliances:', response.data)
-      } else {
+      // Log only on first run or when appliances change
+      const currentIds = new Set(appliances.map((a: ApplianceStub) => a.applianceId))
+      const added = appliances.filter((a: ApplianceStub) => !this.previousAppliances.has(a.applianceId))
+      const removed = Array.from(this.previousAppliances.keys()).filter((id) => !currentIds.has(id))
+
+      if (this.previousAppliances.size === 0) {
         logger.info(`Found ${appliances.length} appliance${appliances.length === 1 ? '' : 's'}:`)
         for (const appliance of appliances) {
           logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
         }
+      } else if (added.length > 0 || removed.length > 0) {
+        if (added.length > 0) {
+          logger.info(`New appliance${added.length === 1 ? '' : 's'} found:`)
+          for (const appliance of added) {
+            logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
+          }
+        }
+        if (removed.length > 0) {
+          logger.info(`Appliance${removed.length === 1 ? '' : 's'} removed:`)
+          for (const applianceId of removed) {
+            const name = this.previousAppliances.get(applianceId)
+            logger.info(`- ${name ?? 'Unknown'} (${applianceId})`)
+          }
+        }
+      }
+
+      // Update cached appliance list
+      this.previousAppliances.clear()
+      for (const appliance of appliances) {
+        this.previousAppliances.set(appliance.applianceId, appliance.applianceName)
       }
 
       return appliances
