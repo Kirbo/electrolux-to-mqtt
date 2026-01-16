@@ -2,12 +2,13 @@ import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
 import axios, { AxiosInstance } from 'axios'
+import type { BaseAppliance } from './appliances/base.js'
 import { cache } from './cache.js'
 import config, { Tokens } from './config.js'
 import createLogger from './logger.js'
 import { IMqtt } from './mqtt.js'
-import { Appliance, ApplianceInfo, ApplianceStub, SanitizedState } from './types.js'
-import { initializeHelpers } from './utils.js'
+import type { NormalizedState } from './types/normalized.js'
+import { Appliance, ApplianceInfo, ApplianceStub } from './types.js'
 
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
@@ -19,20 +20,18 @@ const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include
 const LOGIN_RETRY_DELAY_MS = 5_000 // Retry login after 5s on failure
 const TOKEN_REFRESH_RETRY_DELAY_MS = 5_000 // Retry token refresh after 5s on failure
 
-// Type aliases
-type OnOffState = 'on' | 'off'
-type OnOffNullState = 'on' | 'off' | null
-type UpgradeState = 'idle' | 'upgrading' | null
-type LinkQuality = 'excellent' | 'good' | 'fair' | 'poor'
+// Track timeouts for cleanup
+const activeTimeouts = new Set<NodeJS.Timeout>()
 
 /**
  * Compare two states and log the differences
+ * Exported for use in appliance classes and other modules
  */
-type StateDifference = { from: unknown; to: unknown }
+export type StateDifference = { from: unknown; to: unknown }
 
-function getStateDifferences(
-  oldState: SanitizedState | null,
-  newState: SanitizedState,
+export function getStateDifferences(
+  oldState: NormalizedState | null,
+  newState: NormalizedState,
 ): Record<string, StateDifference> {
   const differences: Record<string, StateDifference> = {}
   const ignoredKeys = config.logging?.ignoredKeys || []
@@ -102,8 +101,8 @@ function getStateDifferences(
 
   // Compare all keys in newState
   for (const key of Object.keys(newState)) {
-    const oldValue = (oldState as Record<string, unknown>)[key]
-    const newValue = (newState as Record<string, unknown>)[key]
+    const oldValue = (oldState as unknown as Record<string, unknown>)[key]
+    const newValue = (newState as unknown as Record<string, unknown>)[key]
 
     // Skip if this key is ignored
     if (shouldIgnore(key)) {
@@ -117,7 +116,7 @@ function getStateDifferences(
   return differences
 }
 
-function formatStateDifferences(differences: Record<string, StateDifference>): string {
+export function formatStateDifferences(differences: Record<string, StateDifference>): string {
   const changes = Object.entries(differences)
     .map(([key, { from, to }]) => `\n  ${key}: ${from} → ${to}`)
     .join('')
@@ -146,7 +145,8 @@ function formatAxiosError(error: unknown): string {
 
     let formatted = message
     if (status) {
-      formatted += ` (${status}${statusText ? ' ' + statusText : ''})`
+      const statusPart = statusText ? ` ${statusText}` : ''
+      formatted += ` (${status}${statusPart})`
     }
     if (method && url) {
       const urlPath = extractUrlPath(url)
@@ -166,14 +166,13 @@ function formatAxiosError(error: unknown): string {
   return String(error)
 }
 
-class ElectroluxClient {
+export class ElectroluxClient {
   private client?: AxiosInstance
   private accessToken?: string = config.electrolux.accessToken
   private refreshToken?: string = config.electrolux.refreshToken
   private eat?: Date = config.electrolux.eat
   private iat?: Date = config.electrolux.iat
   private readonly mqtt: IMqtt
-  private readonly utils: ReturnType<typeof initializeHelpers>
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
 
   public isLoggingIn = false
@@ -182,7 +181,17 @@ class ElectroluxClient {
 
   constructor(mqtt: IMqtt) {
     this.mqtt = mqtt
-    this.utils = initializeHelpers(this.mqtt)
+  }
+
+  /**
+   * Cleanup all pending timeouts
+   * Should be called on application shutdown
+   */
+  public cleanup() {
+    for (const timeout of activeTimeouts) {
+      clearTimeout(timeout)
+    }
+    activeTimeouts.clear()
   }
 
   public async initialize() {
@@ -249,6 +258,7 @@ class ElectroluxClient {
 
     const tokenData = await this.getXcsrfToken()
     if (!tokenData) {
+      this.isLoggingIn = false
       throw new Error('Failed to retrieve X-CSRF token data')
     }
     const { xcsrfToken, csrfSecret } = tokenData
@@ -366,9 +376,11 @@ class ElectroluxClient {
       this.isLoggedIn = false
       this.isLoggingIn = false
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
-      setTimeout(async () => {
+      const retryTimeout = setTimeout(async () => {
+        activeTimeouts.delete(retryTimeout)
         await this.login()
       }, LOGIN_RETRY_DELAY_MS)
+      activeTimeouts.add(retryTimeout)
       return false
     }
   }
@@ -383,77 +395,6 @@ class ElectroluxClient {
       accessToken: `${this.accessToken?.slice(0, 10)}...token length ${this.accessToken?.length}...${this.accessToken?.slice(-10)}`,
       refreshToken: `${this.refreshToken?.slice(0, 10)}...token length ${this.refreshToken?.length}...${this.refreshToken?.slice(-10)}`,
     }
-  }
-
-  private readonly sanitizeStateToMqtt = (rawState: Appliance) => {
-    // Handle both nested structure (properties.reported) and flat structure
-    const reported = rawState?.properties?.reported || rawState
-
-    const mode = reported.mode?.toLowerCase()
-    const fanSpeedSetting = reported.fanSpeedSetting?.toLowerCase()
-    const applianceStateRaw = reported.applianceState?.toLowerCase()
-    // Normalize "running" to "on" since they mean the same thing
-    const applianceState = applianceStateRaw === 'running' ? 'on' : applianceStateRaw
-
-    const state = {
-      applianceId: rawState.applianceId,
-      status: rawState?.status?.toLowerCase() as 'enabled' | 'disabled',
-      applianceState: applianceState as 'on' | 'off',
-      mode: (mode === 'fanonly' ? 'fan_only' : mode) as 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto',
-      ambientTemperatureC: reported.ambientTemperatureC,
-      targetTemperatureC: reported.targetTemperatureC,
-      fanSpeedSetting: (fanSpeedSetting === 'middle' ? 'medium' : fanSpeedSetting) as
-        | 'low'
-        | 'medium'
-        | 'high'
-        | 'auto',
-      verticalSwing: reported.verticalSwing,
-
-      ambientTemperatureF: reported.ambientTemperatureF,
-      applianceData: reported.applianceData
-        ? {
-            elc: reported.applianceData.elc,
-            mac: reported.applianceData.mac,
-            pnc: reported.applianceData.pnc,
-            sn: reported.applianceData.sn,
-          }
-        : null,
-      capabilities: reported.capabilities,
-      compressorCoolingRuntime: reported.compressorCoolingRuntime,
-      compressorHeatingRuntime: reported.compressorHeatingRuntime,
-      compressorState: reported.compressorState?.toLowerCase() as 'on' | 'off',
-      connectionState: rawState.connectionState?.toLowerCase() as 'connected' | 'disconnected',
-      dataModelVersion: reported.dataModelVersion,
-      deviceId: reported.deviceId,
-      evapDefrostState: reported.evapDefrostState?.toLowerCase() as OnOffNullState,
-      filterRuntime: reported.filterRuntime,
-      filterState: reported.filterState?.toLowerCase() as 'clean' | 'dirty',
-      fourWayValveState: reported.fourWayValveState?.toLowerCase() as OnOffNullState,
-      hepaFilterLifeTime: reported.hepaFilterLifeTime,
-      logE: reported.logE,
-      logW: reported.logW,
-      networkInterface: {
-        linkQualityIndicator: reported.networkInterface?.linkQualityIndicator?.toLowerCase() as LinkQuality,
-        rssi: reported.networkInterface?.rssi,
-      },
-      schedulerMode: reported.schedulerMode?.toLowerCase() as OnOffNullState,
-      schedulerSession: reported.schedulerSession?.toLowerCase() as OnOffNullState,
-      sleepMode: reported.sleepMode?.toLowerCase() as OnOffState,
-      startTime: reported.startTime,
-      stopTime: reported.stopTime,
-      tasks: reported.tasks,
-      temperatureRepresentation: reported.temperatureRepresentation?.toLowerCase() as 'celsius' | 'fahrenheit',
-      TimeZoneDaylightRule: reported.TimeZoneDaylightRule,
-      TimeZoneStandardName: reported.TimeZoneStandardName,
-      totalRuntime: reported.totalRuntime,
-      uiLockMode: reported.uiLockMode,
-      upgradeState: reported.upgradeState?.toLowerCase() as UpgradeState,
-      version: reported.$version,
-      VmNo_MCU: reported.VmNo_MCU,
-      VmNo_NIU: reported.VmNo_NIU,
-    } as SanitizedState
-
-    return state
   }
 
   public async ensureValidToken() {
@@ -527,9 +468,11 @@ class ElectroluxClient {
       await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (error) {
       logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
-      setTimeout(async () => {
+      const retryTimeout = setTimeout(async () => {
+        activeTimeouts.delete(retryTimeout)
         await this.refreshTokens()
       }, TOKEN_REFRESH_RETRY_DELAY_MS)
+      activeTimeouts.add(retryTimeout)
     }
   }
 
@@ -573,27 +516,29 @@ class ElectroluxClient {
     }
   }
 
-  private handleStateChanges(applianceId: string, stateToPublish: SanitizedState, cachedState: Appliance | null): void {
-    const cachedSanitized = cachedState ? this.sanitizeStateToMqtt(cachedState) : null
-    const differences = getStateDifferences(cachedSanitized, stateToPublish)
+  private handleStateChanges(
+    appliance: BaseAppliance,
+    stateToPublish: NormalizedState,
+    cachedState: Appliance | null,
+  ): void {
+    const cachedNormalized = cachedState ? appliance.normalizeState(cachedState) : null
+    const differences = getStateDifferences(cachedNormalized, stateToPublish)
     const hasChanges = Object.keys(differences).length > 0
 
     if (hasChanges) {
       const changesSummary = formatStateDifferences(differences)
       if (config.logging?.showChanges) {
-        logger.info(`State changed for appliance ${applianceId} via API: ${changesSummary}`)
+        logger.info(`State changed for appliance ${appliance.getApplianceId()} via API: ${changesSummary}`)
       } else {
-        logger.info(`State changed for appliance ${applianceId} via API`)
+        logger.info(`State changed for appliance ${appliance.getApplianceId()} via API`)
       }
     } else {
       logger.debug('State checked, no changes detected')
     }
   }
 
-  public async getApplianceState(
-    applianceId: string,
-    callback?: (state: SanitizedState) => void,
-  ): Promise<Appliance | undefined> {
+  public async getApplianceState(appliance: BaseAppliance, callback?: () => void): Promise<Appliance | undefined> {
+    const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
 
     // Skip fetching state if a command was sent recently (within 30 seconds) to avoid stale API cache
@@ -621,33 +566,33 @@ class ElectroluxClient {
         return cache.get(cacheKey) as Appliance
       }
 
-      const sanitizedState = this.sanitizeStateToMqtt(response.data)
+      const normalizedState = appliance.normalizeState(response.data)
 
-      // If new state is incomplete, use cached sanitized state for publishing
+      // If new state is incomplete, use cached normalized state for publishing
       // but DON'T cache the incomplete response
-      let stateToPublish = sanitizedState
-      if (!sanitizedState && cachedState) {
+      let stateToPublish = normalizedState
+      if (!normalizedState && cachedState) {
         logger.debug(`Using cached state for appliance ${applianceId} due to incomplete API response`)
-        stateToPublish = this.sanitizeStateToMqtt(cachedState)
+        stateToPublish = appliance.normalizeState(cachedState)
       }
 
       if (!stateToPublish) {
         return response.data
       }
 
-      // Compare sanitized states and log changes
-      this.handleStateChanges(applianceId, stateToPublish, cachedState)
+      // Compare normalized states and log changes
+      this.handleStateChanges(appliance, stateToPublish, cachedState)
 
       // Only update the cache with the new state if it's complete
-      if (sanitizedState) {
+      if (normalizedState) {
         cache.set(cacheKey, response.data)
       }
 
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(stateToPublish))
 
-      // Only call callback if we have a valid sanitized state
-      if (callback && sanitizedState) {
-        callback(sanitizedState)
+      // Only call callback if we have a valid normalized state
+      if (callback && normalizedState) {
+        callback()
       }
 
       return response.data
@@ -660,7 +605,8 @@ class ElectroluxClient {
     }
   }
 
-  public async sendApplianceCommand(applianceId: string, rawCommand: SanitizedState) {
+  public async sendApplianceCommand(appliance: BaseAppliance, rawCommand: Partial<NormalizedState>) {
+    const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
 
     try {
@@ -669,22 +615,8 @@ class ElectroluxClient {
         throw new Error('API client is not initialized')
       }
 
-      const { mode, ...command } = rawCommand
-
-      const executeCommand = mode?.toLowerCase() === 'off' ? 'OFF' : 'ON'
-
-      const payload = {
-        ...command,
-        executeCommand,
-        ...(executeCommand !== 'OFF' && mode ? { mode: mode?.toUpperCase() } : {}),
-        ...(command?.fanSpeedSetting
-          ? {
-              fanSpeedSetting: ['medium', 'middle'].includes(command?.fanSpeedSetting?.toLowerCase())
-                ? 'MIDDLE'
-                : command?.fanSpeedSetting?.toUpperCase(),
-            }
-          : {}),
-      }
+      // Transform the MQTT command to Electrolux API format using the appliance-specific logic
+      const payload = appliance.transformMqttCommandToApi(rawCommand)
 
       logger.info('Sending command to appliance:', applianceId, 'Command:', payload)
 
@@ -693,29 +625,25 @@ class ElectroluxClient {
 
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)
-      const state = await this.getApplianceState(applianceId)
+
+      const state = await this.getApplianceState(appliance)
       if (!state) {
         logger.error('Failed to get appliance state after sending command')
         return
       }
 
-      const sanitizedState = this.sanitizeStateToMqtt(state)
+      const normalizedState = appliance.normalizeState(state)
 
-      const resolvedMode = mode ?? sanitizedState?.mode
-
-      const { executeCommand: _, ...sanitizedWithoutCommand } = payload
-
+      // Combine the normalized state with the command values to ensure immediate feedback
       const combinedState = {
-        ...sanitizedState,
-        ...sanitizedWithoutCommand,
-        applianceState: executeCommand.toLowerCase(),
-        ...(resolvedMode && resolvedMode.toLowerCase() !== 'off'
-          ? {
-              mode: this.utils.mapModes[resolvedMode?.toUpperCase() as keyof typeof this.utils.mapModes],
-            }
-          : {}),
-        ...(command?.fanSpeedSetting ? { fanSpeedSetting: command.fanSpeedSetting.toLowerCase() } : {}),
-        ...(command?.verticalSwing ? { verticalSwing: command.verticalSwing.toLowerCase() } : {}),
+        ...normalizedState,
+        ...rawCommand,
+      }
+
+      // Apply any appliance-specific immediate state updates derived from the command
+      const immediateStateUpdates = appliance.deriveImmediateStateFromCommand(payload)
+      if (immediateStateUpdates) {
+        Object.assign(combinedState, immediateStateUpdates)
       }
 
       if (cache.matchByValue(cacheKey, combinedState)) {

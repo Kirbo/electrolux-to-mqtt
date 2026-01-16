@@ -1,22 +1,26 @@
 import packageJson from '../package.json' with { type: 'json' }
+import type { BaseAppliance } from './appliances/base.js'
+import { ApplianceFactory } from './appliances/factory.js'
 import { cache } from './cache.js'
 import config from './config.js'
-import ElectroluxClient from './electrolux.js'
+import { ElectroluxClient } from './electrolux.js'
 import createLogger from './logger.js'
 import Mqtt from './mqtt.js'
-import { SanitizedState } from './types.js'
-import { initializeHelpers } from './utils.js'
+import type { ApplianceStub } from './types.js'
 
 const appVersion = packageJson.version
 const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
-const { exampleConfig, autoDiscovery } = initializeHelpers(mqtt)
 
 const refreshInterval = (client.refreshInterval ?? 60) * 1000
+const applianceDiscoveryInterval = (config.electrolux.applianceDiscoveryInterval ?? 300) * 1000
 
-// Track all intervals for cleanup
+// Track all intervals and appliance instances for cleanup
 const activeIntervals = new Set<NodeJS.Timeout>()
+const applianceInstances = new Map<string, BaseAppliance>()
+const applianceStateIntervals = new Map<string, NodeJS.Timeout>()
+let discoveryInterval: NodeJS.Timeout | null = null
 let isShuttingDown = false
 
 // Graceful shutdown handler
@@ -26,11 +30,25 @@ const shutdown = async () => {
 
   logger.info('Shutting down gracefully...')
 
+  // Clear discovery interval
+  if (discoveryInterval) {
+    clearInterval(discoveryInterval)
+  }
+
   // Clear all intervals
   for (const interval of activeIntervals) {
     clearInterval(interval)
   }
   activeIntervals.clear()
+
+  // Clear appliance state intervals
+  for (const interval of applianceStateIntervals.values()) {
+    clearInterval(interval)
+  }
+  applianceStateIntervals.clear()
+
+  // Cleanup client timeouts
+  client.cleanup()
 
   // Disconnect MQTT
   mqtt.disconnect()
@@ -59,6 +77,177 @@ const waitForLogin = async () => {
   }
 }
 
+/**
+ * Initialize a single appliance with state polling and MQTT subscription
+ */
+const initializeAppliance = async (
+  applianceStub: { applianceId: string; applianceName: string; applianceType: string; created: string },
+  delayMs: number = 0,
+) => {
+  const { applianceId } = applianceStub
+
+  try {
+    const applianceInfo = await client.getApplianceInfo(applianceId)
+    if (!applianceInfo) {
+      logger.error('Failed to get appliance info for applianceId:', applianceId)
+      return
+    }
+
+    // Create appliance instance using the factory
+    const appliance = ApplianceFactory.create(applianceStub, applianceInfo)
+    applianceInstances.set(applianceId, appliance)
+
+    logger.info(
+      `Initialized appliance: ${appliance.getApplianceName()} (${appliance.getModelName()}) with ID: ${applianceId}`,
+    )
+
+    let applianceDiscoveryCallback: (() => void) | undefined
+    if (config.homeAssistant.autoDiscovery) {
+      // Generate and publish auto-discovery config using the appliance-specific logic
+      logger.debug(`Using topicPrefix for auto-discovery: "${mqtt.topicPrefix}"`)
+      const discoveryConfig = appliance.generateAutoDiscoveryConfig(mqtt.topicPrefix)
+      logger.debug('Generated auto-discovery config:', discoveryConfig)
+      mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), {
+        retain: true,
+        qos: 2,
+      })
+
+      applianceDiscoveryCallback = () => {
+        const cacheKey = cache.cacheKey(applianceId).autoDiscovery
+        const autoDiscoveryConfig = appliance.generateAutoDiscoveryConfig(mqtt.topicPrefix)
+
+        if (cache.matchByValue(cacheKey, autoDiscoveryConfig)) {
+          return
+        }
+
+        mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscoveryConfig), {
+          retain: true,
+          qos: 2,
+        })
+      }
+    } else {
+      await client.getApplianceState(appliance, () => {
+        logger.info('Appliance initialized successfully')
+      })
+    }
+
+    // Start state polling after optional delay
+    setTimeout(async () => {
+      if (isShuttingDown) return
+
+      await client.getApplianceState(appliance, applianceDiscoveryCallback)
+
+      const intervalId = setInterval(async () => {
+        if (isShuttingDown) {
+          clearInterval(intervalId)
+          return
+        }
+        await client.getApplianceState(appliance, applianceDiscoveryCallback)
+      }, refreshInterval)
+
+      activeIntervals.add(intervalId)
+      applianceStateIntervals.set(applianceId, intervalId)
+    }, delayMs)
+
+    // Subscribe to MQTT commands for this appliance
+    mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
+      try {
+        const command = JSON.parse(message.toString())
+        logger.info('Received command on topic:', topic, 'Message:', command)
+        const applianceInstance = applianceInstances.get(applianceId)
+        if (applianceInstance) {
+          client.sendApplianceCommand(applianceInstance, command)
+        } else {
+          logger.error(`No appliance instance found for applianceId: ${applianceId}`)
+        }
+      } catch (error) {
+        logger.error(`Failed to parse MQTT command from topic ${topic}:`, error)
+      }
+    })
+  } catch (error) {
+    logger.error(`Error initializing appliance ${applianceId}:`, error)
+  }
+}
+
+/**
+ * Clean up a removed appliance
+ */
+const cleanupAppliance = (applianceId: string) => {
+  logger.info(`Cleaning up removed appliance: ${applianceId}`)
+
+  // Clear state polling interval
+  const stateInterval = applianceStateIntervals.get(applianceId)
+  if (stateInterval) {
+    clearInterval(stateInterval)
+    activeIntervals.delete(stateInterval)
+    applianceStateIntervals.delete(applianceId)
+  }
+
+  // Unsubscribe from MQTT commands
+  mqtt.unsubscribe(`${applianceId}/command`)
+
+  // Remove from instances map
+  applianceInstances.delete(applianceId)
+
+  // Optionally publish offline status
+  if (config.homeAssistant.autoDiscovery) {
+    mqtt.publish(
+      `${applianceId}/state`,
+      JSON.stringify({ applianceId, connectionState: 'disconnected', applianceState: 'off' }),
+    )
+  }
+
+  logger.info(`Appliance ${applianceId} cleanup complete`)
+}
+
+/**
+ * Discover and manage appliances dynamically
+ */
+const discoverAppliances = async () => {
+  try {
+    const appliances = await client.getAppliances()
+
+    if (!appliances || appliances.length === 0) {
+      logger.warn('No appliances found during discovery check')
+      return
+    }
+
+    const currentApplianceIds = new Set(appliances.map((a: ApplianceStub) => a.applianceId))
+    const knownApplianceIds = new Set(applianceInstances.keys())
+
+    // Find new appliances
+    const newAppliances = appliances.filter((a: ApplianceStub) => !knownApplianceIds.has(a.applianceId))
+
+    // Find removed appliances
+    const removedApplianceIds = Array.from(knownApplianceIds).filter((id) => !currentApplianceIds.has(id))
+
+    // Initialize new appliances
+    if (newAppliances.length > 0) {
+      logger.info(`Found ${newAppliances.length} new appliance(s)`)
+      const intervalDelay = refreshInterval / (appliances.length + 1) // Distribute load
+
+      for (let i = 0; i < newAppliances.length; i++) {
+        const delay = i * intervalDelay
+        await initializeAppliance(newAppliances[i], delay)
+      }
+    }
+
+    // Clean up removed appliances
+    if (removedApplianceIds.length > 0) {
+      logger.info(`Detected ${removedApplianceIds.length} removed appliance(s)`)
+      for (const applianceId of removedApplianceIds) {
+        cleanupAppliance(applianceId)
+      }
+    }
+
+    if (newAppliances.length === 0 && removedApplianceIds.length === 0) {
+      logger.debug('No appliance changes detected')
+    }
+  } catch (error) {
+    logger.error('Error during appliance discovery:', error)
+  }
+}
+
 const main = async () => {
   logger.info(
     `Starting Electrolux to MQTT version: "${appVersion}", with refresh interval: ${refreshInterval / 1000} seconds`,
@@ -68,6 +257,7 @@ const main = async () => {
   await client.initialize()
   await waitForLogin()
 
+  // Initial appliance discovery
   const appliances = await client.getAppliances()
 
   if (!appliances || appliances.length === 0) {
@@ -80,67 +270,27 @@ const main = async () => {
     return
   }
 
+  logger.info(`Found ${appliances.length} appliance(s), initializing...`)
+
   const totalAppliances = appliances.length
   const intervalDelay = refreshInterval / totalAppliances
 
+  // Initialize all appliances with staggered delays
   for (let i = 0; i < appliances.length; i++) {
-    const appliance = appliances[i]
-    const { applianceId } = appliance
-
-    const applianceInfo = await client.getApplianceInfo(applianceId)
-    if (!applianceInfo) {
-      logger.error('Failed to get appliance info for applianceId:', applianceId)
-      continue
-    }
-
-    let applianceDiscoveryCallback: ((state: SanitizedState) => void) | undefined
-    if (config.homeAssistant.autoDiscovery) {
-      mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscovery(appliance, applianceInfo)), {
-        retain: true,
-        qos: 2,
-      })
-
-      applianceDiscoveryCallback = (state: SanitizedState) => {
-        const cacheKey = cache.cacheKey(applianceId).autoDiscovery
-        const autoDiscoveryConfig = autoDiscovery(appliance, applianceInfo, state)
-
-        if (cache.matchByValue(cacheKey, autoDiscoveryConfig)) {
-          return
-        }
-
-        mqtt.autoDiscovery(applianceId, JSON.stringify(autoDiscoveryConfig), {
-          retain: true,
-          qos: 2,
-        })
-      }
-    } else {
-      await client.getApplianceState(applianceId, (state) => {
-        logger.info('Example config:', exampleConfig(appliance, applianceInfo, state))
-      })
-    }
-
-    setTimeout(async () => {
-      if (isShuttingDown) return
-
-      await client.getApplianceState(applianceId, applianceDiscoveryCallback)
-
-      const intervalId = setInterval(async () => {
-        if (isShuttingDown) {
-          clearInterval(intervalId)
-          return
-        }
-        await client.getApplianceState(applianceId, applianceDiscoveryCallback)
-      }, refreshInterval)
-
-      activeIntervals.add(intervalId)
-    }, i * intervalDelay)
-
-    mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
-      const command = JSON.parse(message.toString())
-      logger.info('Received command on topic:', topic, 'Message:', command)
-      client.sendApplianceCommand(applianceId, command)
-    })
+    const delay = i * intervalDelay
+    await initializeAppliance(appliances[i], delay)
   }
+
+  // Start periodic appliance discovery
+  discoveryInterval = setInterval(() => {
+    if (isShuttingDown) {
+      if (discoveryInterval) clearInterval(discoveryInterval)
+      return
+    }
+    discoverAppliances()
+  }, applianceDiscoveryInterval)
+
+  logger.info(`Appliance discovery running every ${applianceDiscoveryInterval / 1000 / 60} minutes to detect changes`)
 }
 
 main()

@@ -24,7 +24,8 @@ services:
       # - MQTT_CLIENT_ID=electrolux-comfort600                    # MQTT client ID
       # - MQTT_RETAIN=false                                       # MQTT retain flag
       # - MQTT_QOS=2                                              # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
-      # - ELECTROLUX_REFRESH_INTERVAL=30                          # Electrolux refresh interval in seconds
+      # - ELECTROLUX_REFRESH_INTERVAL=30                          # Electrolux refresh interval in seconds (how often to poll appliance state)
+      # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300             # Appliance discovery interval in seconds (how often to check for added/removed appliances)
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                      # Enable Home Assistant auto discovery
       # - LOGGING_SHOW_CHANGES=true                               # Log appliance state changes
       # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime      # Comma-separated list of keys to ignore in state change logs

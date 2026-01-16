@@ -22,6 +22,7 @@ export interface AppConfig {
     eat?: Date
     iat?: Date
     refreshInterval?: number
+    applianceDiscoveryInterval?: number
   }
   homeAssistant: {
     autoDiscovery: boolean
@@ -56,6 +57,7 @@ interface EnvVars {
   MQTT_RETAIN?: string
   MQTT_QOS?: string
   ELECTROLUX_REFRESH_INTERVAL?: string
+  ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL?: string
   HOME_ASSISTANT_AUTO_DISCOVERY?: string
   LOGGING_SHOW_CHANGES?: string
   LOGGING_IGNORED_KEYS?: string
@@ -110,6 +112,7 @@ electrolux:
   password: ${env.ELECTROLUX_PASSWORD}
   countryCode: ${env.ELECTROLUX_COUNTRY_CODE}
   refreshInterval: ${env.ELECTROLUX_REFRESH_INTERVAL || '30'}
+  applianceDiscoveryInterval: ${env.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL || '300'}
 
 homeAssistant:
   autoDiscovery: ${env.HOME_ASSISTANT_AUTO_DISCOVERY || 'true'}
@@ -134,40 +137,49 @@ if (!fs.existsSync(configPath)) {
 const file = fs.readFileSync(configPath, 'utf8')
 const config = yaml.parse(file) as AppConfig
 
+// Helper function to validate interval range
+function validateInterval(value: number | undefined, name: string, min: number, max: number, errors: string[]): void {
+  if (value === undefined) return
+
+  if (value < min) {
+    errors.push(`${name} must be at least ${min} seconds (current: ${value})`)
+  }
+  if (value > max) {
+    errors.push(`${name} should not exceed ${max} seconds (current: ${value})`)
+  }
+}
+
+// Helper function to report validation errors
+function reportErrors(errors: string[]): void {
+  console.error('Configuration validation failed:')
+  for (const error of errors) {
+    console.error(`  - ${error}`)
+  }
+  process.exit(1)
+}
+
 // Validate configuration
 function validateConfig(cfg: AppConfig): void {
   const errors: string[] = []
 
   // Validate refresh interval
-  if (cfg.electrolux.refreshInterval !== undefined) {
-    if (cfg.electrolux.refreshInterval < 10) {
-      errors.push(
-        'electrolux.refreshInterval must be at least 10 seconds (current: ' + cfg.electrolux.refreshInterval + ')',
-      )
-    }
-    if (cfg.electrolux.refreshInterval > 3600) {
-      errors.push(
-        'electrolux.refreshInterval should not exceed 3600 seconds (current: ' + cfg.electrolux.refreshInterval + ')',
-      )
-    }
-  }
+  validateInterval(cfg.electrolux.refreshInterval, 'electrolux.refreshInterval', 10, 3600, errors)
+
+  // Validate appliance discovery interval
+  validateInterval(cfg.electrolux.applianceDiscoveryInterval, 'electrolux.applianceDiscoveryInterval', 60, 3600, errors)
 
   // Validate QoS
   if (cfg.mqtt.qos !== undefined && ![0, 1, 2].includes(cfg.mqtt.qos)) {
-    errors.push('mqtt.qos must be 0, 1, or 2 (current: ' + cfg.mqtt.qos + ')')
+    errors.push(`mqtt.qos must be 0, 1, or 2 (current: ${cfg.mqtt.qos})`)
   }
 
   // Validate MQTT URL format
   if (cfg.mqtt.url && !/^mqtts?:\/\/.+/.exec(cfg.mqtt.url)) {
-    errors.push('mqtt.url must start with mqtt:// or mqtts:// (current: ' + cfg.mqtt.url + ')')
+    errors.push(`mqtt.url must start with mqtt:// or mqtts:// (current: ${cfg.mqtt.url})`)
   }
 
   if (errors.length > 0) {
-    console.error('Configuration validation failed:')
-    for (const error of errors) {
-      console.error('  - ' + error)
-    }
-    process.exit(1)
+    reportErrors(errors)
   }
 }
 

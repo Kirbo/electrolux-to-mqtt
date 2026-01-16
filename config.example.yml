@@ -18,8 +18,10 @@ electrolux:
   password: your_password_here
   # e.g. FI, SE, NO, DK...
   countryCode: your_country_code_here
-  # Refresh interval in seconds
+  # Refresh interval in seconds (how often to poll appliance state)
   refreshInterval: 10
+  # Appliance discovery interval in seconds (how often to check for added/removed appliances)
+  applianceDiscoveryInterval: 300
 
 homeAssistant:
   # Automatically discover the device in Home Assistant

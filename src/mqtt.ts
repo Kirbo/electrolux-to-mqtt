@@ -101,6 +101,14 @@ class Mqtt {
 
   public autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {
     logger.info(`Publishing auto-discovery config for appliance: ${applianceId}`)
+    const config = JSON.parse(message)
+    logger.debug(`Auto-discovery config topics:`, {
+      availability_topic: config.availability_topic,
+      mode_state_topic: config.mode_state_topic,
+      mode_command_topic: config.mode_command_topic,
+      temperature_state_topic: config.current_temperature_topic,
+      temperature_command_topic: config.temperature_command_topic,
+    })
     this._publish(`homeassistant/climate/${applianceId}/config`, message, {
       ...options,
       retain: true,
