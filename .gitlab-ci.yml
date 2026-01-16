@@ -150,6 +150,15 @@ test:
     - echo "Running tests with coverage..."
     - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
     - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
+        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
+      fi
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
+        pnpm config set store-dir .pnpm-store
+      fi
   script:
     - FORCE_COLOR=1 ${PACKAGE_MANAGER_NAME} test:coverage
   allow_failure: false
@@ -185,6 +194,15 @@ lint:
     - echo "Running linter checks..."
     - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
     - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
+        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
+      fi
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
+        pnpm config set store-dir .pnpm-store
+      fi
   script:
     - ${PACKAGE_MANAGER_NAME} biome check .
   allow_failure: false
@@ -217,6 +235,15 @@ audit:
     - echo "Running security audit..."
     - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
     - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
+        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
+      fi
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
+        pnpm config set store-dir .pnpm-store
+      fi
   script:
     - ${PACKAGE_MANAGER_NAME} audit
   allow_failure: false
