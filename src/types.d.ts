@@ -111,6 +111,12 @@ export type SanitizedState = {
   VmNo_NIU: string | null
 }
 
+/**
+ * @deprecated Use NormalizedState from types/normalized.ts instead
+ * This type alias exists for backward compatibility
+ */
+export type { NormalizedState as NormalizedApplianceState } from './types/normalized.js'
+
 export type ApplianceInfo = {
   applianceInfo: {
     serialNumber: string
