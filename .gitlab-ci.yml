@@ -1,5 +1,6 @@
 stages:
   - init
+  - test
   - build
   - release
   - docs
@@ -64,6 +65,164 @@ bump version:
     - semantic-release --version-file --allow-no-changes --changelog CHANGELOG --dry
     - export VERSION=$(cat .version-unreleased)
     - echo "VERSION=${VERSION}" > build.env
+
+install dependencies:
+  stage: init
+  image: node:${NODE_VERSION}
+  interruptible: true
+  rules:
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+      changes:
+        - .gitlab-ci.yml
+        - package.json
+        - pnpm-lock.yaml
+      when: always
+    - when: never
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+      - node_modules
+  needs:
+    - job: initialise variables
+      artifacts: true
+  before_script:
+    - echo "Node version from .nvmrc: $(cat .nvmrc)"
+    - node --version
+    - npm --version
+    # Extract package manager from package.json
+    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
+    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
+    - echo "Package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"
+    # Install package manager if not npm
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
+        echo "Installing package manager ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"
+        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
+      fi
+    # Configure pnpm to use cache directory
+    - |
+      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
+        pnpm config set store-dir .pnpm-store
+      fi
+  script:
+    - echo "Installing dependencies..."
+    - ${PACKAGE_MANAGER_NAME} install --config.scripts-prepend-node-path=true
+
+test:
+  stage: test
+  image: node:${NODE_VERSION}
+  interruptible: true
+  rules:
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+      changes:
+        - .gitlab-ci.yml
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+      when: always
+    - when: never
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+      - node_modules
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: install dependencies
+      artifacts: false
+  coverage: '/All files\s+\|\s+[0-9.]+\s+\|\s+[0-9.]+\s+\|\s+[0-9.]+\s+\|\s+([0-9.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 1 week
+  before_script:
+    - echo "Running tests with coverage..."
+    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
+    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+  script:
+    - FORCE_COLOR=1 ${PACKAGE_MANAGER_NAME} test:coverage
+  allow_failure: false
+
+lint:
+  stage: test
+  image: node:${NODE_VERSION}
+  interruptible: true
+  rules:
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+      changes:
+        - .gitlab-ci.yml
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - biome.jsonc
+      when: always
+    - when: never
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+      - node_modules
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: install dependencies
+      artifacts: false
+  before_script:
+    - echo "Running linter checks..."
+    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
+    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+  script:
+    - ${PACKAGE_MANAGER_NAME} biome check .
+  allow_failure: false
+
+audit:
+  stage: test
+  image: node:${NODE_VERSION}
+  interruptible: true
+  rules:
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+      changes:
+        - .gitlab-ci.yml
+        - package.json
+        - pnpm-lock.yaml
+      when: always
+    - when: never
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+      - node_modules
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: install dependencies
+      artifacts: false
+  before_script:
+    - echo "Running security audit..."
+    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
+    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
+  script:
+    - ${PACKAGE_MANAGER_NAME} audit
+  allow_failure: false
 
 try to build docker images:
   stage: build
