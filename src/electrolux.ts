@@ -7,7 +7,7 @@ import { cache } from './cache.js'
 import config, { Tokens } from './config.js'
 import createLogger from './logger.js'
 import { IMqtt } from './mqtt.js'
-import type { NormalizedState } from './types/normalized.js'
+import type { NormalizedClimateMode, NormalizedState } from './types/normalized.js'
 import { Appliance, ApplianceInfo, ApplianceStub } from './types.js'
 
 const logger = createLogger('electrolux')
@@ -174,6 +174,7 @@ export class ElectroluxClient {
   private iat?: Date = config.electrolux.iat
   private readonly mqtt: IMqtt
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
+  private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
 
   public isLoggingIn = false
   public isLoggedIn = false
@@ -568,6 +569,11 @@ export class ElectroluxClient {
 
       const normalizedState = appliance.normalizeState(response.data)
 
+      // Track last non-off mode from authoritative API state so we can restore it after OFF commands
+      if (normalizedState?.mode && normalizedState.mode !== 'off') {
+        this.lastActiveMode.set(applianceId, normalizedState.mode)
+      }
+
       // If new state is incomplete, use cached normalized state for publishing
       // but DON'T cache the incomplete response
       let stateToPublish = normalizedState
@@ -634,10 +640,35 @@ export class ElectroluxClient {
 
       const normalizedState = appliance.normalizeState(state)
 
-      // Combine the normalized state with the command values to ensure immediate feedback
-      const combinedState = {
+      // Track last non-off mode from authoritative API state so we can restore it after OFF commands
+      if (normalizedState?.mode && normalizedState.mode !== 'off') {
+        this.lastActiveMode.set(applianceId, normalizedState.mode)
+      }
+
+      // Combine the normalized state with the command values to ensure immediate feedback,
+      // while preserving the last active mode when turning off.
+      const lastMode = this.lastActiveMode.get(applianceId)
+      const isOffCommand = rawCommand.mode?.toLowerCase() === 'off'
+
+      const combinedState: NormalizedState = {
         ...normalizedState,
         ...rawCommand,
+      }
+
+      // If the command explicitly turns the unit off, keep the previous non-off mode for UI state
+      if (isOffCommand && lastMode) {
+        combinedState.mode = lastMode
+      }
+
+      // If the command sets a new non-off mode, remember it for future OFF/ON transitions
+      if (rawCommand.mode && rawCommand.mode.toLowerCase() !== 'off') {
+        this.lastActiveMode.set(applianceId, rawCommand.mode as NormalizedClimateMode)
+      }
+
+      // If the appliance was off and a non-mode command comes in (e.g., fan speed/temperature),
+      // restore the last active mode so Home Assistant shows the previous mode instead of "off".
+      if (!rawCommand.mode && normalizedState.mode === 'off' && lastMode) {
+        combinedState.mode = lastMode
       }
 
       // Apply any appliance-specific immediate state updates derived from the command
