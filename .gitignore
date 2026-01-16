@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store
 **/tokens.json*
 
 docker-compose.yml

@@ -8,7 +8,7 @@
 
 # Define build arguments
 ARG NODE_VERSION=24-alpine3.23
-ARG NODE_IMAGE=docker.io/node:${NODE_VERSION}
+ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION}
 ARG VERSION=development
 
 ################## Create the build image

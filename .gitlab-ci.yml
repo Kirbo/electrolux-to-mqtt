@@ -274,6 +274,7 @@ try to build docker images:
     - docker:dind
   before_script:
     - apk add --no-cache qemu qemu-system-x86_64
+    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - docker buildx create --use

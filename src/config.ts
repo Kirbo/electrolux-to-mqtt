@@ -89,7 +89,10 @@ function createConfigFromEnv(): void {
     for (const varName of missingVars) {
       console.error(`  - ${varName}`)
     }
-    process.exit(1)
+    // Skip exit in test environment
+    if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      process.exit(1)
+    }
   }
 
   console.info('Config file not found. Creating from environment variables...')
