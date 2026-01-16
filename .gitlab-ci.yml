@@ -64,7 +64,7 @@ bump version:
     paths:
       - .version-unreleased
       - build.env
-      - CHANGELOG
+      - CHANGELOG.md
     expire_in: never
   before_script:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
@@ -72,9 +72,10 @@ bump version:
     - git fetch --tags --force || true
     - git fetch origin "$CI_DEFAULT_BRANCH" || true
   script:
-    - semantic-release --version-file --allow-no-changes --changelog CHANGELOG --dry
+    - semantic-release --version-file --allow-no-changes --changelog CHANGELOG.md --dry
     - export VERSION=$(cat .version-unreleased)
     - echo "VERSION=${VERSION}" > build.env
+    - cat CHANGELOG.md
 
 install dependencies:
   stage: init
