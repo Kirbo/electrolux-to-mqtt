@@ -8,6 +8,7 @@ stages:
 variables:
   DOCKER_REGISTRY: ${CI_REGISTRY}
   DOCKERHUB_PASSWORD: ${CI_REGISTRY_PASSWORD}
+  DOCKERHUB_PASSWORD_READ: ${CI_REGISTRY_PASSWORD_READ}
   DOCKERHUB_REPOSITORY: kirbownz/electrolux-to-mqtt
   DOCKERHUB_USERNAME: ${CI_REGISTRY_USERNAME}
   README_FILEPATH: ${CI_PROJECT_DIR}/README.md
@@ -274,7 +275,8 @@ try to build docker images:
     - docker:dind
   before_script:
     - apk add --no-cache qemu qemu-system-x86_64
-    - echo "${CI_REGISTRY_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
+    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
+    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - docker buildx create --use

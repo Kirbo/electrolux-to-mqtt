@@ -20,6 +20,7 @@ export default defineConfig({
         'tests/',
         'src/init.ts', // Initialization script
         'src/index.ts', // Main entry point (integration tested separately)
+        'package.json',
       ],
       thresholds: {
         lines: 35,
