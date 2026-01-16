@@ -1,4 +1,42 @@
 node_modules
 **/tokens.json
-
 config.yml
+
+# Build artifacts and generated files
+dist
+coverage
+.coverage
+
+# Version control
+.git
+.gitignore
+.gitattributes
+.githooks
+
+# Testing
+tests
+*.test.ts
+*.test.js
+vitest.config.ts
+
+# IDE and editor files
+.vscode
+.idea
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+!README.md
+docs
+
+# CI/CD
+.gitlab-ci.yml
+.github
+
+# Local environment
+.env
+.env.local
+docker-compose.local.yml
