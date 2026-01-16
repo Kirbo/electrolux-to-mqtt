@@ -158,7 +158,10 @@ function reportErrors(errors: string[]): void {
   for (const error of errors) {
     console.error(`  - ${error}`)
   }
-  process.exit(1)
+  // Skip exit in test environment
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    process.exit(1)
+  }
 }
 
 // Validate configuration
