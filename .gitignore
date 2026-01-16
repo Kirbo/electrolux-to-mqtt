@@ -1,7 +1,8 @@
 node_modules
-**/tokens.json
+**/tokens.json*
 
 docker-compose.yml
 docker-compose.local.yml
 config.yml
 dist
+.DS_Store
