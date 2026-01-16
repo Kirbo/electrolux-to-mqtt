@@ -209,12 +209,8 @@ class ElectroluxClient {
       if (request.url !== '/api/v1/token/refresh') {
         while (this.isLoggingIn) {
           logger.debug('Waiting for login to complete...')
-          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
-      }
-
-      if (this.isLoggedIn) {
-        await this.ensureValidToken()
       }
       return request
     })
@@ -526,6 +522,9 @@ class ElectroluxClient {
 
       this.isLoggingIn = false
       this.isLoggedIn = true
+
+      // Small delay to ensure the new client is fully ready
+      await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (error) {
       logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
       setTimeout(async () => {
@@ -536,6 +535,7 @@ class ElectroluxClient {
 
   public async getAppliances() {
     try {
+      await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
@@ -561,6 +561,7 @@ class ElectroluxClient {
 
   public async getApplianceInfo(applianceId: string) {
     try {
+      await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
@@ -607,6 +608,7 @@ class ElectroluxClient {
     }
 
     try {
+      await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
@@ -662,6 +664,7 @@ class ElectroluxClient {
     const cacheKey = cache.cacheKey(applianceId).state
 
     try {
+      await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
