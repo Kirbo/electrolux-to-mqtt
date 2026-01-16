@@ -89,21 +89,18 @@ install dependencies:
     - job: initialise variables
       artifacts: true
   before_script:
-    - echo "Node version from .nvmrc: $(cat .nvmrc)"
+    - echo "Node version from .nvmrc:" && cat .nvmrc
     - node --version
     - npm --version
-    # Extract package manager from package.json
     - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
     - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
     - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
-    - echo "Package manager: ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"
-    # Install package manager if not npm
+    - echo "Package manager:" ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
     - |
       if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
         echo "Installing package manager ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"
         npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
       fi
-    # Configure pnpm to use cache directory
     - |
       if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
         pnpm config set store-dir .pnpm-store
