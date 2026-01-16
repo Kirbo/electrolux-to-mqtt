@@ -324,8 +324,41 @@ LOG_LEVEL=error pnpm test
 - Use **Vitest** for testing
 - Place tests in `tests/` directory mirroring `src/` structure
 - Name test files with `.test.ts` extension
-- Aim for >70% code coverage
+- Aim for >70% code coverage for new code
 - Test both success and error cases
+
+### Coverage Requirements
+
+The project maintains test coverage with the following requirements:
+
+**Minimum Coverage Thresholds:**
+- **Lines**: 35%
+- **Statements**: 35%
+- **Branches**: 35%
+- **Functions**: 50%
+
+**New Code Coverage:**
+- New code should have **≥80% coverage** where possible
+- The `src/appliances/` directory has excellent coverage (90%+) as a reference
+
+**Coverage Regression Protection:**
+- The GitLab CI pipeline enforces these thresholds
+- Coverage reports are generated and tracked in merge requests
+- Regressions will block merge requests from being merged
+- Coverage reports are available in: `coverage/index.html`
+
+**Checking Coverage Locally:**
+```bash
+# Generate HTML coverage report
+pnpm test:coverage
+
+# View the report in your browser
+open coverage/index.html  # macOS
+# or
+xdg-open coverage/index.html  # Linux
+# or
+start coverage/index.html  # Windows
+```
 
 Example test structure:
 
