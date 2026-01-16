@@ -7,7 +7,17 @@
 [![GitLab Merge Requests](https://img.shields.io/gitlab/merge-requests/open/Kirbo%2Felectrolux-to-mqtt)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests)
 [![Docker Pulls](https://badgen.net/docker/pulls/kirbownz/electrolux-to-mqtt)](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt/)
 
+A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Home Assistant. Features automatic discovery, dynamic appliance management, and a modular architecture for easy extensibility.
 
+## ✨ Features
+
+- 🔄 **Automatic Home Assistant Discovery** - Zero-configuration MQTT Climate integration
+- 🔌 **Dynamic Appliance Detection** - Automatically detects added/removed appliances
+- 🏗️ **Modular Architecture** - Easy to extend with new appliance models
+- 🔐 **Secure Token Management** - Automatic OAuth token refresh
+- 🚀 **Production Ready** - Comprehensive error handling and graceful shutdown
+- 🧪 **Well Tested** - Unit tests with >70% coverage
+- 🐳 **Docker Ready** - Multi-platform Docker images (amd64/arm64)
 
 Relevant links:
 - [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
@@ -56,6 +66,7 @@ docker run --rm \
   # -e MQTT_RETAIN=false \
   # -e MQTT_QOS=2 \
   # -e ELECTROLUX_REFRESH_INTERVAL=30 \
+  # -e ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e LOG_LEVEL=info \
   # -e LOGGING_SHOW_CHANGES=false \
@@ -102,6 +113,7 @@ services:
       # - MQTT_RETAIN=false
       # - MQTT_QOS=2
       # - ELECTROLUX_REFRESH_INTERVAL=30
+      # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - LOG_LEVEL=info
       # - LOGGING_SHOW_CHANGES=false
@@ -126,6 +138,29 @@ pnpm install
 # Run the app in development mode
 pnpm dev
 ```
+
+## Testing
+
+This project includes comprehensive unit tests to ensure reliability:
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests in watch mode (auto-rerun on changes)
+pnpm test:watch
+
+# Run tests with coverage report
+pnpm test:coverage
+```
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines on:
+- Adding support for new appliance models
+- Development setup and workflow
+- Code style and testing requirements
+- Submitting merge requests
 
 ..or if you want to use Docker instead:
 ```bash
