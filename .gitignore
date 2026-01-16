@@ -4,7 +4,7 @@ node_modules
 
 docker-compose.yml
 docker-compose.local.yml
-config.yml
+**config.yml**
 dist
 coverage
 .DS_Store
