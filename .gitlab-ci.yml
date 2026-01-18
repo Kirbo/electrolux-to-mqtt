@@ -25,12 +25,16 @@ initialise variables:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
         - docker-compose*.yml
         - Dockerfile
         - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
       when: always
     - when: never
   cache: []
@@ -51,12 +55,16 @@ bump version:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
         - docker-compose*.yml
         - Dockerfile
         - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
       when: always
     - when: never
   cache: []
@@ -87,13 +95,14 @@ install dependencies:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
+        - biome.jsonc
         - package.json
         - pnpm-lock.yaml
         - src/**/*
         - tests/**/*
-        - biome.jsonc
         - tsconfig.json
         - vitest.config.ts
+        - vitest.setup.ts
       when: always
     - when: never
   cache:
@@ -135,12 +144,14 @@ test:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
+        - biome.jsonc
         - package.json
         - pnpm-lock.yaml
         - src/**/*
         - tests/**/*
         - tsconfig.json
         - vitest.config.ts
+        - vitest.setup.ts
       when: always
     - when: never
   cache:
@@ -189,11 +200,14 @@ lint:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
+        - biome.jsonc
         - package.json
         - pnpm-lock.yaml
         - src/**/*
         - tests/**/*
-        - biome.jsonc
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
       when: always
     - when: never
   cache:
@@ -272,13 +286,14 @@ sonarcloud-check:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
+        - biome.jsonc
         - package.json
         - pnpm-lock.yaml
         - src/**/*
         - tests/**/*
-        - biome.jsonc
         - tsconfig.json
         - vitest.config.ts
+        - vitest.setup.ts
       when: always
     - when: never
   image:
@@ -295,6 +310,8 @@ sonarcloud-check:
       artifacts: true
     - job: install dependencies
       artifacts: false
+    - job: test
+      artifacts: true
   script:
     - sonar-scanner
 
@@ -306,12 +323,13 @@ try to build docker images:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
       changes:
         - .gitlab-ci.yml
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
         - docker-compose*.yml
         - Dockerfile
         - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
       when: always
     - when: never
   cache: []
@@ -341,12 +359,13 @@ create gitlab release:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
         - docker-compose*.yml
         - Dockerfile
         - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
       when: always
     - when: never
   cache: []
@@ -371,12 +390,13 @@ build and deploy docker images:
     - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
         - docker-compose*.yml
         - Dockerfile
         - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
       when: always
     - when: never
   cache: []
