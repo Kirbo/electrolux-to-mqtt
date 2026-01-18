@@ -61,4 +61,60 @@ describe('Cache', () => {
     cache.delete('key')
     expect(cache.has('key')).toBe(false)
   })
+
+  it('should handle getting unparsed values', () => {
+    const cache = new Cache<Record<string, unknown>>()
+    cache.set('test-key', { data: 'value' })
+    const unparsed = cache.get('test-key', false)
+    expect(typeof unparsed).toBe('string')
+  })
+
+  it('should handle number values', () => {
+    const cache = new Cache<{ count: number }>()
+    cache.set('count-key', { count: 42 })
+    expect(cache.get('count-key')).toEqual({ count: 42 })
+  })
+
+  it('should handle array values', () => {
+    const cache = new Cache<number[]>()
+    cache.set('array-key', [1, 2, 3])
+    expect(cache.get('array-key')).toEqual([1, 2, 3])
+  })
+
+  it('should handle nested objects', () => {
+    const cache = new Cache<{ nested: { deep: { value: string } } }>()
+    const nested = { nested: { deep: { value: 'test' } } }
+    cache.set('nested-key', nested)
+    expect(cache.get('nested-key')).toEqual(nested)
+  })
+
+  it('should return cache instance for chaining', () => {
+    const cache = new Cache<{ val: string }>()
+    const result = cache.set('key1', { val: 'value1' })
+    expect(result).toBe(cache)
+
+    // Should allow chaining
+    cache.set('key2', { val: 'value2' }).set('key3', { val: 'value3' })
+    expect(cache.has('key2')).toBe(true)
+    expect(cache.has('key3')).toBe(true)
+  })
+
+  it('should handle value comparison with different types', () => {
+    const cache = new Cache<unknown>()
+
+    // Test with object
+    const obj = { type: 'object' }
+    expect(cache.matchByValue('obj-key', obj)).toBe(false)
+    expect(cache.matchByValue('obj-key', obj)).toBe(true)
+
+    // Test with array
+    const arr = [1, 2, 3]
+    expect(cache.matchByValue('arr-key', arr)).toBe(false)
+    expect(cache.matchByValue('arr-key', arr)).toBe(true)
+
+    // Test with number
+    const num = 123
+    expect(cache.matchByValue('num-key', num)).toBe(false)
+    expect(cache.matchByValue('num-key', num)).toBe(true)
+  })
 })

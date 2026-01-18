@@ -10,59 +10,291 @@ const mockStub: ApplianceStub = {
   created: '2024-01-01T00:00:00Z',
 }
 
-const mockInfo = {
+const mockInfo: ApplianceInfo = {
   applianceInfo: {
-    applianceId: 'test-appliance-123',
-    applianceName: 'Test AC',
+    serialNumber: 'SN123456',
+    pnc: '12345678',
     brand: 'Electrolux',
-    colour: 'White',
     deviceType: 'PORTABLE_AIR_CONDITIONER',
     model: 'COMFORT600',
-    serialNumber: 'SN123456',
     variant: 'A1',
+    colour: 'White',
   },
   capabilities: {
+    alerts: {
+      access: 'read',
+      type: 'alert',
+      values: {
+        ROOM_TEMPERATURE_THERMISTOR_FAULT: {},
+        INDOOR_DEFROST_THERMISTOR_FAULT: {},
+        DRAIN_PAN_FULL: {},
+        COMMUNICATION_FAULT: {},
+        DC_MOTOR_FAULT: {},
+      },
+    },
+    applianceState: {
+      access: 'read',
+      type: 'string',
+      values: { OFF: {}, RUNNING: {} },
+    },
+    executeCommand: {
+      access: 'readwrite',
+      type: 'string',
+      schedulable: true,
+      values: { ON: {}, OFF: {} },
+    },
+    targetTemperatureC: {
+      access: 'readwrite',
+      default: 16,
+      max: 32,
+      min: 16,
+      step: 1,
+      type: 'temperature',
+      schedulable: true,
+    },
+    fanSpeedSetting: {
+      access: 'readwrite',
+      type: 'string',
+      schedulable: true,
+      values: { AUTO: {}, LOW: {}, MIDDLE: {}, HIGH: {} },
+    },
+    fanSpeedState: {
+      access: 'read',
+      type: 'string',
+      values: { HIGH: {}, LOW: {}, MIDDLE: {} },
+    },
     mode: {
+      access: 'readwrite',
+      type: 'string',
+      schedulable: true,
       values: {
         AUTO: {},
         COOL: {},
-        HEAT: {},
         DRY: {},
+        HEAT: {},
         FANONLY: {},
+        OFF: { disabled: true },
       },
+      triggers: [
+        // Fan only mode trigger
+        {
+          action: {
+            fanSpeedSetting: {
+              access: 'readwrite',
+              type: 'string',
+              values: { LOW: {}, MIDDLE: {}, HIGH: {} },
+            },
+            targetTemperatureC: {
+              access: 'readwrite',
+              default: 23,
+              max: 23,
+              min: 23,
+              step: 1,
+              type: 'temperature',
+              disabled: true,
+            },
+            sleepMode: { disabled: true },
+          },
+          condition: { operand_1: 'value', operand_2: 'FANONLY', operator: 'eq' },
+        },
+        // Dry mode trigger
+        {
+          action: {
+            fanSpeedSetting: { access: 'read', type: 'string', values: { LOW: {} } },
+            targetTemperatureC: {
+              access: 'readwrite',
+              default: 23,
+              max: 23,
+              min: 23,
+              step: 1,
+              type: 'temperature',
+              disabled: true,
+            },
+            sleepMode: { disabled: true },
+          },
+          condition: { operand_1: 'value', operand_2: 'DRY', operator: 'eq' },
+        },
+        // Auto mode trigger
+        {
+          action: {
+            fanSpeedSetting: { access: 'read', type: 'string', values: { AUTO: {} } },
+            targetTemperatureC: {
+              access: 'readwrite',
+              default: 16,
+              max: 32,
+              min: 16,
+              step: 1,
+              type: 'temperature',
+            },
+            sleepMode: { disabled: false },
+          },
+          condition: { operand_1: 'value', operand_2: 'AUTO', operator: 'eq' },
+        },
+        // Cool mode trigger
+        {
+          action: {
+            fanSpeedSetting: {
+              access: 'readwrite',
+              type: 'string',
+              values: { AUTO: {}, LOW: {}, MIDDLE: {}, HIGH: {} },
+            },
+            targetTemperatureC: {
+              access: 'readwrite',
+              default: 16,
+              max: 32,
+              min: 16,
+              step: 1,
+              type: 'temperature',
+            },
+            sleepMode: { disabled: false },
+          },
+          condition: { operand_1: 'value', operand_2: 'COOL', operator: 'eq' },
+        },
+        // Heat mode trigger
+        {
+          action: {
+            fanSpeedSetting: {
+              access: 'readwrite',
+              type: 'string',
+              values: { AUTO: {}, LOW: {}, MIDDLE: {}, HIGH: {} },
+            },
+            targetTemperatureC: {
+              access: 'readwrite',
+              default: 16,
+              max: 32,
+              min: 16,
+              step: 1,
+              type: 'temperature',
+            },
+            sleepMode: { disabled: false },
+          },
+          condition: { operand_1: 'value', operand_2: 'HEAT', operator: 'eq' },
+        },
+      ],
     },
-    fanSpeedSetting: {
-      values: {
-        AUTO: {},
-        HIGH: {},
-        MIDDLE: {},
-        LOW: {},
+    networkInterface: {
+      linkQualityIndicator: {
+        access: 'read',
+        type: 'string',
+        values: {
+          EXCELLENT: {},
+          GOOD: {},
+          POOR: {},
+          UNDEFINED: {},
+          VERY_GOOD: {},
+          VERY_POOR: {},
+        },
+        rssi: { access: 'read', type: 'string' },
       },
+      swVersion: { access: 'read', type: 'string' },
+    },
+    sleepMode: {
+      access: 'readwrite',
+      type: 'string',
+      values: { OFF: {}, ON: {} },
+    },
+    uiLockMode: {
+      access: 'readwrite',
+      type: 'boolean',
+      values: { OFF: {}, ON: {} },
     },
     verticalSwing: {
+      access: 'readwrite',
+      type: 'string',
+      schedulable: true,
+      values: { OFF: {}, ON: {} },
+    },
+    startTime: {
+      access: 'readwrite',
+      max: 86400,
+      min: 0,
+      step: 1800,
+      type: 'number',
       values: {
-        ON: {},
-        OFF: {},
+        '0': {},
+        '1800': {},
+        '3600': {},
+        '5400': {},
+        '7200': {},
+        '9000': {},
+        '10800': {},
+        '12600': {},
+        '14400': {},
+        '16200': {},
+        '18000': {},
+        '19800': {},
+        '21600': {},
+        '23400': {},
+        '25200': {},
+        '27000': {},
+        '28800': {},
+        '30600': {},
+        '32400': {},
+        '34200': {},
+        '36000': {},
+        '39600': {},
+        '43200': {},
+        '46800': {},
+        '50400': {},
+        '54000': {},
+        '57600': {},
+        '61200': {},
+        '64800': {},
+        '68400': {},
+        '72000': {},
+        '75600': {},
+        '79200': {},
+        '82800': {},
+        '86400': {},
       },
     },
-    targetTemperatureC: {
-      min: 16,
-      max: 30,
-      default: 22,
+    stopTime: {
+      access: 'readwrite',
+      max: 86400,
+      min: 0,
+      step: 1800,
+      type: 'number',
+      values: {
+        '0': {},
+        '1800': {},
+        '3600': {},
+        '5400': {},
+        '7200': {},
+        '9000': {},
+        '10800': {},
+        '12600': {},
+        '14400': {},
+        '16200': {},
+        '18000': {},
+        '19800': {},
+        '21600': {},
+        '23400': {},
+        '25200': {},
+        '27000': {},
+        '28800': {},
+        '30600': {},
+        '32400': {},
+        '34200': {},
+        '36000': {},
+        '39600': {},
+        '43200': {},
+        '46800': {},
+        '50400': {},
+        '54000': {},
+        '57600': {},
+        '61200': {},
+        '64800': {},
+        '68400': {},
+        '72000': {},
+        '75600': {},
+        '79200': {},
+        '82800': {},
+        '86400': {},
+      },
     },
+    ambientTemperatureC: { access: 'read', step: 1, type: 'int' },
   },
-  connectionState: 'connected',
-  state: {
-    reported: {
-      applianceState: 'RUNNING',
-      mode: 'COOL',
-      fanSpeedSetting: 'AUTO',
-      targetTemperatureC: 22,
-      ambientTemperatureC: 25,
-      verticalSwing: 'ON',
-    },
-  },
-} as unknown as ApplianceInfo
+}
 
 describe('Comfort600Appliance', () => {
   const appliance = new Comfort600Appliance(mockStub, mockInfo)
@@ -115,8 +347,17 @@ describe('Comfort600Appliance', () => {
     it('should return correct temperature range', () => {
       const range = appliance.getTemperatureRange()
       expect(range.min).toBe(16)
-      expect(range.max).toBe(30)
-      expect(range.initial).toBe(22)
+      expect(range.max).toBe(32)
+      expect(range.initial).toBe(16)
+    })
+
+    it('should use default temperature range when capabilities are missing', () => {
+      const applianceNoCaps = new Comfort600Appliance(mockStub, mockInfo)
+      const range = applianceNoCaps.getTemperatureRange()
+
+      expect(range.min).toBe(16)
+      expect(range.max).toBe(32)
+      expect(range.initial).toBe(16)
     })
   })
 
@@ -188,7 +429,7 @@ describe('Comfort600Appliance', () => {
       expect(config.fan_modes).toContain('auto')
       expect(config.temperature_unit).toBe('C')
       expect(config.min_temp).toBe(16)
-      expect(config.max_temp).toBe(30)
+      expect(config.max_temp).toBe(32)
     })
 
     it('should include temperature_state_topic', () => {

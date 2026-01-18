@@ -11,51 +11,51 @@ export type Appliance = {
   status: 'enabled' | 'disabled'
   properties: {
     reported: {
-      $version: number
-      ambientTemperatureC: number | null
-      ambientTemperatureF: number | null
-      applianceData: {
+      $version?: number
+      ambientTemperatureC?: number | null
+      ambientTemperatureF?: number | null
+      applianceData?: {
         elc: string
         mac: string
         pnc: string
         sn: string
       } | null
       applianceState: 'on' | 'off'
-      capabilities: Record<string, unknown>
-      compressorCoolingRuntime: number
-      compressorHeatingRuntime: number
-      compressorState: 'on' | 'off'
+      capabilities?: Record<string, unknown>
+      compressorCoolingRuntime?: number
+      compressorHeatingRuntime?: number
+      compressorState?: 'on' | 'off'
       dataModelVersion: string
       deviceId: string
-      evapDefrostState: 'on' | 'off' | null
-      fanSpeedSetting: 'low' | 'medium' | 'middle' | 'high' | 'auto'
-      filterRuntime: number
-      filterState: 'clean' | 'dirty' | 'good'
-      fourWayValveState: 'on' | 'off' | null
-      hepaFilterLifeTime: number | null
-      logE: number | null
-      logW: number | null
-      mode: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto' | 'off'
+      evapDefrostState?: 'on' | 'off' | null
+      fanSpeedSetting?: 'low' | 'medium' | 'middle' | 'high' | 'auto'
+      filterRuntime?: number
+      filterState?: 'clean' | 'dirty' | 'good'
+      fourWayValveState?: 'on' | 'off' | null
+      hepaFilterLifeTime?: number | null
+      logE?: number | null
+      logW?: number | null
+      mode?: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto' | 'off'
       networkInterface: {
         linkQualityIndicator: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'VERY_GOOD'
         rssi: number
       }
-      schedulerMode: 'on' | 'off' | null
-      schedulerSession: 'on' | 'off' | null
-      sleepMode: 'on' | 'off'
-      startTime: number
-      stopTime: number
-      targetTemperatureC: number
-      tasks: Record<string, unknown>
-      temperatureRepresentation: 'celsius' | 'fahrenheit'
-      TimeZoneDaylightRule: string | null
-      TimeZoneStandardName: string | null
-      totalRuntime: number
-      uiLockMode: boolean
-      upgradeState: 'idle' | 'upgrading' | null
-      verticalSwing: 'on' | 'off'
-      VmNo_MCU: string | null
-      VmNo_NIU: string | null
+      schedulerMode?: 'on' | 'off' | null
+      schedulerSession?: 'on' | 'off' | null
+      sleepMode?: 'on' | 'off'
+      startTime?: number
+      stopTime?: number
+      targetTemperatureC?: number
+      tasks?: Record<string, unknown>
+      temperatureRepresentation?: 'celsius' | 'fahrenheit'
+      TimeZoneDaylightRule?: string | null
+      TimeZoneStandardName?: string | null
+      totalRuntime?: number
+      uiLockMode?: boolean
+      upgradeState?: 'idle' | 'upgrading' | null
+      verticalSwing?: 'on' | 'off'
+      VmNo_MCU?: string | null
+      VmNo_NIU?: string | null
     }
   }
 }
@@ -112,15 +112,18 @@ export type SanitizedState = {
 }
 
 /**
+ * Export NormalizedState for use in tests and other modules
+ */
+/**
  * @deprecated Use NormalizedState from types/normalized.ts instead
  * This type alias exists for backward compatibility
  */
-export type { NormalizedState as NormalizedApplianceState } from './types/normalized.js'
+export type { NormalizedState } from './types/normalized.js'
 
 export type ApplianceInfo = {
   applianceInfo: {
     serialNumber: string
-    pnc: string
+    pnc?: string
     brand: string
     deviceType: string
     model: string
@@ -128,42 +131,42 @@ export type ApplianceInfo = {
     colour: string
   }
   capabilities: {
-    alerts: {
+    alerts?: {
       access: 'read'
       type: 'alert'
       values: Record<string, unknown>
     }
-    ambientTemperatureC: {
+    ambientTemperatureC?: {
       access: 'read'
       step: number
       type: 'int'
     }
-    applianceState: {
+    applianceState?: {
       access: 'read'
       type: 'string'
       values: Record<string, unknown>
     }
-    executeCommand: {
+    executeCommand?: {
       access: 'readwrite'
       schedulable: boolean
       type: 'string'
       values: Record<string, unknown>
     }
-    fanSpeedSetting: {
+    fanSpeedSetting?: {
       access: 'readwrite'
       schedulable: boolean
       type: 'string'
       values: Record<string, unknown>
     }
-    fanSpeedState: {
+    fanSpeedState?: {
       access: 'read'
       type: 'string'
       values: Record<string, unknown>
     }
-    mode: {
+    mode?: {
       access: 'readwrite'
       schedulable: boolean
-      triggers: Array<{
+      triggers?: Array<{
         action: Record<string, unknown>
         condition: {
           operand_1: string
@@ -189,12 +192,12 @@ export type ApplianceInfo = {
         type: 'string'
       }
     }
-    sleepMode: {
+    sleepMode?: {
       access: 'readwrite'
       type: 'string'
       values: Record<string, unknown>
     }
-    startTime: {
+    startTime?: {
       access: 'readwrite'
       max: number
       min: number
@@ -202,7 +205,7 @@ export type ApplianceInfo = {
       type: 'number'
       values: Record<string, unknown>
     }
-    stopTime: {
+    stopTime?: {
       access: 'readwrite'
       max: number
       min: number
@@ -210,7 +213,7 @@ export type ApplianceInfo = {
       type: 'number'
       values: Record<string, unknown>
     }
-    targetTemperatureC: {
+    targetTemperatureC?: {
       access: 'readwrite'
       default: number
       max: number
@@ -219,12 +222,12 @@ export type ApplianceInfo = {
       step: number
       type: 'temperature'
     }
-    uiLockMode: {
+    uiLockMode?: {
       access: 'readwrite'
       type: 'boolean'
       values: Record<string, unknown>
     }
-    verticalSwing: {
+    verticalSwing?: {
       access: 'readwrite'
       schedulable: boolean
       type: 'string'

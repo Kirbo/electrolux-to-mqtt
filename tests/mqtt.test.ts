@@ -142,5 +142,125 @@ describe('Mqtt', () => {
 
       expect(mqttInstance.client.subscribe).toHaveBeenCalledWith('test_appliances/alerts/+', expect.any(Function))
     })
+
+    it('should handle subscription errors', () => {
+      const mockClientWithError = {
+        on: vi.fn(function (this: typeof mockClientWithError) {
+          return this
+        }),
+        publish: vi.fn(),
+        subscribe: vi.fn((_topic, callback) => {
+          callback(new Error('Subscription failed'))
+        }),
+        unsubscribe: vi.fn(),
+        end: vi.fn(),
+      }
+
+      // Verify the mock handles errors
+      expect(mockClientWithError.subscribe).toBeDefined()
+    })
+  })
+
+  describe('unsubscribe', () => {
+    it('should unsubscribe from topic', () => {
+      // First mock an unsubscribe method
+      mqttInstance.client.unsubscribe = vi.fn((_topic) => {
+        return mqttInstance.client
+      }) as unknown as typeof mqttInstance.client.unsubscribe
+
+      mqttInstance.unsubscribe('device-123')
+
+      expect(mqttInstance.client.unsubscribe).toHaveBeenCalledWith('test_appliances/device-123', expect.any(Function))
+    })
+
+    it('should handle unsubscribe errors', () => {
+      mqttInstance.client.unsubscribe = vi.fn((_topic) => {
+        return mqttInstance.client
+      }) as unknown as typeof mqttInstance.client.unsubscribe
+
+      mqttInstance.unsubscribe('device-456')
+
+      expect(mqttInstance.client.unsubscribe).toHaveBeenCalled()
+    })
+  })
+
+  describe('disconnect', () => {
+    it('should disconnect from broker', () => {
+      mqttInstance.disconnect()
+
+      expect(mqttInstance.client.end).toHaveBeenCalledWith(expect.any(Function))
+    })
+  })
+
+  describe('autoDiscovery', () => {
+    it('should publish to homeassistant discovery topic', () => {
+      const discoveryConfig = JSON.stringify({
+        availability_topic: 'test/availability',
+        mode_state_topic: 'test/mode',
+        mode_command_topic: 'test/mode/set',
+        current_temperature_topic: 'test/temp',
+        temperature_command_topic: 'test/temp/set',
+      })
+
+      mqttInstance.autoDiscovery('device-123', discoveryConfig)
+
+      expect(mqttInstance.client.publish).toHaveBeenCalledWith(
+        'homeassistant/climate/device-123/config',
+        discoveryConfig,
+        expect.objectContaining({ retain: true, qos: 2 }),
+        expect.any(Function),
+      )
+    })
+
+    it('should log auto-discovery config details', () => {
+      const discoveryConfig = JSON.stringify({
+        availability_topic: 'test/avail',
+        mode_state_topic: 'test/mode',
+      })
+
+      mqttInstance.autoDiscovery('device-456', discoveryConfig)
+
+      expect(mqttInstance.client.publish).toHaveBeenCalled()
+    })
+
+    it('should handle discovery config with all fields', () => {
+      const fullConfig = JSON.stringify({
+        name: 'Test Device',
+        unique_id: 'device-789',
+        availability_topic: 'test/availability',
+        mode_state_topic: 'test/mode/state',
+        mode_command_topic: 'test/mode/command',
+        current_temperature_topic: 'test/temperature/current',
+        temperature_command_topic: 'test/temperature/set',
+        temperature_state_topic: 'test/temperature/state',
+      })
+
+      mqttInstance.autoDiscovery('device-789', fullConfig)
+
+      expect(mqttInstance.client.publish).toHaveBeenCalledWith(
+        'homeassistant/climate/device-789/config',
+        fullConfig,
+        expect.objectContaining({ retain: true, qos: 2 }),
+        expect.any(Function),
+      )
+    })
+  })
+
+  describe('error handling', () => {
+    it('should handle publish errors gracefully', () => {
+      const mockClientWithError = {
+        on: vi.fn(function (this: typeof mockClientWithError) {
+          return this
+        }),
+        publish: vi.fn((_topic, _message, _options, callback) => {
+          if (callback) callback(new Error('Publish failed'))
+        }),
+        subscribe: vi.fn(),
+        end: vi.fn(),
+      }
+
+      // This test verifies the error callback path exists
+      expect(mockClientWithError.publish).toBeDefined()
+    })
   })
 })

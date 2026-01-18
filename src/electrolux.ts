@@ -250,6 +250,7 @@ export class ElectroluxClient {
       return { xcsrfToken, csrfSecret }
     } catch (error) {
       logger.error(`Error getting X-CSRF token: ${formatAxiosError(error)}`)
+      return undefined
     }
   }
 

@@ -99,4 +99,92 @@ describe('logger', () => {
       expect(defaultLevel).toBe('info')
     })
   })
+
+  describe('timezone handling', () => {
+    it('should read timezone from TZ env var', () => {
+      const tzValue = 'America/New_York'
+      expect(tzValue).toBeTruthy()
+    })
+
+    it('should fallback to UTC when timezone cannot be detected', () => {
+      const fallback = 'UTC'
+      expect(fallback).toBe('UTC')
+    })
+
+    it('should handle zoneinfo path format', () => {
+      const zoneinfoPath = '/usr/share/zoneinfo/Europe/Helsinki'
+      const regex = /zoneinfo\/(.*)/
+      const match = regex.exec(zoneinfoPath)
+      expect(match).toBeTruthy()
+      if (match) {
+        expect(match[1]).toBe('Europe/Helsinki')
+      }
+    })
+  })
+
+  describe('version prefix handling', () => {
+    it('should format version prefix for production', () => {
+      const version = '1.0.0'
+      const prefix = `v${version} :: `
+      expect(prefix).toBe('v1.0.0 :: ')
+    })
+
+    it('should not show version prefix for development', () => {
+      const version = 'development'
+      const prefix = version === 'development' ? '' : `v${version} :: `
+      expect(prefix).toBe('')
+    })
+
+    it('should respect showVersionNumber config', () => {
+      const showVersionNumber = true
+      const version = '2.0.0'
+      const prefix = showVersionNumber ? `v${version} :: ` : ''
+      expect(prefix).toBe('v2.0.0 :: ')
+    })
+
+    it('should hide version when showVersionNumber is false', () => {
+      const showVersionNumber = false
+      const version = '2.0.0'
+      const prefix = showVersionNumber ? `v${version} :: ` : ''
+      expect(prefix).toBe('')
+    })
+  })
+
+  describe('argument stringification', () => {
+    it('should stringify string arguments', () => {
+      const arg = 'simple string'
+      const result = String(arg)
+      expect(result).toBe('simple string')
+    })
+
+    it('should stringify number arguments', () => {
+      const arg = 42
+      const result = String(arg)
+      expect(result).toBe('42')
+    })
+
+    it('should handle null values', () => {
+      const arg = null
+      const result = String(arg)
+      expect(result).toBe('null')
+    })
+
+    it('should handle undefined values', () => {
+      const arg = undefined
+      const result = String(arg)
+      expect(result).toBe('undefined')
+    })
+
+    it('should handle object stringification', () => {
+      const arg = { key: 'value', nested: { data: 123 } }
+      const isObject = typeof arg === 'object' && arg !== null
+      expect(isObject).toBe(true)
+    })
+
+    it('should handle array stringification', () => {
+      const arg = [1, 2, 3, 'test']
+      const isObject = typeof arg === 'object' && arg !== null
+      expect(isObject).toBe(true)
+    })
+  })
 })

@@ -67,7 +67,7 @@ describe('normalizers extended', () => {
             mode: 'COOL',
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = extractReportedState(appliance)
       expect(result.applianceState).toBe('ON')
@@ -78,7 +78,7 @@ describe('normalizers extended', () => {
       const appliance = {
         applianceState: 'ON',
         mode: 'COOL',
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = extractReportedState(appliance)
       expect(result.applianceState).toBe('ON')
@@ -102,7 +102,7 @@ describe('normalizers extended', () => {
             $version: 5,
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeBaseFields(appliance)
 
@@ -126,7 +126,7 @@ describe('normalizers extended', () => {
             },
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeBaseFields(appliance)
 
@@ -147,7 +147,7 @@ describe('normalizers extended', () => {
             },
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeBaseFields(appliance)
 
@@ -170,7 +170,7 @@ describe('normalizers extended', () => {
             stopTime: '22:00',
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeBaseFields(appliance)
 
@@ -189,7 +189,7 @@ describe('normalizers extended', () => {
             VmNo_NIU: '4.5.6',
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeBaseFields(appliance)
 
@@ -221,7 +221,7 @@ describe('normalizers extended', () => {
             filterState: 'Good',
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeClimateAppliance(appliance)
 
@@ -247,7 +247,7 @@ describe('normalizers extended', () => {
             mode: 'FANONLY',
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeClimateAppliance(appliance)
       expect(result.mode).toBe('fan_only')
@@ -264,7 +264,7 @@ describe('normalizers extended', () => {
             filterRuntime: 300,
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeClimateAppliance(appliance)
       expect(result.compressorCoolingRuntime).toBe(1000)
@@ -283,7 +283,7 @@ describe('normalizers extended', () => {
             hepaFilterLifeTime: 2000,
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeClimateAppliance(appliance)
       expect(result.fourWayValveState).toBe('on')
@@ -301,7 +301,7 @@ describe('normalizers extended', () => {
             mode: 'COOL',
           },
         },
-      } as ApplianceInfo
+      } as unknown as Appliance
 
       const result = normalizeFromApiResponse(appliance)
       expect(result.mode).toBe('cool')

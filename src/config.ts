@@ -66,7 +66,7 @@ interface EnvVars {
   LOGGING_SKIP_CACHE_LOGGING?: string
 }
 
-function createConfigFromEnv(): void {
+export function createConfigFromEnv(): void {
   const env = process.env as EnvVars
   const MANDATORY_VARS = [
     'MQTT_URL',
@@ -144,7 +144,13 @@ const file = fs.readFileSync(configPath, 'utf8')
 const config = yaml.parse(file) as AppConfig
 
 // Helper function to validate interval range
-function validateInterval(value: number | undefined, name: string, min: number, max: number, errors: string[]): void {
+export function validateInterval(
+  value: number | undefined,
+  name: string,
+  min: number,
+  max: number,
+  errors: string[],
+): void {
   if (value === undefined) return
 
   if (value < min) {
@@ -156,7 +162,7 @@ function validateInterval(value: number | undefined, name: string, min: number, 
 }
 
 // Helper function to report validation errors
-function reportErrors(errors: string[]): void {
+export function reportErrors(errors: string[]): void {
   console.error('Configuration validation failed:')
   for (const error of errors) {
     console.error(`  - ${error}`)
@@ -168,7 +174,7 @@ function reportErrors(errors: string[]): void {
 }
 
 // Validate configuration
-function validateConfig(cfg: AppConfig): void {
+export function validateConfig(cfg: AppConfig): void {
   const errors: string[] = []
 
   // Validate refresh interval
