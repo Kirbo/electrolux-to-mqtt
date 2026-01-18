@@ -1265,16 +1265,16 @@ describe('electrolux', () => {
     describe('getApplianceState', () => {
       let mockAppliance: MockAppliance
 
+      const normalizeStateForGetApplianceState = (state: Appliance): NormalizedState =>
+        ({
+          applianceId: state.applianceId,
+          mode: state.properties.reported.mode,
+          targetTemperatureC: state.properties.reported.targetTemperatureC,
+        }) as NormalizedState
+
       beforeEach(() => {
         mockAppliance = createMockAppliance({
-          normalizeState: vi.fn(
-            (state: Appliance) =>
-              ({
-                applianceId: state.applianceId,
-                mode: state.properties.reported.mode,
-                targetTemperatureC: state.properties.reported.targetTemperatureC,
-              }) as NormalizedState,
-          ),
+          normalizeState: vi.fn(normalizeStateForGetApplianceState),
         })
       })
 
@@ -1305,36 +1305,39 @@ describe('electrolux', () => {
         expect(mockAxiosInstance.get).not.toHaveBeenCalled()
       })
 
-      it('should handle API error and publish disconnected state', async () => {
+      it('should handle API error without publishing disconnected state', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network error'))
 
         await client.initialize()
-        await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+        const result = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
 
-        expect(mockMqtt.publish).toHaveBeenCalledWith(
-          'test-appliance-123/state',
-          expect.stringContaining('disconnected'),
-        )
+        // Should return undefined on error without publishing disconnected state
+        expect(result).toBeUndefined()
+        expect(mockMqtt.publish).not.toHaveBeenCalled()
       })
     })
 
     describe('sendApplianceCommand', () => {
       let mockAppliance: MockAppliance
 
+      const normalizeStateForSendApplianceCommand = (state: Appliance): NormalizedState =>
+        ({
+          applianceId: state.applianceId,
+          mode: state.properties.reported.mode,
+          applianceState: state.properties.reported.applianceState,
+        }) as NormalizedState
+
+      const transformMqttCommandToApiForSendApplianceCommand = (cmd: Record<string, unknown>) => ({
+        WorkMode: cmd.mode === 'cool' ? 1 : 0,
+      })
+
+      const deriveImmediateStateFromCommandForSendApplianceCommand = () => null
+
       beforeEach(() => {
         mockAppliance = createMockAppliance({
-          normalizeState: vi.fn(
-            (state: Appliance) =>
-              ({
-                applianceId: state.applianceId,
-                mode: state.properties.reported.mode,
-                applianceState: state.properties.reported.applianceState,
-              }) as NormalizedState,
-          ),
-          transformMqttCommandToApi: vi.fn((cmd) => ({
-            WorkMode: cmd.mode === 'cool' ? 1 : 0,
-          })),
-          deriveImmediateStateFromCommand: vi.fn(() => null),
+          normalizeState: vi.fn(normalizeStateForSendApplianceCommand),
+          transformMqttCommandToApi: vi.fn(transformMqttCommandToApiForSendApplianceCommand),
+          deriveImmediateStateFromCommand: vi.fn(deriveImmediateStateFromCommandForSendApplianceCommand),
         })
       })
 

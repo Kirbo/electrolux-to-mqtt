@@ -31,5 +31,9 @@
   },
   "[jsonc]": {
     "editor.defaultFormatter": "biomejs.biome"
+  },
+  "sonarlint.connectedMode.project": {
+    "connectionId": "kirbo",
+    "projectKey": "kirbo_electrolux-to-mqtt"
   }
 }

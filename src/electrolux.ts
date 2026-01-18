@@ -662,10 +662,10 @@ export class ElectroluxClient {
       return response.data
     } catch (error) {
       logger.error(`Error getting appliance state: ${formatAxiosError(error)}`)
-      this.mqtt.publish(
-        `${applianceId}/state`,
-        JSON.stringify({ applianceId, connectionState: 'disconnected', applianceState: 'off' }),
-      )
+      // Don't publish disconnected state on temporary errors (DNS failures, API errors, etc.)
+      // This preserves the last known good state in MQTT/Home Assistant
+      // Only return undefined to indicate fetch failure without changing published state
+      return undefined
     }
   }
 

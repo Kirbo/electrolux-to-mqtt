@@ -207,7 +207,14 @@ const discoverAppliances = async () => {
   try {
     const appliances = await client.getAppliances()
 
-    if (!appliances || appliances.length === 0) {
+    if (!appliances) {
+      // API call failed (network error, DNS failure, etc.) - skip discovery
+      // Don't treat this as "no appliances" to avoid cleaning up existing ones
+      logger.debug('Skipping appliance discovery due to API error')
+      return
+    }
+
+    if (appliances.length === 0) {
       logger.warn('No appliances found during discovery check')
       return
     }
@@ -260,7 +267,16 @@ const main = async () => {
   // Initial appliance discovery
   const appliances = await client.getAppliances()
 
-  if (!appliances || appliances.length === 0) {
+  if (!appliances) {
+    // API call failed (network error, DNS failure, etc.)
+    logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshInterval / 1000} seconds...`)
+    if (!isShuttingDown) {
+      setTimeout(() => main(), refreshInterval)
+    }
+    return
+  }
+
+  if (appliances.length === 0) {
     logger.error(
       `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
     )
