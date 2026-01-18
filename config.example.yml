@@ -38,3 +38,5 @@ logging:
   #   - logW
   # Show version number in logs
   showVersionNumber: true
+  # Skip cache debug logs (default: true)
+  skipCacheLogging: true

@@ -71,6 +71,7 @@ docker run --rm \
   # -e LOG_LEVEL=info \
   # -e LOGGING_SHOW_CHANGES=false \
   # -e LOGGING_IGNORED_KEYS=networkInterface.rssi \
+  # -e LOGGING_SKIP_CACHE_LOGGING=true \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 
@@ -118,6 +119,7 @@ services:
       # - LOG_LEVEL=info
       # - LOGGING_SHOW_CHANGES=false
       # - LOGGING_IGNORED_KEYS=networkInterface.rssi
+      # - LOGGING_SKIP_CACHE_LOGGING=true
 ```
 
 ## Developing locally
