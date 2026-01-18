@@ -31,6 +31,7 @@ export interface AppConfig {
     showChanges?: boolean
     ignoredKeys?: string[]
     showVersionNumber?: boolean
+    skipCacheLogging?: boolean
   }
 }
 
@@ -62,6 +63,7 @@ interface EnvVars {
   LOGGING_SHOW_CHANGES?: string
   LOGGING_IGNORED_KEYS?: string
   LOGGING_SHOW_VERSION_NUMBER?: string
+  LOGGING_SKIP_CACHE_LOGGING?: string
 }
 
 function createConfigFromEnv(): void {
@@ -124,6 +126,7 @@ logging:
   showChanges: ${env.LOGGING_SHOW_CHANGES || 'true'}
   ignoredKeys: [${formattedIgnoredKeys}]
   showVersionNumber: ${env.LOGGING_SHOW_VERSION_NUMBER || 'true'}
+  skipCacheLogging: ${env.LOGGING_SKIP_CACHE_LOGGING || 'true'}
 `
 
   fs.writeFileSync(configPath, configContent, 'utf8')

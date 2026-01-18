@@ -1,7 +1,9 @@
 import { LRU } from 'tiny-lru'
+import config from './config.js'
 import createLogger from './logger.js'
 
 const logger = createLogger('cache')
+const skipCacheLogging = config.logging?.skipCacheLogging ?? true
 
 const maxItems = 1000
 const defaultTtl = 1000 * 60 * 60 * 24 // 24 hours
@@ -30,7 +32,9 @@ export class Cache<T = unknown> {
     const cached = this.get(key)
     const match = JSON.stringify(value) === JSON.stringify(cached)
     if (match) {
-      logger.debug(`Key "${key}" value has not changed.`)
+      if (!skipCacheLogging) {
+        logger.debug(`Key "${key}" value has not changed.`)
+      }
       return true
     }
 
@@ -49,7 +53,9 @@ export class Cache<T = unknown> {
   set(key: string, value: T): this {
     const toStore = typeof value === 'string' ? value : JSON.stringify(value)
     this.lru.set(key, toStore, false, true)
-    logger.debug(`Set "${key}" value:`, value)
+    if (!skipCacheLogging) {
+      logger.debug(`Set "${key}" value:`, value)
+    }
     return this
   }
 
