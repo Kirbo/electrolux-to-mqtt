@@ -22,7 +22,7 @@ initialise variables:
   image: alpine:latest
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -52,7 +52,7 @@ bump version:
     entrypoint: [""]
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -92,7 +92,7 @@ install dependencies:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -141,7 +141,7 @@ test:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -197,7 +197,7 @@ lint:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -244,7 +244,7 @@ audit:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - package.json
@@ -283,7 +283,7 @@ audit:
 sonarcloud-check:
   stage: test
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -320,7 +320,7 @@ try to build docker images:
   image: docker:latest
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
