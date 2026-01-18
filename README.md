@@ -6,18 +6,19 @@
 [![GitLab Issues](https://img.shields.io/gitlab/issues/open/Kirbo%2Felectrolux-to-mqtt?labels=Bug)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues?label_name%5B%5D=Bug)
 [![GitLab Merge Requests](https://img.shields.io/gitlab/merge-requests/open/Kirbo%2Felectrolux-to-mqtt)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests)
 [![Docker Pulls](https://badgen.net/docker/pulls/kirbownz/electrolux-to-mqtt)](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt/)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kirbo_electrolux-to-mqtt&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kirbo_electrolux-to-mqtt)
 
 A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Home Assistant. Features automatic discovery, dynamic appliance management, and a modular architecture for easy extensibility.
 
-## ✨ Features
+## Features
 
-- 🔄 **Automatic Home Assistant Discovery** - Zero-configuration MQTT Climate integration
-- 🔌 **Dynamic Appliance Detection** - Automatically detects added/removed appliances
-- 🏗️ **Modular Architecture** - Easy to extend with new appliance models
-- 🔐 **Secure Token Management** - Automatic OAuth token refresh
-- 🚀 **Production Ready** - Comprehensive error handling and graceful shutdown
-- 🧪 **Well Tested** - Unit tests with >70% coverage
-- 🐳 **Docker Ready** - Multi-platform Docker images (amd64/arm64)
+- **Automatic Home Assistant Discovery** - Zero-configuration MQTT Climate integration
+- **Dynamic Appliance Detection** - Automatically detects added/removed appliances
+- **Modular Architecture** - Easy to extend with new appliance models
+- **Secure Token Management** - Automatic OAuth token refresh
+- **Production Ready** - Comprehensive error handling and graceful shutdown
+- **Well Tested** - Unit tests with >70% coverage
+- **Docker Ready** - Multi-platform Docker images (amd64/arm64)
 
 Relevant links:
 - [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
@@ -27,6 +28,7 @@ Relevant links:
 - [CI/CD Pipeline](https://gitlab.com/kirbo/electrolux-to-mqtt/-/pipelines) is in GitLab
 - [Dockerhub](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt)
 - [GitHub mirror](https://github.com/Kirbo/electrolux-to-mqtt)
+- [SonarQube Cloud](https://sonarcloud.io/project/overview?id=kirbo_electrolux-to-mqtt)
 
 
 ## How to install
