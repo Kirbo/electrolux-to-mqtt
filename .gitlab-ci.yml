@@ -5,6 +5,20 @@ stages:
   - release
   - docs
 
+workflow:
+  rules:
+    # Run pipeline for merge requests
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # Run pipeline for pushes to default branch
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    # Run pipeline for pushes to branches without open merge requests
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    # Run pipeline for all other branch pushes
+    - if: '$CI_COMMIT_BRANCH'
+    # Run pipeline for web/api triggers
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
 variables:
   DOCKER_REGISTRY: ${CI_REGISTRY}
   DOCKERHUB_PASSWORD: ${CI_REGISTRY_PASSWORD}
@@ -22,7 +36,7 @@ initialise variables:
   image: alpine:latest
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -52,7 +66,7 @@ bump version:
     entrypoint: [""]
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -92,7 +106,7 @@ install dependencies:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -141,7 +155,7 @@ test:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -197,7 +211,7 @@ lint:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -244,7 +258,7 @@ audit:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - package.json
@@ -283,7 +297,7 @@ audit:
 sonarcloud-check:
   stage: test
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_TAG == null'
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -320,7 +334,7 @@ try to build docker images:
   image: docker:latest
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "merge_request_event") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -356,7 +370,7 @@ create gitlab release:
     entrypoint: [""]
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -387,7 +401,7 @@ build and deploy docker images:
   image: docker:latest
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -421,7 +435,7 @@ update dockerhub description:
   image: peterevans/dockerhub-description:4
   interruptible: true
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       when: always
     - when: never
   cache: []
