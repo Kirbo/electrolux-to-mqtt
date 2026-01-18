@@ -178,7 +178,7 @@ test:
         pnpm config set store-dir .pnpm-store
       fi
   script:
-    - FORCE_COLOR=1 ${PACKAGE_MANAGER_NAME} test:coverage
+    - FORCE_COLOR=1 ${PACKAGE_MANAGER_NAME} test
   allow_failure: false
 
 lint:

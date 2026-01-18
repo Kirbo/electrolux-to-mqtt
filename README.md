@@ -151,9 +151,6 @@ pnpm test
 
 # Run tests in watch mode (auto-rerun on changes)
 pnpm test:watch
-
-# Run tests with coverage report
-pnpm test:coverage
 ```
 
 ## Contributing

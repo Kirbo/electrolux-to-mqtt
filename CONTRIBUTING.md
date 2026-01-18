@@ -265,9 +265,6 @@ describe('YourModelAppliance', () => {
 # Run unit tests
 pnpm test
 
-# Run with coverage
-pnpm test:coverage
-
 # Test in development mode
 pnpm dev
 ```
@@ -281,11 +278,15 @@ pnpm test
 # Run tests in watch mode (re-runs on file changes)
 pnpm test:watch
 
-# Run tests with coverage report
-pnpm test:coverage
-
 # Run specific test file
 pnpm test tests/cache.test.ts
+```
+
+## Running E2E Tests
+
+```bash
+# Run E2E tests (required `config.yml` file to exist and contain Electrolux API credentials)
+pnpm test:e2e
 ```
 
 ### Controlling Test Output with LOG_LEVEL
@@ -350,7 +351,7 @@ The project maintains test coverage with the following requirements:
 **Checking Coverage Locally:**
 ```bash
 # Generate HTML coverage report
-pnpm test:coverage
+pnpm test
 
 # View the report in your browser
 open coverage/index.html  # macOS
