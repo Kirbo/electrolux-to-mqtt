@@ -478,6 +478,47 @@ export class ElectroluxClient {
     }
   }
 
+  private logApplianceChanges(appliances: ApplianceStub[]): void {
+    const currentIds = new Set(appliances.map((a: ApplianceStub) => a.applianceId))
+    const added = appliances.filter((a: ApplianceStub) => !this.previousAppliances.has(a.applianceId))
+    const removed = Array.from(this.previousAppliances.keys()).filter((id) => !currentIds.has(id))
+
+    if (this.previousAppliances.size === 0) {
+      this.logInitialAppliances(appliances)
+    } else if (added.length > 0 || removed.length > 0) {
+      this.logAddedAndRemovedAppliances(added, removed)
+    }
+
+    // Update cached appliance list
+    this.previousAppliances.clear()
+    for (const appliance of appliances) {
+      this.previousAppliances.set(appliance.applianceId, appliance.applianceName)
+    }
+  }
+
+  private logInitialAppliances(appliances: ApplianceStub[]): void {
+    logger.info(`Found ${appliances.length} appliance${appliances.length === 1 ? '' : 's'}:`)
+    for (const appliance of appliances) {
+      logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
+    }
+  }
+
+  private logAddedAndRemovedAppliances(added: ApplianceStub[], removed: string[]): void {
+    if (added.length > 0) {
+      logger.info(`New appliance${added.length === 1 ? '' : 's'} found:`)
+      for (const appliance of added) {
+        logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
+      }
+    }
+    if (removed.length > 0) {
+      logger.info(`Appliance${removed.length === 1 ? '' : 's'} removed:`)
+      for (const applianceId of removed) {
+        const name = this.previousAppliances.get(applianceId)
+        logger.info(`- ${name ?? 'Unknown'} (${applianceId})`)
+      }
+    }
+  }
+
   public async getAppliances() {
     try {
       await this.ensureValidToken()
@@ -488,36 +529,7 @@ export class ElectroluxClient {
       const appliances = response.data satisfies ApplianceStub[]
 
       // Log only on first run or when appliances change
-      const currentIds = new Set(appliances.map((a: ApplianceStub) => a.applianceId))
-      const added = appliances.filter((a: ApplianceStub) => !this.previousAppliances.has(a.applianceId))
-      const removed = Array.from(this.previousAppliances.keys()).filter((id) => !currentIds.has(id))
-
-      if (this.previousAppliances.size === 0) {
-        logger.info(`Found ${appliances.length} appliance${appliances.length === 1 ? '' : 's'}:`)
-        for (const appliance of appliances) {
-          logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
-        }
-      } else if (added.length > 0 || removed.length > 0) {
-        if (added.length > 0) {
-          logger.info(`New appliance${added.length === 1 ? '' : 's'} found:`)
-          for (const appliance of added) {
-            logger.info(`- ${appliance.applianceName} (${appliance.applianceId})`)
-          }
-        }
-        if (removed.length > 0) {
-          logger.info(`Appliance${removed.length === 1 ? '' : 's'} removed:`)
-          for (const applianceId of removed) {
-            const name = this.previousAppliances.get(applianceId)
-            logger.info(`- ${name ?? 'Unknown'} (${applianceId})`)
-          }
-        }
-      }
-
-      // Update cached appliance list
-      this.previousAppliances.clear()
-      for (const appliance of appliances) {
-        this.previousAppliances.set(appliance.applianceId, appliance.applianceName)
-      }
+      this.logApplianceChanges(appliances)
 
       return appliances
     } catch (error) {
@@ -539,13 +551,28 @@ export class ElectroluxClient {
     }
   }
 
-  private handleStateChanges(
+  private prepareStateForPublishing(
     appliance: BaseAppliance,
-    stateToPublish: NormalizedState,
-    cachedState: Appliance | null,
-  ): void {
-    const cachedNormalized = cachedState ? appliance.normalizeState(cachedState) : null
-    const differences = getStateDifferences(cachedNormalized, stateToPublish)
+    normalizedState: NormalizedState | null,
+    cachedNormalizedState: NormalizedState | null,
+  ): NormalizedState | null {
+    const applianceId = appliance.getApplianceId()
+
+    // Track last non-off mode from authoritative API state
+    if (normalizedState?.mode && normalizedState.mode !== 'off') {
+      this.lastActiveMode.set(applianceId, normalizedState.mode)
+    }
+
+    // If new state is incomplete, use cached normalized state for publishing
+    if (!normalizedState && cachedNormalizedState) {
+      logger.debug(`Using cached state for appliance ${applianceId} due to incomplete API response`)
+      return cachedNormalizedState
+    }
+
+    return normalizedState
+  }
+
+  private logStateChanges(appliance: BaseAppliance, differences: Record<string, StateDifference>): boolean {
     const hasChanges = Object.keys(differences).length > 0
 
     if (hasChanges) {
@@ -558,13 +585,38 @@ export class ElectroluxClient {
     } else {
       logger.debug('State checked, no changes detected')
     }
+
+    return hasChanges
+  }
+
+  private publishStateIfChanged(
+    applianceId: string,
+    cacheKey: string,
+    stateToPublish: NormalizedState,
+    responseData: Appliance,
+    options: {
+      hasChanges: boolean
+      isFirstFetch: boolean
+      callback?: () => void
+      normalizedState?: NormalizedState | null
+    },
+  ): void {
+    if (options.hasChanges || options.isFirstFetch) {
+      cache.set(cacheKey, responseData)
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(stateToPublish))
+
+      // Only call callback if we have changes (not on first fetch)
+      if (options.callback && options.normalizedState && options.hasChanges) {
+        options.callback()
+      }
+    }
   }
 
   public async getApplianceState(appliance: BaseAppliance, callback?: () => void): Promise<Appliance | undefined> {
     const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
 
-    // Skip fetching state if a command was sent recently (within 30 seconds) to avoid stale API cache
+    // Skip fetching state if a command was sent recently
     const lastCommandTime = this.lastCommandTime.get(applianceId) ?? 0
     const timeSinceCommand = Date.now() - lastCommandTime
 
@@ -582,46 +634,29 @@ export class ElectroluxClient {
       }
       const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
 
-      // Get the cached state BEFORE checking if the new response matches
-      const cachedState = cache.get(cacheKey) as Appliance | null
-
-      if (cache.matchByValue(cacheKey, response.data)) {
-        return cache.get(cacheKey) as Appliance
-      }
-
+      // Get cached state and normalize
+      const cachedRawState = cache.get(cacheKey) as Appliance | null
+      const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
       const normalizedState = appliance.normalizeState(response.data)
 
-      // Track last non-off mode from authoritative API state so we can restore it after OFF commands
-      if (normalizedState?.mode && normalizedState.mode !== 'off') {
-        this.lastActiveMode.set(applianceId, normalizedState.mode)
-      }
-
-      // If new state is incomplete, use cached normalized state for publishing
-      // but DON'T cache the incomplete response
-      let stateToPublish = normalizedState
-      if (!normalizedState && cachedState) {
-        logger.debug(`Using cached state for appliance ${applianceId} due to incomplete API response`)
-        stateToPublish = appliance.normalizeState(cachedState)
-      }
-
+      // Prepare state for publishing
+      const stateToPublish = this.prepareStateForPublishing(appliance, normalizedState, cachedNormalizedState)
       if (!stateToPublish) {
         return response.data
       }
 
-      // Compare normalized states and log changes
-      this.handleStateChanges(appliance, stateToPublish, cachedState)
+      // Compare and log changes
+      const differences = getStateDifferences(cachedNormalizedState, stateToPublish)
+      const hasChanges = this.logStateChanges(appliance, differences)
+      const isFirstFetch = !cachedNormalizedState
 
-      // Only update the cache with the new state if it's complete
-      if (normalizedState) {
-        cache.set(cacheKey, response.data)
-      }
-
-      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(stateToPublish))
-
-      // Only call callback if we have a valid normalized state
-      if (callback && normalizedState) {
-        callback()
-      }
+      // Publish if changed or first fetch
+      this.publishStateIfChanged(applianceId, cacheKey, stateToPublish, response.data, {
+        hasChanges,
+        isFirstFetch,
+        callback,
+        normalizedState,
+      })
 
       return response.data
     } catch (error) {
@@ -654,26 +689,26 @@ export class ElectroluxClient {
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)
 
-      const state = await this.getApplianceState(appliance)
-      if (!state) {
-        logger.error('Failed to get appliance state after sending command')
-        return
+      // Get cached state for immediate feedback
+      const cachedRawState = cache.get(cacheKey) as Appliance | null
+      const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
+
+      if (!cachedNormalizedState) {
+        logger.warn('No cached state available for immediate feedback after command')
+        return response.data
       }
 
-      const normalizedState = appliance.normalizeState(state)
-
-      // Track last non-off mode from authoritative API state so we can restore it after OFF commands
-      if (normalizedState?.mode && normalizedState.mode !== 'off') {
-        this.lastActiveMode.set(applianceId, normalizedState.mode)
+      // Track last non-off mode from command if applicable
+      if (rawCommand.mode && rawCommand.mode.toLowerCase() !== 'off') {
+        this.lastActiveMode.set(applianceId, rawCommand.mode)
       }
 
-      // Combine the normalized state with the command values to ensure immediate feedback,
-      // while preserving the last active mode when turning off.
+      // Combine the cached normalized state with the command values to ensure immediate feedback
       const lastMode = this.lastActiveMode.get(applianceId)
       const isOffCommand = rawCommand.mode?.toLowerCase() === 'off'
 
       const combinedState: NormalizedState = {
-        ...normalizedState,
+        ...cachedNormalizedState,
         ...rawCommand,
       }
 
@@ -682,14 +717,10 @@ export class ElectroluxClient {
         combinedState.mode = lastMode
       }
 
-      // If the command sets a new non-off mode, remember it for future OFF/ON transitions
-      if (rawCommand.mode && rawCommand.mode.toLowerCase() !== 'off') {
-        this.lastActiveMode.set(applianceId, rawCommand.mode as NormalizedClimateMode)
-      }
-
       // If the appliance was off and a non-mode command comes in (e.g., fan speed/temperature),
-      // restore the last active mode so Home Assistant shows the previous mode instead of "off".
-      if (!rawCommand.mode && normalizedState.mode === 'off' && lastMode) {
+      // turn it on and restore the last active mode
+      if (!rawCommand.mode && cachedNormalizedState.applianceState === 'off' && lastMode) {
+        combinedState.applianceState = 'on'
         combinedState.mode = lastMode
       }
 
@@ -699,10 +730,7 @@ export class ElectroluxClient {
         Object.assign(combinedState, immediateStateUpdates)
       }
 
-      if (cache.matchByValue(cacheKey, combinedState)) {
-        return
-      }
-
+      // Publish immediate feedback to MQTT
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
 
       // Update cache with the combined state so comparisons after the command delay work correctly
