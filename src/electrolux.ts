@@ -520,26 +520,105 @@ export class ElectroluxClient {
     }
   }
 
-  public async getAppliances() {
+  private async handleApiRequest<T>(requestFn: () => Promise<T>, errorMessage: string): Promise<T | undefined> {
     try {
+      return await requestFn()
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 403 && this.isLoggedIn) {
+        logger.warn('Received 403 error, forcing token refresh...')
+        this.isLoggedIn = false
+        await this.refreshTokens()
+
+        try {
+          return await requestFn()
+        } catch (retryError) {
+          logger.error(`${errorMessage} after token refresh: ${formatAxiosError(retryError)}`)
+        }
+      } else {
+        logger.error(`${errorMessage}: ${formatAxiosError(error)}`)
+      }
+      return undefined
+    }
+  }
+
+  private buildCombinedCommandState(
+    cachedNormalizedState: NormalizedState,
+    rawCommand: Partial<NormalizedState>,
+    applianceId: string,
+  ): NormalizedState {
+    // Track last non-off mode from command if applicable
+    if (rawCommand.mode && rawCommand.mode.toLowerCase() !== 'off') {
+      this.lastActiveMode.set(applianceId, rawCommand.mode)
+    }
+
+    const lastMode = this.lastActiveMode.get(applianceId)
+    const isOffCommand = rawCommand.mode?.toLowerCase() === 'off'
+
+    const combinedState: NormalizedState = {
+      ...cachedNormalizedState,
+      ...rawCommand,
+    }
+
+    // If the command explicitly turns the unit off, keep the previous non-off mode for UI state
+    if (isOffCommand && lastMode) {
+      combinedState.mode = lastMode
+    }
+
+    // If the appliance was off and a non-mode command comes in (e.g., fan speed/temperature),
+    // turn it on and restore the last active mode
+    if (!rawCommand.mode && cachedNormalizedState.applianceState === 'off' && lastMode) {
+      combinedState.applianceState = 'on'
+      combinedState.mode = lastMode
+    }
+
+    return combinedState
+  }
+
+  private publishCommandFeedback(
+    appliance: BaseAppliance,
+    rawCommand: Partial<NormalizedState>,
+    payload: Record<string, unknown>,
+    applianceId: string,
+    cacheKey: string,
+  ): void {
+    const cachedRawState = cache.get(cacheKey) as Appliance | null
+    const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
+
+    if (!cachedNormalizedState) {
+      logger.warn('No cached state available for immediate feedback after command')
+      return
+    }
+
+    const combinedState = this.buildCombinedCommandState(cachedNormalizedState, rawCommand, applianceId)
+
+    // Apply any appliance-specific immediate state updates derived from the command
+    const immediateStateUpdates = appliance.deriveImmediateStateFromCommand(payload)
+    if (immediateStateUpdates) {
+      Object.assign(combinedState, immediateStateUpdates)
+    }
+
+    // Publish immediate feedback to MQTT
+    this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
+
+    // Update cache with the combined state so comparisons after the command delay work correctly
+    cache.set(cacheKey, combinedState)
+  }
+
+  public async getAppliances() {
+    return this.handleApiRequest(async () => {
       await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
       const response = await this.client.get('/api/v1/appliances')
       const appliances = response.data satisfies ApplianceStub[]
-
-      // Log only on first run or when appliances change
       this.logApplianceChanges(appliances)
-
       return appliances
-    } catch (error) {
-      logger.error(`Error getting appliances: ${formatAxiosError(error)}`)
-    }
+    }, 'Error getting appliances')
   }
 
   public async getApplianceInfo(applianceId: string) {
-    try {
+    return this.handleApiRequest(async () => {
       await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
@@ -547,9 +626,7 @@ export class ElectroluxClient {
       const response = await this.client.get(`/api/v1/appliances/${applianceId}/info`)
       logger.debug('Appliance info:', response.data)
       return response.data as ApplianceInfo
-    } catch (error) {
-      logger.error(`Error getting appliance info: ${formatAxiosError(error)}`)
-    }
+    }, 'Error getting appliance info')
   }
 
   private prepareStateForPublishing(
@@ -613,6 +690,40 @@ export class ElectroluxClient {
     }
   }
 
+  private async fetchAndProcessApplianceState(
+    appliance: BaseAppliance,
+    applianceId: string,
+    cacheKey: string,
+    callback?: () => void,
+  ): Promise<Appliance> {
+    if (!this.client) {
+      throw new Error('API client is not initialized')
+    }
+    const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
+
+    const cachedRawState = cache.get(cacheKey) as Appliance | null
+    const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
+    const normalizedState = appliance.normalizeState(response.data)
+
+    const stateToPublish = this.prepareStateForPublishing(appliance, normalizedState, cachedNormalizedState)
+    if (!stateToPublish) {
+      return response.data
+    }
+
+    const differences = getStateDifferences(cachedNormalizedState, stateToPublish)
+    const hasChanges = this.logStateChanges(appliance, differences)
+    const isFirstFetch = !cachedNormalizedState
+
+    this.publishStateIfChanged(applianceId, cacheKey, stateToPublish, response.data, {
+      hasChanges,
+      isFirstFetch,
+      callback,
+      normalizedState,
+    })
+
+    return response.data
+  }
+
   public async getApplianceState(appliance: BaseAppliance, callback?: () => void): Promise<Appliance | undefined> {
     const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
@@ -628,119 +739,34 @@ export class ElectroluxClient {
       return cache.get(cacheKey) as Appliance
     }
 
-    try {
+    return this.handleApiRequest(async () => {
       await this.ensureValidToken()
-      if (!this.client) {
-        throw new Error('API client is not initialized')
-      }
-      const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
-
-      // Get cached state and normalize
-      const cachedRawState = cache.get(cacheKey) as Appliance | null
-      const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
-      const normalizedState = appliance.normalizeState(response.data)
-
-      // Prepare state for publishing
-      const stateToPublish = this.prepareStateForPublishing(appliance, normalizedState, cachedNormalizedState)
-      if (!stateToPublish) {
-        return response.data
-      }
-
-      // Compare and log changes
-      const differences = getStateDifferences(cachedNormalizedState, stateToPublish)
-      const hasChanges = this.logStateChanges(appliance, differences)
-      const isFirstFetch = !cachedNormalizedState
-
-      // Publish if changed or first fetch
-      this.publishStateIfChanged(applianceId, cacheKey, stateToPublish, response.data, {
-        hasChanges,
-        isFirstFetch,
-        callback,
-        normalizedState,
-      })
-
-      return response.data
-    } catch (error) {
-      logger.error(`Error getting appliance state: ${formatAxiosError(error)}`)
-      // Don't publish disconnected state on temporary errors (DNS failures, API errors, etc.)
-      // This preserves the last known good state in MQTT/Home Assistant
-      // Only return undefined to indicate fetch failure without changing published state
-      return undefined
-    }
+      return this.fetchAndProcessApplianceState(appliance, applianceId, cacheKey, callback)
+    }, 'Error getting appliance state')
   }
 
   public async sendApplianceCommand(appliance: BaseAppliance, rawCommand: Partial<NormalizedState>) {
     const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
 
-    try {
+    return this.handleApiRequest(async () => {
       await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
       }
 
-      // Transform the MQTT command to Electrolux API format using the appliance-specific logic
       const payload = appliance.transformMqttCommandToApi(rawCommand)
-
       logger.info('Sending command to appliance:', applianceId, 'Command:', payload)
 
-      // Record the time the command was sent to avoid fetching stale state
       this.lastCommandTime.set(applianceId, Date.now())
 
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)
 
-      // Get cached state for immediate feedback
-      const cachedRawState = cache.get(cacheKey) as Appliance | null
-      const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
-
-      if (!cachedNormalizedState) {
-        logger.warn('No cached state available for immediate feedback after command')
-        return response.data
-      }
-
-      // Track last non-off mode from command if applicable
-      if (rawCommand.mode && rawCommand.mode.toLowerCase() !== 'off') {
-        this.lastActiveMode.set(applianceId, rawCommand.mode)
-      }
-
-      // Combine the cached normalized state with the command values to ensure immediate feedback
-      const lastMode = this.lastActiveMode.get(applianceId)
-      const isOffCommand = rawCommand.mode?.toLowerCase() === 'off'
-
-      const combinedState: NormalizedState = {
-        ...cachedNormalizedState,
-        ...rawCommand,
-      }
-
-      // If the command explicitly turns the unit off, keep the previous non-off mode for UI state
-      if (isOffCommand && lastMode) {
-        combinedState.mode = lastMode
-      }
-
-      // If the appliance was off and a non-mode command comes in (e.g., fan speed/temperature),
-      // turn it on and restore the last active mode
-      if (!rawCommand.mode && cachedNormalizedState.applianceState === 'off' && lastMode) {
-        combinedState.applianceState = 'on'
-        combinedState.mode = lastMode
-      }
-
-      // Apply any appliance-specific immediate state updates derived from the command
-      const immediateStateUpdates = appliance.deriveImmediateStateFromCommand(payload)
-      if (immediateStateUpdates) {
-        Object.assign(combinedState, immediateStateUpdates)
-      }
-
-      // Publish immediate feedback to MQTT
-      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
-
-      // Update cache with the combined state so comparisons after the command delay work correctly
-      cache.set(cacheKey, combinedState)
+      this.publishCommandFeedback(appliance, rawCommand, payload, applianceId, cacheKey)
 
       return response.data
-    } catch (error) {
-      logger.error(`Error sending command: ${formatAxiosError(error)}`)
-    }
+    }, 'Error sending command')
   }
 }
 
