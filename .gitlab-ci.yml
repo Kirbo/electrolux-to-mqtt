@@ -128,11 +128,13 @@ install dependencies:
     - when: never
   cache:
     key:
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
+    policy: push
   needs:
     - job: initialise variables
       artifacts: true
@@ -177,11 +179,13 @@ test:
     - when: never
   cache:
     key:
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
+    policy: pull
   needs:
     - job: initialise variables
       artifacts: true
@@ -233,11 +237,13 @@ lint:
     - when: never
   cache:
     key:
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
+    policy: pull
   needs:
     - job: initialise variables
       artifacts: true
@@ -274,11 +280,13 @@ audit:
     - when: never
   cache:
     key:
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
+    policy: pull
   needs:
     - job: initialise variables
       artifacts: true
@@ -332,8 +340,6 @@ sonarcloud-check:
     - job: test
       artifacts: true
   before_script:
-    - echo "Checking for coverage files..."
-    - ls -la coverage/ || echo "No coverage directory found"
     - test -f coverage/lcov.info && echo "LCOV report found" || echo "LCOV report NOT found"
     - test -f coverage/cobertura-coverage.xml && echo "Cobertura report found" || echo "Cobertura report NOT found"
   script:
@@ -364,13 +370,24 @@ try to build docker images:
       artifacts: true
   services:
     - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
   before_script:
     - apk add --no-cache qemu qemu-system-x86_64
+    # Try local Docker socket first, fall back to dind
+    - |
+      export DOCKER_HOST=unix:///var/run/docker.sock
+      if docker info >/dev/null 2>&1; then
+        echo "Using local Docker socket (Mac runner)"
+      else
+        export DOCKER_HOST=tcp://docker:2375
+        echo "Using Docker-in-Docker service (shared runner)"
+      fi
     - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
     - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
-    - docker buildx create --use
+    - docker buildx create --driver docker-container --use || docker buildx use default
     - docker buildx build --build-arg NODE_VERSION=${NODE_VERSION} --build-arg VERSION=${VERSION} --platform linux/amd64,linux/arm64 -t kirbownz/electrolux-to-mqtt:latest .
 
 create gitlab release:
@@ -431,13 +448,24 @@ build and deploy docker images:
       artifacts: true
   services:
     - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
   before_script:
     - apk add --no-cache qemu qemu-system-x86_64
+    # Try local Docker socket first, fall back to dind
+    - |
+      export DOCKER_HOST=unix:///var/run/docker.sock
+      if docker info >/dev/null 2>&1; then
+        echo "Using local Docker socket (Mac runner)"
+      else
+        export DOCKER_HOST=tcp://docker:2375
+        echo "Using Docker-in-Docker service (shared runner)"
+      fi
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
-    - docker buildx create --use
+    - docker buildx create --driver docker-container --use || docker buildx use default
     - docker buildx build --build-arg NODE_VERSION=${NODE_VERSION} --build-arg VERSION=${VERSION} --push --platform linux/amd64,linux/arm64 -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest .
 
 update dockerhub description:
