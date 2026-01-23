@@ -41,7 +41,7 @@ Relevant links:
 
 1. Sign up/sign in into [Electrolux for Developer](https://developer.electrolux.one/dashboard)
 2. Create a new API Key and copy the value
-3. Setup configs to either [docker-compose.yml](./docker-compose.yml) or copy [config.example.yml](./config.example.yml) into `config.yml`
+3. Setup configs to either [docker-compose.yml](./docker/docker-compose.yml) or copy [config.example.yml](./config.example.yml) into `config.yml`
 4. Start the container by following the [instructions](./README.md#starting-container)
 
 ## Starting container
@@ -85,7 +85,7 @@ docker run --rm \
 
 ### Using `docker compose`
 
-1. Copy [`docker-compose.example.yml`](./docker-compose.example.yml) as `docker-compose.yml` (`cp docker-compose.example.yml docker-compose.yml`)
+1. Copy [`docker-compose.example.yml`](./docker/docker-compose.example.yml) as `docker-compose.yml` (`cp docker/docker-compose.example.yml docker-compose.yml`)
 2. Modify the `docker-compose.yml` accordingly (`code docker-compose.yml`) and save changes
 3. Run:
 ```bash
@@ -172,9 +172,9 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for d
 ..or if you want to use Docker instead:
 ```bash
 # Make a copy of the docker-compose.local.example.yml
-cp docker-compose.local.example.yml docker-compose.local.yml
+cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 # Modify as needed
-code docker-compose.local.yml
+code docker/docker-compose.local.yml
 # Run the stack (automatically uses Node version from .nvmrc)
 pnpm dev:docker
 ```

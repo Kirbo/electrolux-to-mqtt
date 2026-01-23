@@ -31,13 +31,13 @@ RUN if [ -n "${VERSION}" ]; then \
   sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json; \
   fi && \
   PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
-  PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1) && \
-  PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2) && \
+  PACKAGE_MANAGER_NAME=$(echo "${PACKAGE_MANAGER}" | cut -d'@' -f1) && \
+  PACKAGE_MANAGER_VERSION=$(echo "${PACKAGE_MANAGER}" | cut -d'@' -f2) && \
   if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then \
   echo "Installing package manager ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"; \
-  npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}; \
+  npm install -g --force "${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"; \
   fi && \
-  echo "$(which ${PACKAGE_MANAGER_NAME})" > /tmp/package-manager.txt && \
+  echo "$(which "${PACKAGE_MANAGER_NAME}")" > /tmp/package-manager.txt && \
   PACKAGE_MANAGER_BIN=$(cat /tmp/package-manager.txt) && \
   echo "====================================================================================" && \
   echo "                Application Version:          ${VERSION}" && \
@@ -45,8 +45,8 @@ RUN if [ -n "${VERSION}" ]; then \
   echo "                Package manager:              ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
   echo "                Package manager binary:       ${PACKAGE_MANAGER_BIN}" && \
   echo "====================================================================================" && \
-  ${PACKAGE_MANAGER_BIN} install --config.scripts-prepend-node-path=true && \
-  ${PACKAGE_MANAGER_BIN} run build
+  "${PACKAGE_MANAGER_BIN}" install --config.scripts-prepend-node-path=true && \
+  "${PACKAGE_MANAGER_BIN}" run build
 
 
 

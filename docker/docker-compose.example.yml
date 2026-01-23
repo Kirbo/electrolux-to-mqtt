@@ -1,18 +1,14 @@
 # docker-compose.yml
 services:
   electrolux-to-mqtt:
-    build:
-      context: .
-      dockerfile: Dockerfile.local
-      args:
-        - NODE_VERSION=${NODE_VERSION:-24}
+    image: kirbownz/electrolux-to-mqtt:latest
     mem_limit: 128mb
     memswap_limit: 256mb
     restart: unless-stopped
     volumes:
       - "/etc/localtime:/etc/localtime:ro"
       - "/etc/timezone:/etc/timezone:ro"
-      - ./config.yml:/app/config.yml
+      - ../config.yml:/app/config.yml
     environment:
       - LOG_LEVEL=info                                            # Log level (debug, info, warn, error)
       # ## Mandatory variables
