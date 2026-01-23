@@ -1506,8 +1506,11 @@ describe('electrolux', () => {
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
 
         // Should not publish immediate feedback without cached state
-        // Note: This might still publish if the implementation falls back to fetching state
-        // The key is that publishCommandFeedback should return early if no cached state
+        expect(mockMqtt.publish).not.toHaveBeenCalled()
+        expect(mockAxiosInstance.put).toHaveBeenCalledWith(
+          '/api/v1/appliances/test-appliance-123/command',
+          expect.any(Object),
+        )
       })
 
       it('should fetch state and publish if changed', async () => {
