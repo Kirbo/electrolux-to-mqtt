@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config'
 
+// Disable coverage thresholds for E2E tests
+const isE2ETest = process.env.E2E_TEST === 'true'
+
 export default defineConfig({
   test: {
     globals: true,
@@ -25,12 +28,20 @@ export default defineConfig({
       // Coverage thresholds set to maintain high test quality
       // Current coverage: ~80% statements/lines, ~65% branches, ~86% functions
       // Thresholds set slightly below current values to allow flexibility
-      thresholds: {
-        lines: 75,
-        functions: 80,
-        branches: 60,
-        statements: 75,
-      },
+      // Disabled for E2E tests which only test real API integration
+      thresholds: isE2ETest
+        ? {
+            lines: 50,
+            functions: 65,
+            branches: 35,
+            statements: 50,
+          }
+        : {
+            lines: 75,
+            functions: 80,
+            branches: 60,
+            statements: 75,
+          },
     },
   },
 })

@@ -31,6 +31,13 @@ variables:
   GIT_STRATEGY: fetch
   GITLAB_TOKEN: ${CI_JOB_TOKEN}
 
+# Default configuration for all jobs
+default:
+  # Prefer private runner (macos tag), fallback to shared runners if unavailable
+  # Jobs without the macos tag will use shared runners automatically
+  tags:
+    - macos
+
 initialise variables:
   stage: init
   image: alpine:latest

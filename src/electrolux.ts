@@ -168,10 +168,10 @@ function formatAxiosError(error: unknown): string {
 
 export class ElectroluxClient {
   private client?: AxiosInstance
-  private accessToken?: string = config.electrolux.accessToken
-  private refreshToken?: string = config.electrolux.refreshToken
-  private eat?: Date = config.electrolux.eat
-  private iat?: Date = config.electrolux.iat
+  accessToken?: string = config.electrolux.accessToken
+  refreshToken?: string = config.electrolux.refreshToken
+  eat?: Date = config.electrolux.eat
+  iat?: Date = config.electrolux.iat
   private readonly mqtt: IMqtt
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
