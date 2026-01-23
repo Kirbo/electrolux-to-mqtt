@@ -316,8 +316,6 @@ sonarcloud-check:
   cache:
     key: "${CI_JOB_NAME}"
     paths:
-      - .pnpm-store
-      - node_modules
       - .sonar/cache
   needs:
     - job: bump version
@@ -326,6 +324,11 @@ sonarcloud-check:
       artifacts: false
     - job: test
       artifacts: true
+  before_script:
+    - echo "Checking for coverage files..."
+    - ls -la coverage/ || echo "No coverage directory found"
+    - test -f coverage/lcov.info && echo "LCOV report found" || echo "LCOV report NOT found"
+    - test -f coverage/cobertura-coverage.xml && echo "Cobertura report found" || echo "Cobertura report NOT found"
   script:
     - sonar-scanner
 

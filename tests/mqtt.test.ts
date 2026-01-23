@@ -262,5 +262,57 @@ describe('Mqtt', () => {
       // This test verifies the error callback path exists
       expect(mockClientWithError.publish).toBeDefined()
     })
+
+    it('should handle subscribe errors', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        subscribe: ReturnType<typeof vi.fn>
+      }
+      mockClient.subscribe = vi.fn((_topic, callback) => {
+        callback(new Error('Subscribe failed'))
+      })
+
+      const mockCallback = vi.fn()
+      mqttInstance.subscribe('device-error', mockCallback)
+
+      expect(mockClient.subscribe).toHaveBeenCalled()
+    })
+
+    it('should handle unsubscribe errors', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        unsubscribe: ReturnType<typeof vi.fn>
+      }
+      mockClient.unsubscribe = vi.fn((_topic, callback) => {
+        callback(new Error('Unsubscribe failed'))
+      })
+
+      mqttInstance.unsubscribe('device-error')
+
+      expect(mockClient.unsubscribe).toHaveBeenCalled()
+    })
+  })
+
+  describe('disconnect', () => {
+    it('should disconnect from MQTT broker', () => {
+      mqttInstance.disconnect()
+
+      expect(mqttInstance.client.end).toHaveBeenCalledWith(expect.any(Function))
+    })
+
+    it('should call end callback when disconnecting', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        end: ReturnType<typeof vi.fn>
+      }
+      let endCallback: (() => void) | undefined
+
+      mockClient.end = vi.fn((callback) => {
+        endCallback = callback
+        if (callback) callback()
+      })
+
+      mqttInstance.disconnect()
+
+      expect(mockClient.end).toHaveBeenCalled()
+      expect(endCallback).toBeDefined()
+    })
   })
 })
