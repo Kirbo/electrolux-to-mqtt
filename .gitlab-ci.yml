@@ -180,7 +180,7 @@ test:
       artifacts: true
     - job: install dependencies
       artifacts: false
-  coverage: '/All files\s+\|\s+[0-9.]+\s+\|\s+[0-9.]+\s+\|\s+[0-9.]+\s+\|\s+([0-9.]+)/'
+  coverage: '/All files(?:\s*\x1b\[[0-9;]*m)?\s*\|(?:\s*\x1b\[[0-9;]*m)?\s*[0-9.]+(?:\s*\x1b\[[0-9;]*m)?\s*\|(?:\s*\x1b\[[0-9;]*m)?\s*[0-9.]+(?:\s*\x1b\[[0-9;]*m)?\s*\|(?:\s*\x1b\[[0-9;]*m)?\s*[0-9.]+(?:\s*\x1b\[[0-9;]*m)?\s*\|(?:\s*\x1b\[[0-9;]*m)?\s*([0-9.]+)/'
   artifacts:
     reports:
       coverage_report:
