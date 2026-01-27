@@ -1,10 +1,12 @@
 node_modules
 .pnpm-store
 **/tokens.json*
+!tests/tokens.json
 
 docker-compose.yml
 docker-compose.local.yml
 **config.yml**
+!tests/config.yml
 dist
 coverage
 .DS_Store
