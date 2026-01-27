@@ -236,13 +236,6 @@ describe('electrolux', () => {
       expect(Object.keys(differences).length).toBeGreaterThan(0)
     })
 
-    it.skip('should ignore parent paths when configured', () => {
-      // Note: This test is skipped because mocking config with vi.doMock doesn't work
-      // properly in this context. The config is already imported at module level.
-      // To properly test this, we would need to use a different approach like
-      // dependency injection or separate the config usage from the function.
-    })
-
     it('should handle null to value transitions', () => {
       const oldState = {
         applianceId: 'test-123',
