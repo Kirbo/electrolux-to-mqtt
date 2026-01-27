@@ -10,7 +10,7 @@ import {
 } from '../../src/appliances/normalizers.js'
 import type { Appliance } from '../../src/types.js'
 
-describe('normalizers extended', () => {
+describe('normalizers', () => {
   describe('denormalizeClimateMode', () => {
     it('should convert fan_only to FANONLY', () => {
       expect(denormalizeClimateMode('fan_only')).toBe('FANONLY')
