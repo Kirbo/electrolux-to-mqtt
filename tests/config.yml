@@ -1,0 +1,22 @@
+mqtt:
+  url: mqtt://localhost:1883
+  username: test
+  password: test
+  qos: 0
+
+electrolux:
+  apiKey: test-api-key
+  username: test@example.com
+  password: testpassword
+  countryCode: US
+  refreshInterval: 30
+  applianceDiscoveryInterval: 300
+
+homeAssistant:
+  autoDiscovery: true
+
+logging:
+  showChanges: true
+  ignoredKeys: []
+  showVersionNumber: true
+  skipCacheLogging: true
