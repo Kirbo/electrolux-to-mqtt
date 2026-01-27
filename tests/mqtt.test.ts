@@ -315,4 +315,56 @@ describe('Mqtt', () => {
       expect(endCallback).toBeDefined()
     })
   })
+
+  describe('publish error handling', () => {
+    it('should handle publish errors in callback', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        publish: ReturnType<typeof vi.fn>
+      }
+
+      // Mock publish to call callback with error
+      mockClient.publish = vi.fn((_topic, _message, _options, callback) => {
+        if (callback) callback(new Error('Publish failed'))
+      })
+
+      const message = JSON.stringify({ mode: 'cool' })
+
+      // This should not throw even though the callback receives an error
+      expect(() => mqttInstance.publish('device-123', message)).not.toThrow()
+    })
+  })
+
+  describe('subscribe error handling', () => {
+    it('should handle subscribe errors in callback', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        subscribe: ReturnType<typeof vi.fn>
+      }
+
+      // Mock subscribe to call callback with error
+      mockClient.subscribe = vi.fn((_topic, callback) => {
+        if (callback) callback(new Error('Subscribe failed'))
+      })
+
+      const testCallback = vi.fn()
+
+      // This should not throw even though the callback receives an error
+      expect(() => mqttInstance.subscribe('device-123', testCallback)).not.toThrow()
+    })
+  })
+
+  describe('unsubscribe error handling', () => {
+    it('should handle unsubscribe errors in callback', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        unsubscribe: ReturnType<typeof vi.fn>
+      }
+
+      // Mock unsubscribe to call callback with error
+      mockClient.unsubscribe = vi.fn((_topic, callback) => {
+        if (callback) callback(new Error('Unsubscribe failed'))
+      })
+
+      // This should not throw even though the callback receives an error
+      expect(() => mqttInstance.unsubscribe('device-123')).not.toThrow()
+    })
+  })
 })
