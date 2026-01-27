@@ -1,4 +1,3 @@
-import packageJson from '../package.json' with { type: 'json' }
 import type { BaseAppliance } from './appliances/base.js'
 import { ApplianceFactory } from './appliances/factory.js'
 import { cache } from './cache.js'
@@ -8,7 +7,6 @@ import createLogger from './logger.js'
 import Mqtt from './mqtt.js'
 import type { ApplianceStub } from './types.js'
 
-const appVersion = packageJson.version
 const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
@@ -256,9 +254,7 @@ const discoverAppliances = async () => {
 }
 
 const main = async () => {
-  logger.info(
-    `Starting Electrolux to MQTT version: "${appVersion}", with refresh interval: ${refreshInterval / 1000} seconds`,
-  )
+  logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
 
   // Initialize the client
   await client.initialize()
