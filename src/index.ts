@@ -1,3 +1,5 @@
+import crypto from 'node:crypto'
+import packageJson from '../package.json' with { type: 'json' }
 import type { BaseAppliance } from './appliances/base.js'
 import { ApplianceFactory } from './appliances/factory.js'
 import { cache } from './cache.js'
@@ -6,10 +8,15 @@ import { ElectroluxClient } from './electrolux.js'
 import createLogger from './logger.js'
 import Mqtt from './mqtt.js'
 import type { ApplianceStub } from './types.js'
+import { startVersionChecker } from './version-checker.js'
 
+const currentVersion = packageJson.version
 const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
+
+// Generate anonymous user hash for telemetry (irreversible SHA-256)
+const userHash = crypto.createHash('sha256').update(config.electrolux.username).digest('hex')
 
 const refreshInterval = (client.refreshInterval ?? 60) * 1000
 const applianceDiscoveryInterval = (config.electrolux.applianceDiscoveryInterval ?? 300) * 1000
@@ -19,6 +26,7 @@ const activeIntervals = new Set<NodeJS.Timeout>()
 const applianceInstances = new Map<string, BaseAppliance>()
 const applianceStateIntervals = new Map<string, NodeJS.Timeout>()
 let discoveryInterval: NodeJS.Timeout | null = null
+let stopVersionChecker: (() => void) | null = null
 let isShuttingDown = false
 
 // Graceful shutdown handler
@@ -27,6 +35,11 @@ const shutdown = async () => {
   isShuttingDown = true
 
   logger.info('Shutting down gracefully...')
+
+  // Stop version checker
+  if (stopVersionChecker) {
+    stopVersionChecker()
+  }
 
   // Clear discovery interval
   if (discoveryInterval) {
@@ -303,6 +316,9 @@ const main = async () => {
   }, applianceDiscoveryInterval)
 
   logger.info(`Appliance discovery running every ${applianceDiscoveryInterval / 1000 / 60} minutes to detect changes`)
+
+  // Start version checker
+  stopVersionChecker = startVersionChecker(currentVersion, userHash)
 }
 
 main()

@@ -49,6 +49,17 @@ const configSchema = z.object({
       skipCacheLogging: z.boolean().optional(),
     })
     .optional(),
+  versionCheck: z
+    .object({
+      checkInterval: z
+        .number()
+        .int()
+        .min(60, 'versionCheck.checkInterval must be at least 60 seconds')
+        .max(86400, 'versionCheck.checkInterval should not exceed 86400 seconds')
+        .optional(),
+      ntfyWebhookUrl: z.string().optional(),
+    })
+    .optional(),
 })
 
 export type AppConfig = z.infer<typeof configSchema>
@@ -112,6 +123,13 @@ const envSchema = z.object({
     .string()
     .default('true')
     .transform((val) => val.toLowerCase() === 'true'),
+  VERSION_CHECK_INTERVAL: z.coerce
+    .number()
+    .int()
+    .min(60, 'VERSION_CHECK_INTERVAL must be at least 60 seconds')
+    .max(86400, 'VERSION_CHECK_INTERVAL should not exceed 86400 seconds')
+    .default(3600),
+  VERSION_CHECK_NTFY_WEBHOOK_URL: z.string().optional(),
 })
 
 // Determine which config file to use based on environment
@@ -211,6 +229,10 @@ logging:
   ignoredKeys: [${formattedIgnoredKeys}]
   showVersionNumber: ${envConfig.LOGGING_SHOW_VERSION_NUMBER}
   skipCacheLogging: ${envConfig.LOGGING_SKIP_CACHE_LOGGING}
+
+versionCheck:
+  checkInterval: ${envConfig.VERSION_CHECK_INTERVAL}
+${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL ? `  ntfyWebhookUrl: ${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL}` : ''}
 `
 
   fs.writeFileSync(configPath, configContent, 'utf8')
