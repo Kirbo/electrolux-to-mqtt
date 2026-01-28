@@ -9,6 +9,7 @@
     "check": "pnpm biome check --write",
     "clean": "rimraf node_modules",
     "dev:docker": "NODE_VERSION=$(cat .nvmrc) docker compose -f docker/docker-compose.local.yml down && NODE_VERSION=$(cat .nvmrc) docker compose -f docker/docker-compose.local.yml up --build",
+    "backend:docker": "NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml down && NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up --build",
     "dev": "tsx watch src/index.ts",
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",

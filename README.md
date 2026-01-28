@@ -6,6 +6,7 @@
 [![GitLab Issues](https://img.shields.io/gitlab/issues/open/Kirbo%2Felectrolux-to-mqtt?labels=Bug)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues?label_name%5B%5D=Bug)
 [![GitLab Merge Requests](https://img.shields.io/gitlab/merge-requests/open/Kirbo%2Felectrolux-to-mqtt)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests)
 [![Docker Pulls](https://badgen.net/docker/pulls/kirbownz/electrolux-to-mqtt)](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt/)
+[![Active Users](https://e2m.devaus.eu/users.svg)](https://e2m.devaus.eu/users.svg)
 
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kirbo_electrolux-to-mqtt&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kirbo_electrolux-to-mqtt)

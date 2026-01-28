@@ -1,0 +1,38 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: telemetry-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - telemetry-network
+
+  telemetry-backend:
+    build:
+      context: ../
+      dockerfile: ./telemetry-backend/Dockerfile
+      args:
+        - NODE_VERSION=${NODE_VERSION:-24}
+    container_name: telemetry-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - telemetry-network
+    volumes:
+      - ./badge:/app/badge
+
+networks:
+  telemetry-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
