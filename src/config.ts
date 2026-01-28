@@ -232,7 +232,7 @@ logging:
 
 versionCheck:
   checkInterval: ${envConfig.VERSION_CHECK_INTERVAL}
-${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL ? `  ntfyWebhookUrl: ${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL}` : ''}
+${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL && envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL !== 'https://ntfy.sh/your_topic_here' ? `  ntfyWebhookUrl: ${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL}` : ''}
 `
 
   fs.writeFileSync(configPath, configContent, 'utf8')
