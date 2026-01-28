@@ -158,6 +158,13 @@ This project includes comprehensive unit tests to ensure reliability:
 # Run all tests
 pnpm test
 
+# To run E2E tests (including version-checker E2E):
+pnpm test:e2e
+
+# You can override the ntfy notification topic for E2E tests with:
+E2M_NTFY_TOPIC=yourtopic pnpm test:e2e
+# If not set, the default topic is `vB66ozQaRiqhTE9j`.
+
 # Run tests in watch mode (auto-rerun on changes)
 pnpm test:watch
 ```
