@@ -34,8 +34,10 @@ describe('version-checker', () => {
     // Setup axios mocks
     mockAxiosGet = vi.fn()
     mockAxiosPost = vi.fn()
-    vi.mocked(axios.get).mockImplementation(mockAxiosGet)
-    vi.mocked(axios.post).mockImplementation(mockAxiosPost)
+    // biome-ignore lint/suspicious/noExplicitAny: supressed for the test
+    vi.mocked(axios.get).mockImplementation(mockAxiosGet as any)
+    // biome-ignore lint/suspicious/noExplicitAny: supressed for the test
+    vi.mocked(axios.post).mockImplementation(mockAxiosPost as any)
     vi.mocked(axios.isAxiosError).mockReturnValue(false)
 
     // Dynamically import the module to ensure mocks are applied

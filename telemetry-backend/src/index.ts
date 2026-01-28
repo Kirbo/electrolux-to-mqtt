@@ -64,14 +64,14 @@ async function generateBadge(): Promise<void> {
 // POST /telemetry - Store user telemetry data
 app.post('/telemetry', async (req: Request, res: Response) => {
   try {
-    const { userHash, version } = req.body
+    const { userHash, version }: { userHash: string; version: string } = req.body
 
     if (!userHash || !version) {
       return res.status(400).json({ error: 'userHash and version are required' })
     }
 
     // Ignore test data
-    if (userHash === 'test-hash-123') {
+    if (userHash.includes('test-hash')) {
       return res.json({ success: true, message: 'Test data ignored' })
     }
 
