@@ -132,30 +132,6 @@ app.get('/telemetry', async (_req: Request, res: Response) => {
   }
 })
 
-// GET /badge - Serve the badge image
-// app.get('/badge', async (_req: Request, res: Response) => {
-//   try {
-//     const badgePath = path.join(process.cwd(), 'badge', 'users.svg')
-
-//     // Check if badge exists, if not generate it
-//     try {
-//       await fs.access(badgePath)
-//     } catch {
-//       await generateBadge()
-//     }
-
-//     // Read and serve the SVG
-//     const svg = await fs.readFile(badgePath, 'utf-8')
-
-//     res.setHeader('Content-Type', 'image/svg+xml')
-//     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-//     res.send(svg)
-//   } catch (error) {
-//     console.error('Error serving badge:', error)
-//     res.status(500).json({ error: 'Internal server error' })
-//   }
-// })
-
 app.listen(port, () => {
   console.log(`Telemetry server running on port ${port}`)
   // Generate initial badge on startup
