@@ -7,9 +7,8 @@
  * 3. Validate our type definitions match reality
  *
  * HOW TO RUN:
- * - Set E2E_TEST=true environment variable to enable these tests
  * - Ensure config.yml has valid credentials
- * - Run: E2E_TEST=true pnpm test tests/e2e/electrolux-api.e2e.test.ts
+ * - Run: pnpm test:e2e
  *
  * IMPORTANT:
  * - These tests are SKIPPED by default in CI/normal test runs
@@ -35,9 +34,8 @@ interface MockAppliance {
 
 // Skip these tests unless explicitly enabled
 const isE2EEnabled = process.env.E2E_TEST === 'true'
-const describeE2E = isE2EEnabled ? describe : describe.skip
 
-describeE2E('Electrolux API - E2E Tests', () => {
+describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
   let client: ElectroluxClient
   let testApplianceId: string | null = null
 
@@ -272,23 +270,5 @@ describeE2E('Electrolux API - E2E Tests', () => {
       expect(client.isLoggedIn).toBe(true)
       console.log('✓ Token validation successful')
     })
-  })
-})
-
-describeE2E('Usage Instructions', () => {
-  it('should display instructions when E2E tests are disabled', () => {
-    if (!isE2EEnabled) {
-      console.log(`\n${'='.repeat(80)}`)
-      console.log('E2E Tests are DISABLED')
-      console.log('='.repeat(80))
-      console.log('\nTo run E2E tests against the real Electrolux API:')
-      console.log('\n  E2E_TEST=true pnpm test tests/e2e/electrolux-api.e2e.test.ts\n')
-      console.log('⚠ WARNING: These tests will:')
-      console.log('  • Make real API calls to Electrolux servers')
-      console.log('  • Interact with your actual appliances')
-      console.log('  • Save API response snapshots for comparison')
-      console.log(`\n${'='.repeat(80)}\n`)
-    }
-    expect(true).toBe(true)
   })
 })
