@@ -18,15 +18,15 @@
     "test": "vitest run --coverage",
     "test:e2e": "E2E_TEST=true vitest run tests/e2e/electrolux-api.e2e.test.ts",
     "test:watch": "vitest",
-    "sonar": "pnpm test && sonar-scanner",
+    "sonar": "sonar-scanner",
     "update-deps": "pnpm update"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
   "license": "MIT",
-  "packageManager": "pnpm@10.28.0",
+  "packageManager": "pnpm@10.28.2",
   "dependencies": {
-    "axios": "^1.13.3",
+    "axios": "^1.13.4",
     "mqtt": "^5.14.1",
     "pino": "^10.3.0",
     "pino-pretty": "^13.1.3",
