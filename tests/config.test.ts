@@ -66,15 +66,15 @@ homeAssistant:
   afterEach(() => {
     process.env = originalEnv
     // Restore valid config after each test
-    if (!fs.existsSync(configPath)) {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-    } else {
+    if (fs.existsSync(configPath)) {
       // If config exists but might be invalid, replace it
       try {
         fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
       } catch {
         // Ignore write errors
       }
+    } else {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
     }
   })
 
