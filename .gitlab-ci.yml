@@ -20,6 +20,8 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "web"'
 
 variables:
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
   DOCKER_REGISTRY: ${CI_REGISTRY}
   DOCKERHUB_PASSWORD: ${CI_REGISTRY_PASSWORD}
   DOCKERHUB_PASSWORD_READ: ${CI_REGISTRY_PASSWORD_READ}
@@ -368,20 +370,9 @@ try to build docker images:
     - job: bump version
       artifacts: true
   services:
-    - docker:dind
-  variables:
-    DOCKER_TLS_CERTDIR: ""
+    - name: docker:dind
+      alias: docker
   before_script:
-    - apk add --no-cache qemu qemu-system-x86_64
-    # Try local Docker socket first, fall back to dind
-    - |
-      export DOCKER_HOST=unix:///var/run/docker.sock
-      if docker info >/dev/null 2>&1; then
-        echo "Using local Docker socket (Mac runner)"
-      else
-        export DOCKER_HOST=tcp://docker:2375
-        echo "Using Docker-in-Docker service (shared runner)"
-      fi
     - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
     - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
@@ -444,20 +435,9 @@ build and deploy docker images:
     - job: bump version
       artifacts: true
   services:
-    - docker:dind
-  variables:
-    DOCKER_TLS_CERTDIR: ""
+    - name: docker:dind
+      alias: docker
   before_script:
-    - apk add --no-cache qemu qemu-system-x86_64
-    # Try local Docker socket first, fall back to dind
-    - |
-      export DOCKER_HOST=unix:///var/run/docker.sock
-      if docker info >/dev/null 2>&1; then
-        echo "Using local Docker socket (Mac runner)"
-      else
-        export DOCKER_HOST=tcp://docker:2375
-        echo "Using Docker-in-Docker service (shared runner)"
-      fi
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
