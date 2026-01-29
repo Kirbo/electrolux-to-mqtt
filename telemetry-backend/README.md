@@ -54,11 +54,6 @@ Get aggregated telemetry statistics.
 }
 ```
 
-### GET /badge
-Generate and serve a badge showing total user count.
-
-Returns an SVG badge image. The badge is automatically regenerated on every POST to `/telemetry` and persisted to disk in the `badge/` directory.
-
 ## Deployment
 
 The telemetry backend uses the Node.js version from the root `.nvmrc` file and package manager from `package.json` to ensure version consistency across the project.
