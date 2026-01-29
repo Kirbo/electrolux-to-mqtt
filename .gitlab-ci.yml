@@ -476,9 +476,7 @@ update telemetry backend:
       when: always
     - when: never
   cache: []
-  needs:
-    - job: build and deploy docker images
-      artifacts: false
+  needs: []
   before_script:
     - apk add --no-cache openssh-client
     - mkdir -p ~/.ssh
