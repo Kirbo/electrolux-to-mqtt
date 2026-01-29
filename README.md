@@ -26,6 +26,7 @@ A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Ho
 - **Production Ready** - Comprehensive error handling and graceful shutdown
 - **Well Tested** - Unit tests with >70% coverage
 - **Docker Ready** - Multi-platform Docker images (amd64/arm64)
+- **Update Notifications** - Periodically check for newer releases and optionally push-notify you via https://ntfy.sh/ webhook.
 
 Relevant links:
 - [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
@@ -42,7 +43,16 @@ Relevant links:
 
 1. Sign up/sign in into [Electrolux for Developer](https://developer.electrolux.one/dashboard)
 2. Create a new API Key and copy the value
-3. Setup configs to either [docker-compose.yml](./docker/docker-compose.yml) or copy [config.example.yml](./config.example.yml) into `config.yml`
+3. Setup configs to either copying the [docker-compose.example.yml](./docker/docker-compose.example.yml) into `docker-compose.yml` or copy [config.example.yml](./config.example.yml) into `config.yml`
+   ```bash
+   # Either
+   cp docker/docker-compose.example.yml docker-compose.yml
+   
+   # Or
+   cp config.example.yml config.yml
+
+   # Modify the file(s) as needed
+   ```
 4. Start the container by following the [instructions](./README.md#starting-container)
 
 ## Starting container
