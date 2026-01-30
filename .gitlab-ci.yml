@@ -46,6 +46,8 @@ default:
     paths:
       - .pnpm-store
 
+################################################################### INIT STAGE JOBS ###################################################################
+
 initialise variables:
   stage: init
   image: alpine:latest
@@ -143,15 +145,19 @@ install dependencies:
     - job: initialise variables
       artifacts: true
   before_script:
-    - echo "Node version from .nvmrc:" && cat .nvmrc
-    - node --version
-    - npm --version
     - corepack enable
     - corepack install
     - pnpm config set store-dir .pnpm-store
+    - echo "Node version from .nvmrc:"
+    - echo "$(cat .nvmrc)"
+    - node --version
+    - npm --version
+    - pnpm --version
   script:
     - echo "Installing dependencies..."
     - pnpm install --config.scripts-prepend-node-path=true
+
+################################################################### TEST STAGE JOBS ###################################################################
 
 test:
   stage: test
@@ -303,6 +309,8 @@ sonarcloud-check:
   script:
     - sonar-scanner
 
+################################################################## BUILD STAGE JOBS ###################################################################
+
 try to build docker images:
   stage: build
   image: docker:latest
@@ -334,7 +342,17 @@ try to build docker images:
   script:
     - source build.env
     - docker buildx create --driver docker-container --use || docker buildx use default
-    - docker buildx build --build-arg NODE_VERSION=${NODE_VERSION} --build-arg VERSION=${VERSION} --platform linux/amd64,linux/arm64 -t kirbownz/electrolux-to-mqtt:latest -f docker/Dockerfile .
+    - |
+      docker buildx build \
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        --build-arg VERSION=${VERSION} \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
+        --platform linux/amd64,linux/arm64 \
+        -t kirbownz/electrolux-to-mqtt:latest \
+        -f docker/Dockerfile .
+
+################################################################# RELEASE STAGE JOBS ##################################################################
 
 create gitlab release:
   stage: release
@@ -399,7 +417,19 @@ build and deploy docker images:
   script:
     - source build.env
     - docker buildx create --driver docker-container --use || docker buildx use default
-    - docker buildx build --build-arg NODE_VERSION=${NODE_VERSION} --build-arg VERSION=${VERSION} --push --provenance=true --sbom=true --platform linux/amd64,linux/arm64 -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest -f docker/Dockerfile .
+    - |
+      docker buildx build \
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        --build-arg VERSION=${VERSION} \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
+        --push \
+        --provenance=true \
+        --sbom=true \
+        --platform linux/amd64,linux/arm64 \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
+        -f docker/Dockerfile .
 
 update telemetry backend:
   stage: release
@@ -422,6 +452,8 @@ update telemetry backend:
     - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
   script:
     - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && ./telemetry-backend/start.sh"
+
+################################################################### DOCS STAGE JOBS ###################################################################
 
 update dockerhub description:
   stage: docs

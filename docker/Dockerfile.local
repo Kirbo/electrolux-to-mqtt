@@ -6,23 +6,42 @@ ARG NODE_VERSION=24
 # Use official Node image
 FROM node:${NODE_VERSION}-alpine
 
+# Set development environment
+ENV NODE_ENV=development
+
+# Install development tools (useful for debugging) and create non-root user for security (even in dev)
+RUN apk add --no-cache \
+  git \
+  bash && \
+  addgroup -g 1001 -S nodejs && \
+  adduser -S nodejs -u 1001
+
 WORKDIR /app
 
+# Change ownership of the working directory
+RUN chown nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
 # Copy package files first for better caching
-COPY package.json pnpm-lock.yaml ./
+COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml ./
 
 # Install package manager and dependencies
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
+  corepack enable && \
+  corepack install && \
   echo "=========================================================" && \
   echo "  Node version:                 $(node --version)" && \
   echo "  Package manager:              ${PACKAGE_MANAGER}" && \
   echo "=========================================================" && \
-  corepack enable && \
-  corepack install && \
   pnpm install --config.scripts-prepend-node-path=true
 
 # Copy the rest of the application
-COPY . .
+COPY --chown=nodejs:nodejs . .
+
+# Expose port if your dev server uses one (adjust as needed)
+# EXPOSE 3000
 
 # Run development server
 CMD ["pnpm", "dev"]

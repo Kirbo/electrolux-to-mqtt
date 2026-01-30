@@ -1,11 +1,24 @@
+# Dependencies (will be installed in container)
 node_modules
+**/node_modules
+.pnpm-store
+
+# Sensitive files
 **/tokens.json
+tokens.json*
 config.yml
+*.pem
+*.key
+*.cert
 
 # Build artifacts and generated files
 dist
 coverage
 .coverage
+*.log
+*.pid
+*.seed
+*.pid.lock
 
 # Version control
 .git
@@ -18,6 +31,7 @@ tests
 *.test.ts
 *.test.js
 vitest.config.ts
+vitest.setup.ts
 
 # IDE and editor files
 .vscode
@@ -26,17 +40,33 @@ vitest.config.ts
 *.swp
 *.swo
 *~
+.editorconfig
 
 # Documentation
 *.md
 !README.md
 docs
+LICENSE
+CONTRIBUTING.md
 
 # CI/CD
 .gitlab-ci.yml
 .github
+sonar-project.properties
+SONARQUBE.md
+
+# Docker files (don't need these inside the image)
+docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
 
 # Local environment
 .env
-.env.local
-docker-compose.local.yml
+.env.*
+.envrc
+
+# Temporary files
+tmp
+temp
+*.tmp

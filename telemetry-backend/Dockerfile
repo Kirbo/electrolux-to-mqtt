@@ -17,20 +17,15 @@ COPY ./telemetry-backend/ .
 # Install package manager if specified and install dependencies
 ENV CI=true
 RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
-    PACKAGE_MANAGER_NAME=$(echo "${PACKAGE_MANAGER}" | cut -d'@' -f1) && \
-    PACKAGE_MANAGER_VERSION=$(echo "${PACKAGE_MANAGER}" | cut -d'@' -f2) && \
-    if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then \
-    echo "Installing package manager ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"; \
-    npm install -g --force "${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"; \
-    fi && \
-    PACKAGE_MANAGER_BIN=$(which "${PACKAGE_MANAGER_NAME}") && \
+    npm pkg set packageManager="${PACKAGE_MANAGER}" && \
+    corepack enable && \
+    corepack install && \
     echo "====================================================================================" && \
     echo "                Node Version:                 ${NODE_VERSION}" && \
-    echo "                Package manager:              ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}" && \
-    echo "                Package manager binary:       ${PACKAGE_MANAGER_BIN}" && \
+    echo "                Package manager:              ${PACKAGE_MANAGER}" && \
     echo "====================================================================================" && \
-    "${PACKAGE_MANAGER_BIN}" install && \
-    "${PACKAGE_MANAGER_BIN}" run build
+    pnpm install && \
+    pnpm run build
 
 # Expose port
 EXPOSE 3001
