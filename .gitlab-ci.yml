@@ -39,6 +39,12 @@ default:
   # Jobs without the macos tag will use shared runners automatically
   tags:
     - macos
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
 
 initialise variables:
   stage: init
@@ -129,10 +135,6 @@ install dependencies:
       when: always
     - when: never
   cache:
-    key:
-      prefix: ${CI_COMMIT_REF_SLUG}
-      files:
-        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -144,22 +146,12 @@ install dependencies:
     - echo "Node version from .nvmrc:" && cat .nvmrc
     - node --version
     - npm --version
-    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
-    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
-    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
-    - echo "Package manager:" ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
-        echo "Installing package manager ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}"
-        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
-      fi
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
-        pnpm config set store-dir .pnpm-store
-      fi
+    - corepack enable
+    - corepack install
+    - pnpm config set store-dir .pnpm-store
   script:
     - echo "Installing dependencies..."
-    - ${PACKAGE_MANAGER_NAME} install --config.scripts-prepend-node-path=true
+    - pnpm install --config.scripts-prepend-node-path=true
 
 test:
   stage: test
@@ -180,10 +172,6 @@ test:
       when: always
     - when: never
   cache:
-    key:
-      prefix: ${CI_COMMIT_REF_SLUG}
-      files:
-        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -204,19 +192,11 @@ test:
     expire_in: 1 week
   before_script:
     - echo "Running tests with coverage..."
-    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
-    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
-    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
-        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
-      fi
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
-        pnpm config set store-dir .pnpm-store
-      fi
+    - corepack enable
+    - corepack install
+    - pnpm config set store-dir .pnpm-store
   script:
-    - FORCE_COLOR=1 ${PACKAGE_MANAGER_NAME} test
+    - FORCE_COLOR=1 pnpm test
   allow_failure: false
 
 lint:
@@ -238,10 +218,6 @@ lint:
       when: always
     - when: never
   cache:
-    key:
-      prefix: ${CI_COMMIT_REF_SLUG}
-      files:
-        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -253,19 +229,11 @@ lint:
       artifacts: false
   before_script:
     - echo "Running linter checks..."
-    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
-    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
-    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
-        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
-      fi
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
-        pnpm config set store-dir .pnpm-store
-      fi
+    - corepack enable
+    - corepack install
+    - pnpm config set store-dir .pnpm-store
   script:
-    - ${PACKAGE_MANAGER_NAME} biome check .
+    - pnpm biome check .
   allow_failure: false
 
 audit:
@@ -281,10 +249,6 @@ audit:
       when: always
     - when: never
   cache:
-    key:
-      prefix: ${CI_COMMIT_REF_SLUG}
-      files:
-        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -296,19 +260,11 @@ audit:
       artifacts: false
   before_script:
     - echo "Running security audit..."
-    - export PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
-    - export PACKAGE_MANAGER_NAME=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f1)
-    - export PACKAGE_MANAGER_VERSION=$(echo ${PACKAGE_MANAGER} | cut -d'@' -f2)
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" != "npm" ]; then
-        npm install -g --force ${PACKAGE_MANAGER_NAME}@${PACKAGE_MANAGER_VERSION}
-      fi
-    - |
-      if [ "${PACKAGE_MANAGER_NAME}" = "pnpm" ]; then
-        pnpm config set store-dir .pnpm-store
-      fi
+    - corepack enable
+    - corepack install
+    - pnpm config set store-dir .pnpm-store
   script:
-    - ${PACKAGE_MANAGER_NAME} audit
+    - pnpm audit
   allow_failure: false
 
 sonarcloud-check:
@@ -466,7 +422,6 @@ update telemetry backend:
     - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
   script:
     - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && ./telemetry-backend/start.sh"
-
 
 update dockerhub description:
   stage: docs
