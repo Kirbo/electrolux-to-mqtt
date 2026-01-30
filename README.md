@@ -39,34 +39,40 @@ Relevant links:
 - [SonarQube Cloud](https://sonarcloud.io/project/overview?id=kirbo_electrolux-to-mqtt)
 
 
-## How to install
+## Prerequisites
 
 1. Sign up/sign in into [Electrolux for Developer](https://developer.electrolux.one/dashboard)
 2. Create a new API Key and copy the value
-3. Setup configs to either copying the [docker-compose.example.yml](./docker/docker-compose.example.yml) into `docker-compose.yml` or copy [config.example.yml](./config.example.yml) into `config.yml`
-   ```bash
-   # Either
-   cp docker/docker-compose.example.yml docker-compose.yml
-   
-   # Or
-   cp config.example.yml config.yml
+3. Start the container by following one of the instructions [listed below](#but-how-to-start)
 
-   # Modify the file(s) as needed
-   ```
-4. Start the container by following the [instructions](./README.md#starting-container)
+## But how to start?!
 
-## Starting container
+Choose one of the following methods and open the details.
 
 ### Using `docker` with `config.yml`
 
-1. Create `config.yml` file, by copying [contents of `config.example.yml`](./config.example.yml) and make changes accordingly
-2. Run:
-```bash
-docker pull kirbownz/electrolux-to-mqtt:latest
-docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
-```
+<details>
+  <summary>I choose you!</summary>
+
+1. Copy [`config.example.yml`](./config.example.yml) as `config.yml`:
+    ```
+    cp config.example.yml config.yml
+    ```
+2. Modify the `config.yml` accordingly and save changes:
+    ```
+    code config.yml
+    ```
+3. Run:
+    ```bash
+    docker pull kirbownz/electrolux-to-mqtt:latest
+    docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
+    ```
+</details>
 
 ### Using `docker` with environmental variables
+
+<details>
+  <summary>I choose you!</summary>
 
 ```bash
 docker pull kirbownz/electrolux-to-mqtt:latest
@@ -95,17 +101,31 @@ docker run --rm \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
+</details>
 
 ### Using `docker compose`
 
-1. Copy [`docker-compose.example.yml`](./docker/docker-compose.example.yml) as `docker-compose.yml` (`cp docker/docker-compose.example.yml docker-compose.yml`)
-2. Modify the `docker-compose.yml` accordingly (`code docker-compose.yml`) and save changes
+<details>
+  <summary>I choose you!</summary>
+
+1. Copy [`docker-compose.example.yml`](./docker/docker-compose.example.yml) as `docker-compose.yml`:
+    ```
+    cp docker/docker-compose.example.yml docker-compose.yml
+    ```
+2. Modify the `docker-compose.yml` accordingly and save changes:
+    ```
+    code docker-compose.yml
+    ```
 3. Run:
-```bash
-docker compose pull && docker compose up -d
-```
+    ```bash
+    docker compose down ; docker compose up --pull always -d
+    ```
+</details>
 
 ### Using Portainer
+
+<details>
+  <summary>I choose you!</summary>
 
 1. Add new Stack
 2. Give it a name, e.g. `electrolux-to-mqtt`
@@ -144,27 +164,53 @@ services:
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
 ```
+</details>
 
 ## Developing locally
+
+<details>
+  <summary>I want to fix it myself!!</summary>
 
 Either running natively locally:
 ```bash
 # Copy config.example.yml
 cp config.example.yml config.yml
+
 # Modify as needed
 code config.yml
+
 # Make sure you have correct NodeJS version
 # If you don't have fnm installed, follow installation guide from https://github.com/Schniz/fnm?tab=readme-ov-file#installation
 fnm use
+
 # Install correct pnpm version if not installed already
 npm install -g $(node -p "require('./package.json').packageManager")
+
 # Install the dependencies
 pnpm install
+
 # Run the app in development mode
 pnpm dev
 ```
 
-## Testing
+..or if you want to use Docker instead:
+```bash
+# Make a copy of the docker-compose.local.example.yml
+cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
+
+# Modify as needed
+code docker/docker-compose.local.yml
+
+# Run the stack (automatically uses Node version from .nvmrc)
+NODE_VERSION=$(cat .nvmrc) docker compose -f docker/docker-compose.local.yml down ; NODE_VERSION=$(cat .nvmrc) docker compose -f docker/docker-compose.local.yml up --build
+
+# Or if you have pnpm installed:
+pnpm dev:docker
+```
+</details>
+
+<details>
+  <summary>But how to run tests?!</summary>
 
 This project includes comprehensive unit tests to ensure reliability:
 
@@ -182,6 +228,7 @@ E2M_NTFY_TOPIC=yourtopic pnpm test:e2e
 # Run tests in watch mode (auto-rerun on changes)
 pnpm test:watch
 ```
+</details>
 
 ## Contributing
 
@@ -190,16 +237,6 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for d
 - Development setup and workflow
 - Code style and testing requirements
 - Submitting merge requests
-
-..or if you want to use Docker instead:
-```bash
-# Make a copy of the docker-compose.local.example.yml
-cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
-# Modify as needed
-code docker/docker-compose.local.yml
-# Run the stack (automatically uses Node version from .nvmrc)
-pnpm dev:docker
-```
 
 
 ## Epilogue

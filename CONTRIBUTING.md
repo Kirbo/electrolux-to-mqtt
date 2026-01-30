@@ -59,13 +59,10 @@ cp config.example.yml config.yml
 ### Running Locally
 
 ```bash
-# Development mode with auto-reload
+# Development mode with auto-reload, using locally installed node and pnpm
 pnpm dev
 
-# Production mode
-pnpm start
-
-# Docker development
+# Development mode with auto-reload, using docker sandbox
 pnpm dev:docker
 ```
 
@@ -285,7 +282,8 @@ pnpm test tests/cache.test.ts
 ## Running E2E Tests
 
 ```bash
-# Run E2E tests (required `config.yml` file to exist and contain Electrolux API credentials)
+# Run E2E tests (required `config.yml` file to exist and contain Electrolux API credentials).
+# This just fetches the data from Electrolux API and checks that the structure is valid/hasn't changed.
 pnpm test:e2e
 ```
 
@@ -333,10 +331,12 @@ LOG_LEVEL=error pnpm test
 The project maintains test coverage with the following requirements:
 
 **Minimum Coverage Thresholds:**
-- **Lines**: 35%
-- **Statements**: 35%
-- **Branches**: 35%
-- **Functions**: 50%
+- **Lines**: 75%
+- **Statements**: 75%
+- **Branches**: 60%
+- **Functions**: 80%
+
+Up-to-date thresholds can be found [here](./vitest.config.ts#L28)
 
 **New Code Coverage:**
 - New code should have **≥80% coverage** where possible
