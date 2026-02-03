@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # Common functions for git hooks
 
@@ -16,6 +16,7 @@ else
   YELLOW=''
   BLUE=''
   NC=''
+  CLEAR_LINE=''
 fi
 
 # Print status with consistent formatting
@@ -66,9 +67,9 @@ find_node() {
   
   # Read node version from .nvmrc if it exists
   NODE_VERSION=""
-  REPO_ROOT=$(git rev-parse --show-toplevel)
-  if [ -f "$REPO_ROOT/.nvmrc" ]; then
-    NODE_VERSION=$(cat "$REPO_ROOT/.nvmrc" | tr -d '\n' | tr -d '%')
+  REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/.nvmrc" ]; then
+    NODE_VERSION=$(cat "$REPO_ROOT/.nvmrc" | tr -d '\n' | tr -d '%' | sed 's/^v//')
   fi
   
   # Try common node manager locations with version matching
@@ -86,15 +87,59 @@ find_node() {
           return 0
         fi
         
-        # Find all matching versions and sort them to get the highest
-        MATCHING_VERSIONS=$(find "$base_dir" -maxdepth 1 -type d -name "v${NODE_VERSION}*" 2>/dev/null | sort -V -r | head -1)
-        if [ -n "$MATCHING_VERSIONS" ]; then
-          if [ -x "${MATCHING_VERSIONS}/installation/bin/node" ]; then
-            echo "${MATCHING_VERSIONS}/installation/bin/node"
+        # Find highest matching version without relying on sort -V (BSD sort doesn't support it)
+        best_match=""
+        best_version=""
+        for candidate in "$base_dir"/v${NODE_VERSION}*; do
+          [ -d "$candidate" ] || continue
+          version=$(basename "$candidate" | sed 's/^v//')
+          if [ -z "$best_version" ]; then
+            best_version="$version"
+            best_match="$candidate"
+            continue
+          fi
+
+          # Bash 3.2 compatible version comparison
+          # Split version strings manually without using arrays
+          v_major=$(echo "$version" | cut -d. -f1)
+          v_minor=$(echo "$version" | cut -d. -f2)
+          v_patch=$(echo "$version" | cut -d. -f3)
+          b_major=$(echo "$best_version" | cut -d. -f1)
+          b_minor=$(echo "$best_version" | cut -d. -f2)
+          b_patch=$(echo "$best_version" | cut -d. -f3)
+          
+          # Default to 0 if part is empty
+          v_major=${v_major:-0}
+          v_minor=${v_minor:-0}
+          v_patch=${v_patch:-0}
+          b_major=${b_major:-0}
+          b_minor=${b_minor:-0}
+          b_patch=${b_patch:-0}
+          
+          # Compare major, minor, patch in order
+          if [ "$v_major" -gt "$b_major" ]; then
+            best_version="$version"
+            best_match="$candidate"
+          elif [ "$v_major" -eq "$b_major" ]; then
+            if [ "$v_minor" -gt "$b_minor" ]; then
+              best_version="$version"
+              best_match="$candidate"
+            elif [ "$v_minor" -eq "$b_minor" ]; then
+              if [ "$v_patch" -gt "$b_patch" ]; then
+                best_version="$version"
+                best_match="$candidate"
+              fi
+            fi
+          fi
+        done
+
+        if [ -n "$best_match" ]; then
+          if [ -x "${best_match}/installation/bin/node" ]; then
+            echo "${best_match}/installation/bin/node"
             return 0
           fi
-          if [ -x "${MATCHING_VERSIONS}/bin/node" ]; then
-            echo "${MATCHING_VERSIONS}/bin/node"
+          if [ -x "${best_match}/bin/node" ]; then
+            echo "${best_match}/bin/node"
             return 0
           fi
         fi
@@ -114,18 +159,6 @@ find_node() {
     fi
   done
   
-  # Try loading from shell rc files
-  for rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
-    if [ -f "$rc_file" ]; then
-      # Source the file and try to find node
-      node_path=$(sh -c ". $rc_file > /dev/null 2>&1 && command -v node 2>/dev/null")
-      if [ -n "$node_path" ] && [ -x "$node_path" ]; then
-        echo "$node_path"
-        return 0
-      fi
-    fi
-  done
-  
   return 1
 }
 
@@ -133,7 +166,7 @@ find_node() {
 setup_node() {
   NODE_BIN=$(find_node)
   if [ -z "$NODE_BIN" ]; then
-    echo "⚠️ Node.js not found. Please install Node.js or check your PATH."
+    echo "Node.js not found. Please install Node.js or check your PATH."
     return 1
   fi
   
@@ -141,4 +174,22 @@ setup_node() {
   NODE_DIR=$(dirname "$NODE_BIN")
   export PATH="$NODE_DIR:$PATH"
   return 0
+}
+
+
+alert() {
+  MESSAGE=${1:-"Alert"}
+  # Escape single quotes in message for shell commands
+  MESSAGE_ESCAPED=$(printf '%s' "$MESSAGE" | sed "s/'/'\\\\''/g")
+  case "${OSTYPE}" in
+    darwin*)
+      osascript -e "tell app \"System Events\" to display dialog \"${MESSAGE_ESCAPED}\" buttons {\"OK\"} default button 1 cancel button 1" >/dev/null 2>&1
+      ;;
+    msys*|cygwin*|win32*)
+      powershell.exe -NoProfile -Command "Add-Type -AssemblyName PresentationFramework;[System.Windows.MessageBox]::Show('${MESSAGE_ESCAPED}','Alert')" >/dev/null 2>&1
+      ;;
+    *)
+      zenity --info --text="${MESSAGE_ESCAPED}" --title="Alert" --width=300 --height=100 2>/dev/null
+      ;;
+  esac
 }

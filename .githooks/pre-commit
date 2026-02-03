@@ -1,14 +1,14 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # Pre-commit hook to run format and lint on staged files only
 
 # Get the repository root directory
 REPO_ROOT=$(git rev-parse --show-toplevel)
-BIOME="$REPO_ROOT/node_modules/.bin/biome"
+BIOME="${REPO_ROOT}/node_modules/.bin/biome"
 
 # Source common functions
 # shellcheck disable=SC1091
-. "$REPO_ROOT/.githooks/common.sh"
+source "${REPO_ROOT}/.githooks/common.sh"
 
 # Setup node environment
 if ! setup_node; then
@@ -16,50 +16,120 @@ if ! setup_node; then
 fi
 
 # Check if biome is installed
-if [ ! -f "$BIOME" ]; then
+if [ ! -f "${BIOME}" ]; then
   step_fail "Biome not found in node_modules. Run 'pnpm install' first."
 fi
 
-# Stash unstaged changes to avoid formatting/linting them
-step_exec "Stashing unstaged changes..."
-if git stash push --keep-index --include-untracked --message "pre-commit-stash" > /dev/null 2>&1; then
-  STASH_RESULT=0
-  step_done "Stashed unstaged changes"
-else
-  STASH_RESULT=1
-  step_skip "No unstaged changes to stash"
+STAGED_FILES_ALL=()
+STAGED_FILES_BIOME=()
+IGNORED_STAGED=()
+UNSTAGED_FILES=()
+OVERLAP_FILES=()
+
+array_contains() {
+  local needle="$1"
+  shift
+  for item in "$@"; do
+    if [ "${item}" = "${needle}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Collect staged files (NUL-safe)
+while IFS= read -r -d '' file; do
+  STAGED_FILES_ALL+=("${file}")
+done < <(git diff --cached --name-only -z --diff-filter=ACM)
+
+# Prevent committing files ignored by .gitignore
+if [ "${#STAGED_FILES_ALL[@]}" -gt 0 ]; then
+  while IFS= read -r -d '' _pattern; do
+    IFS= read -r -d '' _source || break
+    IFS= read -r -d '' _path || break
+    IGNORED_STAGED+=("${_path}")
+  done < <(printf '%s\0' "${STAGED_FILES_ALL[@]}" | git check-ignore -v -z --stdin || true)
 fi
 
-# Get list of staged files that Biome supports
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx|json|jsonc)$')
+if [ "${#IGNORED_STAGED[@]}" -gt 0 ]; then
+  IGNORED_LIST=""
+  for path in "${IGNORED_STAGED[@]}"; do
+    IGNORED_LIST="${IGNORED_LIST}\n${path}"
+  done
+  step_fail "Commit blocked: ignored files are staged:${IGNORED_LIST}"
+fi
 
-if [ -n "$STAGED_FILES" ]; then
+# Collect unstaged files (NUL-safe)
+while IFS= read -r -d '' file; do
+  UNSTAGED_FILES+=("${file}")
+done < <(git diff --name-only -z --diff-filter=ACM)
+
+# Detect partially staged files
+for file in "${STAGED_FILES_ALL[@]}"; do
+  if array_contains "${file}" "${UNSTAGED_FILES[@]}"; then
+    OVERLAP_FILES+=("${file}")
+  fi
+done
+
+SKIP_STASH=0
+STASH_RESULT=1
+if [ "${#OVERLAP_FILES[@]}" -gt 0 ]; then
+  SKIP_STASH=1
+  step_skip "Partial staging detected; skipping stash to preserve unstaged hunks"
+  alert "Partial staging detected. Formatting will be skipped for files with unstaged changes."
+else
+  step_exec "Stashing unstaged changes..."
+  if git stash push --keep-index --include-untracked --message "pre-commit-stash" > /dev/null 2>&1; then
+    STASH_RESULT=0
+    step_done "Stashed unstaged changes"
+  else
+    step_skip "No unstaged changes to stash"
+  fi
+fi
+
+# Get list of staged files that Biome supports (skip partially staged files)
+for file in "${STAGED_FILES_ALL[@]}"; do
+  if array_contains "${file}" "${OVERLAP_FILES[@]}"; then
+    continue
+  fi
+  case "${file}" in
+    *.js|*.jsx|*.ts|*.tsx|*.json|*.jsonc)
+      STAGED_FILES_BIOME+=("${file}")
+      ;;
+  esac
+done
+
+if [ "${#STAGED_FILES_BIOME[@]}" -gt 0 ]; then
   # Run format on staged files
   step_exec "Running format on staged files..."
-  if echo "$STAGED_FILES" | xargs "$BIOME" format --write > /dev/null 2>&1; then
+  # BSD xargs requires non-empty input, so we check array length first
+  if printf '%s\0' "${STAGED_FILES_BIOME[@]}" | xargs -0 "${BIOME}" format --write > /dev/null 2>&1; then
     step_done "Format completed"
   else
     step_fail "Format failed"
   fi
-  
+
   # Run lint on staged files
   step_exec "Running lint on staged files..."
-  if echo "$STAGED_FILES" | xargs "$BIOME" lint --write > /dev/null 2>&1; then
+  if printf '%s\0' "${STAGED_FILES_BIOME[@]}" | xargs -0 "${BIOME}" lint --write > /dev/null 2>&1; then
     step_done "Lint completed"
   else
     step_fail "Lint failed"
   fi
-  
+
   # Add formatted/linted files back to staging
   step_exec "Adding formatted files to staging..."
-  echo "$STAGED_FILES" | xargs git add
-  step_done "Added formatted files to staging"
+  if printf '%s\0' "${STAGED_FILES_BIOME[@]}" | xargs -0 git add; then
+    step_done "Added formatted files to staging"
+  else
+    step_fail "Failed to add formatted files to staging"
+  fi
 else
   step_skip "No Biome-supported files staged"
 fi
 
 # Pop stash to restore unstaged changes
-if [ $STASH_RESULT -eq 0 ]; then
+if [ "${SKIP_STASH}" -eq 0 ] && [ "${STASH_RESULT}" -eq 0 ]; then
   step_exec "Restoring unstaged changes..."
   if git stash pop > /dev/null 2>&1; then
     step_done "Restored unstaged changes"
