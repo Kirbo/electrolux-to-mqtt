@@ -1,3 +1,6 @@
+# https://docs.gitlab.com/ci/variables/
+# https://gitlab-docs-d6a9bb.gitlab.io/ee/ci/variables/predefined_variables.html
+
 stages:
   - init
   - test
