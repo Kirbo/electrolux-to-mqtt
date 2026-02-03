@@ -70,7 +70,7 @@ initialise variables:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-      when: always
+      when: on_success
     - when: never
   cache: []
   artifacts:
@@ -100,7 +100,7 @@ bump version:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-      when: always
+      when: on_success
     - when: never
   cache: []
   artifacts:
@@ -138,7 +138,7 @@ install dependencies:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-      when: always
+      when: on_success
     - when: never
   cache:
     paths:
@@ -179,7 +179,7 @@ test:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-      when: always
+      when: on_success
     - when: never
   cache:
     paths:
@@ -225,7 +225,7 @@ lint:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-      when: always
+      when: on_success
     - when: never
   cache:
     paths:
@@ -256,7 +256,7 @@ audit:
         - .gitlab-ci.yml
         - package.json
         - pnpm-lock.yaml
-      when: always
+      when: on_success
     - when: never
   cache:
     paths:
@@ -291,7 +291,7 @@ sonarcloud-check:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-      when: always
+      when: on_success
     - when: never
   image:
     name: sonarsource/sonar-scanner-cli:latest
@@ -330,7 +330,7 @@ try to build docker images:
         - pnpm-lock.yaml
         - src/**/*
         - tsconfig.json
-      when: always
+      when: on_success
     - when: never
   cache: []
   needs:
@@ -381,7 +381,7 @@ build and deploy docker images:
         - pnpm-lock.yaml
         - src/**/*
         - tsconfig.json
-      when: always
+      when: on_success
     - when: never
   cache: []
   needs:
