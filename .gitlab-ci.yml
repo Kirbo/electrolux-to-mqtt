@@ -24,7 +24,6 @@ workflow:
 
 variables:
   DOCKER_TLS_CERTDIR: ""
-  DOCKER_HOST: "tcp://docker:2375"
   DOCKER_REGISTRY: ${CI_REGISTRY}
   DOCKER_BUILDER_NAME: "builder-${CI_JOB_ID}"
   DOCKERHUB_PASSWORD: ${CI_REGISTRY_PASSWORD}
@@ -333,6 +332,8 @@ try to build docker images:
       when: on_success
     - when: never
   cache: []
+  variables:
+    DOCKER_HOST: "unix:///var/run/docker.sock"  # Use local Docker for shell executor
   needs:
     - job: initialise variables
       artifacts: true
@@ -340,9 +341,6 @@ try to build docker images:
       artifacts: true
     - job: sonarcloud-check
       artifacts: false
-  services:
-    - name: docker:dind
-      alias: docker
   before_script:
     - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
     - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
@@ -384,6 +382,8 @@ build and deploy docker images:
       when: on_success
     - when: never
   cache: []
+  variables:
+    DOCKER_HOST: "unix:///var/run/docker.sock"  # Use local Docker for shell executor
   needs:
     - job: initialise variables
       artifacts: true
@@ -391,9 +391,6 @@ build and deploy docker images:
       artifacts: true
     - job: sonarcloud-check
       artifacts: false
-  services:
-    - name: docker:dind
-      alias: docker
   before_script:
     - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
     - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
