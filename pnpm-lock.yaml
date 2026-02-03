@@ -12,8 +12,8 @@ importers:
         specifier: ^1.13.4
         version: 1.13.4
       mqtt:
-        specifier: ^5.14.1
-        version: 5.14.1
+        specifier: ^5.15.0
+        version: 5.15.0
       pino:
         specifier: ^10.3.0
         version: 10.3.0
@@ -31,14 +31,14 @@ importers:
         version: 4.3.6
     devDependencies:
       '@biomejs/biome':
-        specifier: ^2.3.13
-        version: 2.3.13
+        specifier: ^2.3.14
+        version: 2.3.14
       '@types/node':
-        specifier: ^25.0.10
-        version: 25.0.10
+        specifier: ^25.2.0
+        version: 25.2.0
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.0.18(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2))
       rimraf:
         specifier: ^6.1.2
         version: 6.1.2
@@ -50,7 +50,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 
@@ -79,59 +79,59 @@ packages:
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
 
-  '@biomejs/biome@2.3.13':
-    resolution: {integrity: sha512-Fw7UsV0UAtWIBIm0M7g5CRerpu1eKyKAXIazzxhbXYUyMkwNrkX/KLkGI7b+uVDQ5cLUMfOC9vR60q9IDYDstA==}
+  '@biomejs/biome@2.3.14':
+    resolution: {integrity: sha512-QMT6QviX0WqXJCaiqVMiBUCr5WRQ1iFSjvOLoTk6auKukJMvnMzWucXpwZB0e8F00/1/BsS9DzcKgWH+CLqVuA==}
     engines: {node: '>=14.21.3'}
     hasBin: true
 
-  '@biomejs/cli-darwin-arm64@2.3.13':
-    resolution: {integrity: sha512-0OCwP0/BoKzyJHnFdaTk/i7hIP9JHH9oJJq6hrSCPmJPo8JWcJhprK4gQlhFzrwdTBAW4Bjt/RmCf3ZZe59gwQ==}
+  '@biomejs/cli-darwin-arm64@2.3.14':
+    resolution: {integrity: sha512-UJGPpvWJMkLxSRtpCAKfKh41Q4JJXisvxZL8ChN1eNW3m/WlPFJ6EFDCE7YfUb4XS8ZFi3C1dFpxUJ0Ety5n+A==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [darwin]
 
-  '@biomejs/cli-darwin-x64@2.3.13':
-    resolution: {integrity: sha512-AGr8OoemT/ejynbIu56qeil2+F2WLkIjn2d8jGK1JkchxnMUhYOfnqc9sVzcRxpG9Ycvw4weQ5sprRvtb7Yhcw==}
+  '@biomejs/cli-darwin-x64@2.3.14':
+    resolution: {integrity: sha512-PNkLNQG6RLo8lG7QoWe/hhnMxJIt1tEimoXpGQjwS/dkdNiKBLPv4RpeQl8o3s1OKI3ZOR5XPiYtmbGGHAOnLA==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [darwin]
 
-  '@biomejs/cli-linux-arm64-musl@2.3.13':
-    resolution: {integrity: sha512-TUdDCSY+Eo/EHjhJz7P2GnWwfqet+lFxBZzGHldrvULr59AgahamLs/N85SC4+bdF86EhqDuuw9rYLvLFWWlXA==}
+  '@biomejs/cli-linux-arm64-musl@2.3.14':
+    resolution: {integrity: sha512-LInRbXhYujtL3sH2TMCH/UBwJZsoGwfQjBrMfl84CD4hL/41C/EU5mldqf1yoFpsI0iPWuU83U+nB2TUUypWeg==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@biomejs/cli-linux-arm64@2.3.13':
-    resolution: {integrity: sha512-xvOiFkrDNu607MPMBUQ6huHmBG1PZLOrqhtK6pXJW3GjfVqJg0Z/qpTdhXfcqWdSZHcT+Nct2fOgewZvytESkw==}
+  '@biomejs/cli-linux-arm64@2.3.14':
+    resolution: {integrity: sha512-KT67FKfzIw6DNnUNdYlBg+eU24Go3n75GWK6NwU4+yJmDYFe9i/MjiI+U/iEzKvo0g7G7MZqoyrhIYuND2w8QQ==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@biomejs/cli-linux-x64-musl@2.3.13':
-    resolution: {integrity: sha512-0bdwFVSbbM//Sds6OjtnmQGp4eUjOTt6kHvR/1P0ieR9GcTUAlPNvPC3DiavTqq302W34Ae2T6u5VVNGuQtGlQ==}
+  '@biomejs/cli-linux-x64-musl@2.3.14':
+    resolution: {integrity: sha512-KQU7EkbBBuHPW3/rAcoiVmhlPtDSGOGRPv9js7qJVpYTzjQmVR+C9Rfcz+ti8YCH+zT1J52tuBybtP4IodjxZQ==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@biomejs/cli-linux-x64@2.3.13':
-    resolution: {integrity: sha512-s+YsZlgiXNq8XkgHs6xdvKDFOj/bwTEevqEY6rC2I3cBHbxXYU1LOZstH3Ffw9hE5tE1sqT7U23C00MzkXztMw==}
+  '@biomejs/cli-linux-x64@2.3.14':
+    resolution: {integrity: sha512-ZsZzQsl9U+wxFrGGS4f6UxREUlgHwmEfu1IrXlgNFrNnd5Th6lIJr8KmSzu/+meSa9f4rzFrbEW9LBBA6ScoMA==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@biomejs/cli-win32-arm64@2.3.13':
-    resolution: {integrity: sha512-QweDxY89fq0VvrxME+wS/BXKmqMrOTZlN9SqQ79kQSIc3FrEwvW/PvUegQF6XIVaekncDykB5dzPqjbwSKs9DA==}
+  '@biomejs/cli-win32-arm64@2.3.14':
+    resolution: {integrity: sha512-+IKYkj/pUBbnRf1G1+RlyA3LWiDgra1xpS7H2g4BuOzzRbRB+hmlw0yFsLprHhbbt7jUzbzAbAjK/Pn0FDnh1A==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [win32]
 
-  '@biomejs/cli-win32-x64@2.3.13':
-    resolution: {integrity: sha512-trDw2ogdM2lyav9WFQsdsfdVy1dvZALymRpgmWsvSez0BJzBjulhOT/t+wyKeh3pZWvwP3VMs1SoOKwO3wecMQ==}
+  '@biomejs/cli-win32-x64@2.3.14':
+    resolution: {integrity: sha512-oizCjdyQ3WJEswpb3Chdngeat56rIdSYK12JI3iI11Mt5T5EXcZ7WLuowzEaFPNJ3zmOQFliMN8QY1Pi+qsfdQ==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
@@ -463,8 +463,8 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/node@25.0.10':
-    resolution: {integrity: sha512-zWW5KPngR/yvakJgGOmZ5vTBemDoSqF3AcV/LrO5u5wTWyEAVVh+IT39G4gtyAkh3CtTZs8aX/yRM82OfzHJRg==}
+  '@types/node@25.2.0':
+    resolution: {integrity: sha512-DZ8VwRFUNzuqJ5khrvwMXHmvPe+zGayJhr2CDNiKB1WBE1ST8Djl00D0IC4vvNmHMdj6DlbYRIaFE7WHjlDl5w==}
 
   '@types/readable-stream@4.0.23':
     resolution: {integrity: sha512-wwXrtQvbMHxCbBgjHaMGEmImFTQxxpfMOR/ZoQnXxB1woqkUbdLGFDgauo00Py9IudiaqSeiBiulSV9i6XIPig==}
@@ -786,8 +786,8 @@ packages:
   mqtt-packet@9.0.2:
     resolution: {integrity: sha512-MvIY0B8/qjq7bKxdN1eD+nrljoeaai+qjLJgfRn3TiMuz0pamsIWY2bFODPZMSNmabsLANXsLl4EMoWvlaTZWA==}
 
-  mqtt@5.14.1:
-    resolution: {integrity: sha512-NxkPxE70Uq3Ph7goefQa7ggSsVzHrayCD0OyxlJgITN/EbzlZN+JEPmaAZdxP1LsIT5FamDyILoQTF72W7Nnbw==}
+  mqtt@5.15.0:
+    resolution: {integrity: sha512-KC+wAssYk83Qu5bT8YDzDYgUJxPhbLeVsDvpY2QvL28PnXYJzC2WkKruyMUgBAZaQ7h9lo9k2g4neRNUUxzgMw==}
     engines: {node: '>=16.0.0'}
     hasBin: true
 
@@ -1126,39 +1126,39 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@biomejs/biome@2.3.13':
+  '@biomejs/biome@2.3.14':
     optionalDependencies:
-      '@biomejs/cli-darwin-arm64': 2.3.13
-      '@biomejs/cli-darwin-x64': 2.3.13
-      '@biomejs/cli-linux-arm64': 2.3.13
-      '@biomejs/cli-linux-arm64-musl': 2.3.13
-      '@biomejs/cli-linux-x64': 2.3.13
-      '@biomejs/cli-linux-x64-musl': 2.3.13
-      '@biomejs/cli-win32-arm64': 2.3.13
-      '@biomejs/cli-win32-x64': 2.3.13
+      '@biomejs/cli-darwin-arm64': 2.3.14
+      '@biomejs/cli-darwin-x64': 2.3.14
+      '@biomejs/cli-linux-arm64': 2.3.14
+      '@biomejs/cli-linux-arm64-musl': 2.3.14
+      '@biomejs/cli-linux-x64': 2.3.14
+      '@biomejs/cli-linux-x64-musl': 2.3.14
+      '@biomejs/cli-win32-arm64': 2.3.14
+      '@biomejs/cli-win32-x64': 2.3.14
 
-  '@biomejs/cli-darwin-arm64@2.3.13':
+  '@biomejs/cli-darwin-arm64@2.3.14':
     optional: true
 
-  '@biomejs/cli-darwin-x64@2.3.13':
+  '@biomejs/cli-darwin-x64@2.3.14':
     optional: true
 
-  '@biomejs/cli-linux-arm64-musl@2.3.13':
+  '@biomejs/cli-linux-arm64-musl@2.3.14':
     optional: true
 
-  '@biomejs/cli-linux-arm64@2.3.13':
+  '@biomejs/cli-linux-arm64@2.3.14':
     optional: true
 
-  '@biomejs/cli-linux-x64-musl@2.3.13':
+  '@biomejs/cli-linux-x64-musl@2.3.14':
     optional: true
 
-  '@biomejs/cli-linux-x64@2.3.13':
+  '@biomejs/cli-linux-x64@2.3.14':
     optional: true
 
-  '@biomejs/cli-win32-arm64@2.3.13':
+  '@biomejs/cli-win32-arm64@2.3.14':
     optional: true
 
-  '@biomejs/cli-win32-x64@2.3.13':
+  '@biomejs/cli-win32-x64@2.3.14':
     optional: true
 
   '@esbuild/aix-ppc64@0.27.2':
@@ -1342,19 +1342,19 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/node@25.0.10':
+  '@types/node@25.2.0':
     dependencies:
       undici-types: 7.16.0
 
   '@types/readable-stream@4.0.23':
     dependencies:
-      '@types/node': 25.0.10
+      '@types/node': 25.2.0
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 25.0.10
+      '@types/node': 25.2.0
 
-  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2))':
+  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
       '@vitest/utils': 4.0.18
@@ -1366,7 +1366,7 @@ snapshots:
       obug: 2.1.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2)
+      vitest: 4.0.18(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/expect@4.0.18':
     dependencies:
@@ -1377,13 +1377,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.0.3
 
-  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2))':
+  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@vitest/spy': 4.0.18
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/pretty-format@4.0.18':
     dependencies:
@@ -1691,7 +1691,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  mqtt@5.14.1:
+  mqtt@5.15.0:
     dependencies:
       '@types/readable-stream': 4.0.23
       '@types/ws': 8.18.1
@@ -1932,7 +1932,7 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  vite@7.3.1(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2):
+  vite@7.3.1(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       esbuild: 0.27.2
       fdir: 6.5.0(picomatch@4.0.3)
@@ -1941,15 +1941,15 @@ snapshots:
       rollup: 4.55.1
       tinyglobby: 0.2.15
     optionalDependencies:
-      '@types/node': 25.0.10
+      '@types/node': 25.2.0
       fsevents: 2.3.3
       tsx: 4.21.0
       yaml: 2.8.2
 
-  vitest@4.0.18(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2):
+  vitest@4.0.18(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       '@vitest/expect': 4.0.18
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2))
+      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2))
       '@vitest/pretty-format': 4.0.18
       '@vitest/runner': 4.0.18
       '@vitest/snapshot': 4.0.18
@@ -1966,10 +1966,10 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vite: 7.3.1(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@25.2.0)(tsx@4.21.0)(yaml@2.8.2)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 25.0.10
+      '@types/node': 25.2.0
     transitivePeerDependencies:
       - jiti
       - less
