@@ -14,7 +14,7 @@
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
-    "postinstall": "[ -f /.dockerenv ] || [ -n \"$CI\" ] || [ -n \"$DOCKER_BUILD\" ] && exit 0; bash scripts/postinstall.sh || exit 0",
+    "postinstall": "{ [ -f /.dockerenv ] || [ -n \"$CI\" ] || [ -n \"$DOCKER_BUILD\" ]; } && exit 0; bash .githooks/postinstall.sh || exit 0",
     "test": "vitest run --coverage",
     "test:e2e": "E2E_TEST=true vitest run tests/e2e/*.test.ts",
     "test:watch": "vitest",

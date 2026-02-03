@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # Get the script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # Source common functions if available (in git repo)
-if [ -f "$SCRIPT_DIR/.githooks/common.sh" ]; then
+if [ -f "${REPO_ROOT}/.githooks/common.sh" ]; then
   # shellcheck disable=SC1091
-  . "$SCRIPT_DIR/.githooks/common.sh"
+  source "${REPO_ROOT}/.githooks/common.sh"
 else
   # Fallback: define minimal functions if common.sh not available
   print_status() {
@@ -20,7 +20,7 @@ else
 fi
 
 # Check if we're in a git repository
-if [ ! -d .git ]; then
+if [ ! -d "${REPO_ROOT}/.git" ]; then
   step_skip "Not a git repository"
   exit 0
 fi

@@ -47,7 +47,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
   echo "                Node Image:                   ${NODE_IMAGE}" && \
   echo "                Package manager:              ${PACKAGE_MANAGER}" && \
   echo "====================================================================================" && \
-  pnpm install --frozen-lockfile --config.scripts-prepend-node-path=true
+  DOCKER_BUILD=1 pnpm install --frozen-lockfile --config.scripts-prepend-node-path=true
 
 # Copy source code
 COPY . .
@@ -77,7 +77,7 @@ COPY --from=builder --chown=node:node /app/package.json ./package.json
 # Install only production dependencies
 RUN corepack enable && \
   corepack install && \
-  pnpm install --frozen-lockfile --prod --config.scripts-prepend-node-path=true
+  DOCKER_BUILD=1 pnpm install --frozen-lockfile --prod --config.scripts-prepend-node-path=true
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
