@@ -74,6 +74,10 @@ docker-compose up -d
 
 - `PORT` - Server port (default: 3001)
 - `REDIS_URL` - Redis connection URL (default: redis://redis:6379)
+- `RATE_LIMIT_WINDOW_MS` - Rate limit window in ms (default: 60000)
+- `RATE_LIMIT_IP_MAX` - Max requests per IP per window (default: 10)
+- `RATE_LIMIT_HASH_MAX` - Max requests per userHash per window (default: 1)
+- `RATE_LIMIT_SALT` - Optional secret salt used to hash IPs for rate limiting (defaults to `/etc/machine-id` if available, otherwise hostname)
 
 ## Data Persistence
 
