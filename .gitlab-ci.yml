@@ -1,12 +1,12 @@
 # https://docs.gitlab.com/ci/variables/
 # https://gitlab-docs-d6a9bb.gitlab.io/ee/ci/variables/predefined_variables.html
+# https://docs.gitlab.com/ci/yaml/
 
 stages:
   - init
   - test
   - build
   - release
-  - docs
 
 workflow:
   rules:
@@ -318,6 +318,7 @@ sonarcloud-check:
 try to build docker images:
   stage: build
   image: docker:latest
+  retry: 1
   interruptible: true
   rules:
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
@@ -337,14 +338,16 @@ try to build docker images:
       artifacts: true
     - job: bump version
       artifacts: true
+    - job: sonarcloud-check
+      artifacts: false
   services:
     - name: docker:dind
       alias: docker
   before_script:
-    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
-    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
     - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
     - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
+    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
+    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - |
@@ -361,6 +364,59 @@ try to build docker images:
     - docker buildx rm "${BUILDER_NAME}" || true
 
 ################################################################# RELEASE STAGE JOBS ##################################################################
+
+build and deploy docker images:
+  stage: release
+  image: docker:latest
+  retry: 1
+  interruptible: true
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - .gitlab-ci.yml
+        - docker/Dockerfile
+        - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
+      when: always
+    - when: never
+  cache: []
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: bump version
+      artifacts: true
+    - job: sonarcloud-check
+      artifacts: false
+  services:
+    - name: docker:dind
+      alias: docker
+  before_script:
+    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
+    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
+    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
+    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
+  script:
+    - source build.env
+    - |
+      docker buildx build \
+        --builder "${BUILDER_NAME}" \
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        --build-arg VERSION=${VERSION} \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
+        --push \
+        --provenance=true \
+        --sbom=true \
+        --platform linux/amd64,linux/arm64 \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
+        -f docker/Dockerfile .
+  after_script:
+    - docker buildx rm "${BUILDER_NAME}" || true
 
 create gitlab release:
   stage: release
@@ -386,6 +442,8 @@ create gitlab release:
       artifacts: false
     - job: bump version
       artifacts: true
+    - job: build and deploy docker images
+      artifacts: false
   before_script:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
@@ -393,55 +451,6 @@ create gitlab release:
     - git fetch origin "$CI_DEFAULT_BRANCH" || true
   script:
     - semantic-release
-
-build and deploy docker images:
-  stage: release
-  image: docker:latest
-  interruptible: true
-  rules:
-    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
-      changes:
-        - .gitlab-ci.yml
-        - docker/Dockerfile
-        - entrypoint.sh
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tsconfig.json
-      when: always
-    - when: never
-  cache: []
-  needs:
-    - job: initialise variables
-      artifacts: true
-    - job: bump version
-      artifacts: true
-  services:
-    - name: docker:dind
-      alias: docker
-  before_script:
-    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
-    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
-    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
-    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
-  script:
-    - source build.env
-    - |
-      docker buildx build \
-        --builder "${BUILDER_NAME}" \
-        --build-arg NODE_VERSION=${NODE_VERSION} \
-        --build-arg VERSION=${VERSION} \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
-        --push \
-        --provenance=true \
-        --sbom=true \
-        --platform linux/amd64,linux/arm64 \
-        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
-        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
-        -f docker/Dockerfile .
-  after_script:
-    - docker buildx rm "${BUILDER_NAME}" || true
 
 update telemetry backend:
   stage: release
@@ -454,7 +463,10 @@ update telemetry backend:
       when: always
     - when: never
   cache: []
-  needs: []
+  needs:
+    - job: build and deploy docker images
+      artifacts: false
+      optional: true
   before_script:
     - apk add --no-cache openssh-client
     - mkdir -p ~/.ssh
@@ -465,10 +477,8 @@ update telemetry backend:
   script:
     - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && ./telemetry-backend/start.sh"
 
-################################################################### DOCS STAGE JOBS ###################################################################
-
 update dockerhub description:
-  stage: docs
+  stage: release
   image: peterevans/dockerhub-description:4
   interruptible: true
   rules:
@@ -476,6 +486,10 @@ update dockerhub description:
       when: always
     - when: never
   cache: []
+  needs:
+    - job: build and deploy docker images
+      artifacts: false
+      optional: true
   before_script:
     - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
   script:
