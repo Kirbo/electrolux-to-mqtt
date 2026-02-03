@@ -19,6 +19,7 @@ const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching 
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_DELAY_MS = 5_000 // Retry login after 5s on failure
 const TOKEN_REFRESH_RETRY_DELAY_MS = 5_000 // Retry token refresh after 5s on failure
+const API_TIMEOUT_MS = 10_000 // Default timeout for API requests
 
 // Track timeouts for cleanup
 const activeTimeouts = new Set<NodeJS.Timeout>()
@@ -214,6 +215,7 @@ export class ElectroluxClient {
     this.client = axios.create({
       baseURL: baseUrl,
       headers,
+      timeout: API_TIMEOUT_MS,
     })
 
     this.client.interceptors.request.use(async (request) => {
@@ -367,7 +369,11 @@ export class ElectroluxClient {
       logger.info('Logged in, Tokens', this.retainTokensForOutput(tokens))
 
       const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
-      fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
+      } catch (writeError) {
+        logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
+      }
 
       this.createApiClient()
 
@@ -458,8 +464,12 @@ export class ElectroluxClient {
       logger.info('Refreshed tokens', this.retainTokensForOutput(tokens))
 
       const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
-      fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
-      logger.debug('Tokens saved to', filePath)
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
+        logger.debug('Tokens saved to', filePath)
+      } catch (writeError) {
+        logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
+      }
 
       // Recreate API client with new access token
       await this.createApiClient()
