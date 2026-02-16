@@ -42,12 +42,6 @@ default:
   # Jobs without the macos tag will use shared runners automatically
   tags:
     - macos
-  cache:
-    key:
-      files:
-        - pnpm-lock.yaml
-    paths:
-      - .pnpm-store
 
 ################################################################### INIT STAGE JOBS ###################################################################
 
@@ -140,6 +134,10 @@ install dependencies:
       when: on_success
     - when: never
   cache:
+    key:
+      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      files:
+        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -181,6 +179,10 @@ test:
       when: on_success
     - when: never
   cache:
+    key:
+      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      files:
+        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -227,6 +229,10 @@ lint:
       when: on_success
     - when: never
   cache:
+    key:
+      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      files:
+        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -258,6 +264,10 @@ audit:
       when: on_success
     - when: never
   cache:
+    key:
+      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      files:
+        - pnpm-lock.yaml
     paths:
       - .pnpm-store
       - node_modules
@@ -296,9 +306,13 @@ sonarcloud-check:
     name: sonarsource/sonar-scanner-cli:latest
     entrypoint: [""]
   cache:
-    key: "${CI_JOB_NAME}"
+    key:
+      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      files:
+        - pnpm-lock.yaml
     paths:
       - .sonar/cache
+    policy: pull
   needs:
     - job: bump version
       artifacts: true
