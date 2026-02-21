@@ -238,6 +238,9 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for d
 - Code style and testing requirements
 - Submitting merge requests
 
+## Home Assistant automation examples
+
+Please read [HOME_ASSISTANT.md](./HOME_ASSISTANT.md) for more details.
 
 ## Epilogue
 
