@@ -14,16 +14,59 @@ let hasNotifiedVersion: string | null = null
 // Track last published MQTT info payload to avoid redundant publishes
 let lastPublishedInfo: string | null = null
 
+type GitLabCommit = {
+  id: string
+  short_id: string
+  created_at: string
+  title: string
+  author_name: string
+  web_url: string
+}
+
 type GitLabTag = {
   name: string
-  commit: {
-    created_at: string
-  }
+  message: string
+  target: string
+  commit: GitLabCommit
+  release: {
+    tag_name: string
+    description: string
+  } | null
+  protected: boolean
+  created_at: string | null
 }
 
 type GitLabRelease = {
+  name: string
   tag_name: string
+  description: string
+  created_at: string
   released_at: string
+  upcoming_release: boolean
+  author: {
+    id: number
+    username: string
+    name: string
+    state: string
+    avatar_url: string
+    web_url: string
+  }
+  commit: GitLabCommit
+  commit_path: string
+  tag_path: string
+  assets: {
+    count: number
+    sources: Array<{ format: string; url: string }>
+    links: Array<unknown>
+  }
+  _links: {
+    self: string
+    closed_issues_url: string
+    closed_merge_requests_url: string
+    merged_merge_requests_url: string
+    opened_issues_url: string
+    opened_merge_requests_url: string
+  }
 }
 
 /**
@@ -53,6 +96,7 @@ function compareVersions(v1: string, v2: string): number {
 type LatestVersionInfo = {
   version: string
   releasedAt: string
+  description?: string
 }
 
 /**
@@ -74,7 +118,8 @@ async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
       const sortedReleases = [...releasesResponse.data].sort((a, b) => {
         return new Date(b.released_at).getTime() - new Date(a.released_at).getTime()
       })
-      return { version: sortedReleases[0].tag_name, releasedAt: sortedReleases[0].released_at }
+      const r = sortedReleases[0]
+      return { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined }
     }
 
     // Fallback to tags if no releases found
@@ -91,7 +136,8 @@ async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
       const sortedTags = [...tagsResponse.data].sort((a, b) => {
         return new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime()
       })
-      return { version: sortedTags[0].name, releasedAt: sortedTags[0].commit.created_at }
+      const t = sortedTags[0]
+      return { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
     }
 
     return null
@@ -198,6 +244,7 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
         status: 'update-available',
         latestVersion: latest.version,
         latestReleasedAt: latest.releasedAt,
+        ...(latest.description && { description: latest.description }),
       }),
     )
 
@@ -209,7 +256,15 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     }
   } else {
     logger.debug(`Running latest version: ${currentVersion}`)
-    publishInfoIfChanged(mqtt, JSON.stringify({ currentVersion, status: 'up-to-date', releasedAt: latest.releasedAt }))
+    publishInfoIfChanged(
+      mqtt,
+      JSON.stringify({
+        currentVersion,
+        status: 'up-to-date',
+        releasedAt: latest.releasedAt,
+        ...(latest.description && { description: latest.description }),
+      }),
+    )
   }
 }
 

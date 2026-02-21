@@ -592,5 +592,107 @@ describe('version-checker', () => {
 
       stopChecker()
     })
+
+    it('should include description in update-available payload when release provides it', async () => {
+      const description = '## 1.6.4 (2026-01-28)\n\n#### Feature\n\n* some new feature\n\n'
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z', description }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(
+        JSON.stringify({
+          currentVersion: 'v1.6.3',
+          status: 'update-available',
+          latestVersion: 'v1.6.4',
+          latestReleasedAt: '2026-01-28T12:00:00Z',
+          description,
+        }),
+      )
+
+      stopChecker()
+    })
+
+    it('should include description in up-to-date payload when release provides it', async () => {
+      const description = '## 1.6.3 (2026-01-25)\n\n#### Fix\n\n* some bug fix\n\n'
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.3', released_at: '2026-01-25T12:00:00Z', description }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(
+        JSON.stringify({
+          currentVersion: 'v1.6.3',
+          status: 'up-to-date',
+          releasedAt: '2026-01-25T12:00:00Z',
+          description,
+        }),
+      )
+
+      stopChecker()
+    })
+
+    it('should omit description from payload when release has no description', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      const publishedPayload = JSON.parse(mockPublishInfo.mock.calls[0][0])
+      expect(publishedPayload).not.toHaveProperty('description')
+
+      stopChecker()
+    })
+
+    it('should include description from tag release object when falling back to tags endpoint', async () => {
+      const description = '## 1.6.4 from tag\n\n#### Feature\n\n* tag feature\n\n'
+      mockAxiosGet
+        .mockResolvedValueOnce({ data: [] }) // Empty releases
+        .mockResolvedValueOnce({
+          data: [
+            {
+              name: 'v1.6.4',
+              message: '',
+              target: 'abc123',
+              commit: {
+                id: 'abc123',
+                short_id: 'abc123',
+                created_at: '2026-01-28T12:00:00Z',
+                title: 'feat',
+                author_name: 'Author',
+                web_url: '',
+              },
+              release: { tag_name: 'v1.6.4', description },
+              protected: false,
+              created_at: null,
+            },
+          ],
+        })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(
+        JSON.stringify({
+          currentVersion: 'v1.6.3',
+          status: 'update-available',
+          latestVersion: 'v1.6.4',
+          latestReleasedAt: '2026-01-28T12:00:00Z',
+          description,
+        }),
+      )
+
+      stopChecker()
+    })
   })
 })
