@@ -481,11 +481,24 @@ export class ElectroluxClient {
       await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (error) {
       logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
-      const retryTimeout = setTimeout(async () => {
-        activeTimeouts.delete(retryTimeout)
-        await this.refreshTokens()
-      }, TOKEN_REFRESH_RETRY_DELAY_MS)
-      activeTimeouts.add(retryTimeout)
+
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        // Refresh token is rejected by the server — clear stored tokens and re-authenticate from scratch
+        logger.warn('Refresh token is invalid or expired, falling back to full re-authentication...')
+        this.accessToken = undefined
+        this.refreshToken = undefined
+        this.eat = undefined
+        this.iat = undefined
+        this.isLoggingIn = false
+        await this.login()
+      } else {
+        // Transient error (network issue, 5xx) — retry the refresh after a short delay
+        const retryTimeout = setTimeout(async () => {
+          activeTimeouts.delete(retryTimeout)
+          await this.refreshTokens()
+        }, TOKEN_REFRESH_RETRY_DELAY_MS)
+        activeTimeouts.add(retryTimeout)
+      }
     }
   }
 
