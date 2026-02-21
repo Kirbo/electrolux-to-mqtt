@@ -887,6 +887,7 @@ describe('electrolux', () => {
         connect: vi.fn(),
         disconnect: vi.fn(),
         generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
       } as unknown as IMqtt
 
       client = new ElectroluxClient(mockMqtt)
@@ -1003,6 +1004,7 @@ describe('electrolux', () => {
         connect: vi.fn(),
         disconnect: vi.fn(),
         generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
       } as unknown as IMqtt
 
       mockAxiosInstance = {
@@ -1142,6 +1144,7 @@ describe('electrolux', () => {
         connect: vi.fn(),
         disconnect: vi.fn(),
         generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
       } as unknown as IMqtt
 
       mockAxiosInstance = {

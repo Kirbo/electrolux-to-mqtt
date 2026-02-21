@@ -318,7 +318,7 @@ const main = async () => {
   logger.info(`Appliance discovery running every ${applianceDiscoveryInterval / 1000 / 60} minutes to detect changes`)
 
   // Start version checker
-  stopVersionChecker = startVersionChecker(currentVersion, userHash)
+  stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt)
 }
 
 main()

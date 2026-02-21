@@ -23,7 +23,11 @@ vi.mock('../src/config.js', () => ({
 }))
 
 describe('version-checker', () => {
-  let startVersionChecker: (currentVersion: string, userHash: string) => () => void
+  let startVersionChecker: (
+    currentVersion: string,
+    userHash: string,
+    mqtt?: { publishInfo: (message: string) => void },
+  ) => () => void
   let mockAxiosGet: ReturnType<typeof vi.fn>
   let mockAxiosPost: ReturnType<typeof vi.fn>
 
@@ -462,6 +466,129 @@ describe('version-checker', () => {
 
       // Should have attempted both telemetry and ntfy
       expect(mockAxiosPost).toHaveBeenCalled()
+
+      stopChecker()
+    })
+  })
+
+  describe('MQTT version info publishing', () => {
+    let mockPublishInfo: ReturnType<typeof vi.fn>
+    let mockMqtt: { publishInfo: (message: string) => void }
+
+    beforeEach(() => {
+      mockPublishInfo = vi.fn()
+      mockMqtt = { publishInfo: mockPublishInfo }
+    })
+
+    it('should publish up-to-date status when running the latest version', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(
+        JSON.stringify({ currentVersion: 'v1.6.3', status: 'up-to-date', releasedAt: '2026-01-28T12:00:00Z' }),
+      )
+
+      stopChecker()
+    })
+
+    it('should publish update-available status with latestVersion when a newer version is found', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(
+        JSON.stringify({
+          currentVersion: 'v1.6.3',
+          status: 'update-available',
+          latestVersion: 'v1.6.4',
+          latestReleasedAt: '2026-01-28T12:00:00Z',
+        }),
+      )
+
+      stopChecker()
+    })
+
+    it('should publish development status and skip version fetch for development builds', async () => {
+      const stopChecker = startVersionChecker('development', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(
+        JSON.stringify({ currentVersion: 'development', status: 'development' }),
+      )
+      // Should not have contacted GitLab or telemetry
+      expect(mockAxiosGet).not.toHaveBeenCalled()
+      expect(mockAxiosPost).not.toHaveBeenCalled()
+
+      stopChecker()
+    })
+
+    it('should not call publishInfo when mqtt is not provided (backward-compatible)', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      // Call without mqtt argument
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).not.toHaveBeenCalled()
+
+      stopChecker()
+    })
+
+    it('should publish when status changes between periodic checks', async () => {
+      // First check: up-to-date
+      mockAxiosGet
+        .mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }] })
+        // Second check (after interval): update available
+        .mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-02-01T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockPublishInfo).toHaveBeenCalledTimes(1)
+      expect(mockPublishInfo).toHaveBeenLastCalledWith(
+        JSON.stringify({ currentVersion: 'v1.6.3', status: 'up-to-date', releasedAt: '2026-01-28T12:00:00Z' }),
+      )
+
+      await vi.advanceTimersByTimeAsync(3600 * 1000)
+      expect(mockPublishInfo).toHaveBeenCalledTimes(2)
+      expect(mockPublishInfo).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          currentVersion: 'v1.6.3',
+          status: 'update-available',
+          latestVersion: 'v1.6.4',
+          latestReleasedAt: '2026-02-01T12:00:00Z',
+        }),
+      )
+
+      stopChecker()
+    })
+
+    it('should not publish again when status is unchanged between periodic checks', async () => {
+      // Both checks return the same up-to-date result
+      mockAxiosGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockPublishInfo).toHaveBeenCalledTimes(1)
+
+      // Second check — same result, should not publish again
+      await vi.advanceTimersByTimeAsync(3600 * 1000)
+      expect(mockPublishInfo).toHaveBeenCalledTimes(1)
 
       stopChecker()
     })

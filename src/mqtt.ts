@@ -60,6 +60,7 @@ export interface IMqtt {
   topicPrefix: string
   resolveApplianceTopic(applianceId: string): string
   publish(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
+  publishInfo(message: string, options?: mqtt.IClientPublishOptions): void
   subscribe(applianceId: string, callback: (applianceId: string, message: Buffer) => void): void
   unsubscribe(applianceId: string): void
   disconnect(): void
@@ -97,6 +98,10 @@ class Mqtt {
 
   public publish(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {
     this._publish(`${this.topicPrefix}/${applianceId}`, message, options)
+  }
+
+  public publishInfo(message: string, options?: mqtt.IClientPublishOptions) {
+    this._publish(`${this.topicPrefix}/info`, message, { retain: true, qos: 2, ...options })
   }
 
   public autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {

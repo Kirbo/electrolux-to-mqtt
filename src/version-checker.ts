@@ -1,6 +1,7 @@
 import axios from 'axios'
 import config from './config.js'
 import createLogger from './logger.js'
+import type { IMqtt } from './mqtt.js'
 
 const logger = createLogger('version')
 
@@ -9,6 +10,9 @@ const GITLAB_API = 'https://gitlab.com/api/v4'
 
 // Track whether we've already notified about a newer version in this session
 let hasNotifiedVersion: string | null = null
+
+// Track last published MQTT info payload to avoid redundant publishes
+let lastPublishedInfo: string | null = null
 
 type GitLabTag = {
   name: string
@@ -46,10 +50,15 @@ function compareVersions(v1: string, v2: string): number {
   return 0
 }
 
+type LatestVersionInfo = {
+  version: string
+  releasedAt: string
+}
+
 /**
  * Fetch the latest version from GitLab releases or tags
  */
-async function fetchLatestVersion(): Promise<string | null> {
+async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
   try {
     // Try releases first
     const releasesUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/releases`
@@ -65,7 +74,7 @@ async function fetchLatestVersion(): Promise<string | null> {
       const sortedReleases = [...releasesResponse.data].sort((a, b) => {
         return new Date(b.released_at).getTime() - new Date(a.released_at).getTime()
       })
-      return sortedReleases[0].tag_name
+      return { version: sortedReleases[0].tag_name, releasedAt: sortedReleases[0].released_at }
     }
 
     // Fallback to tags if no releases found
@@ -82,7 +91,7 @@ async function fetchLatestVersion(): Promise<string | null> {
       const sortedTags = [...tagsResponse.data].sort((a, b) => {
         return new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime()
       })
-      return sortedTags[0].name
+      return { version: sortedTags[0].name, releasedAt: sortedTags[0].commit.created_at }
     }
 
     return null
@@ -148,41 +157,59 @@ async function sendTelemetry(userHash: string, version: string): Promise<void> {
 /**
  * Check if a newer version is available and log if found
  */
-async function checkForUpdates(currentVersion: string, userHash: string): Promise<void> {
+function publishInfoIfChanged(mqtt: IMqtt | undefined, message: string): void {
+  if (!mqtt || message === lastPublishedInfo) return
+  lastPublishedInfo = message
+  mqtt.publishInfo(message)
+}
+
+async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: IMqtt): Promise<void> {
   // Skip check if running development version
   if (currentVersion === 'development') {
     logger.debug('Running development version, skipping version check')
+    publishInfoIfChanged(mqtt, JSON.stringify({ currentVersion, status: 'development' }))
     return
   }
 
   // Send telemetry
   await sendTelemetry(userHash, currentVersion)
 
-  const latestVersion = await fetchLatestVersion()
+  const latest = await fetchLatestVersion()
 
-  if (!latestVersion) {
+  if (!latest) {
     logger.debug('Unable to determine latest version')
     return
   }
 
   // Compare versions
-  const comparison = compareVersions(currentVersion, latestVersion)
+  const comparison = compareVersions(currentVersion, latest.version)
 
   if (comparison < 0) {
     // Current version is older
-    const versionTag = latestVersion.startsWith('v') ? latestVersion : `v${latestVersion}`
+    const versionTag = latest.version.startsWith('v') ? latest.version : `v${latest.version}`
     logger.info(
       `A newer version of the application available, please check https://gitlab.com/${GITLAB_REPO}/-/releases/${versionTag}`,
     )
 
+    publishInfoIfChanged(
+      mqtt,
+      JSON.stringify({
+        currentVersion,
+        status: 'update-available',
+        latestVersion: latest.version,
+        latestReleasedAt: latest.releasedAt,
+      }),
+    )
+
     // Send ntfy notification if configured and we haven't already notified about this version
     const webhookUrl = config.versionCheck?.ntfyWebhookUrl
-    if (webhookUrl && hasNotifiedVersion !== latestVersion) {
-      await sendNtfyNotification(currentVersion, latestVersion, webhookUrl)
-      hasNotifiedVersion = latestVersion
+    if (webhookUrl && hasNotifiedVersion !== latest.version) {
+      await sendNtfyNotification(currentVersion, latest.version, webhookUrl)
+      hasNotifiedVersion = latest.version
     }
   } else {
     logger.debug(`Running latest version: ${currentVersion}`)
+    publishInfoIfChanged(mqtt, JSON.stringify({ currentVersion, status: 'up-to-date', releasedAt: latest.releasedAt }))
   }
 }
 
@@ -190,7 +217,7 @@ async function checkForUpdates(currentVersion: string, userHash: string): Promis
  * Start the version check interval
  * @returns A function to stop the interval
  */
-export function startVersionChecker(currentVersion: string, userHash: string): () => void {
+export function startVersionChecker(currentVersion: string, userHash: string, mqtt?: IMqtt): () => void {
   // Get check interval from config, default to 3600 seconds (1 hour)
   const checkIntervalSeconds = config.versionCheck?.checkInterval ?? 3600
   const checkIntervalMs = checkIntervalSeconds * 1000
@@ -198,13 +225,13 @@ export function startVersionChecker(currentVersion: string, userHash: string): (
   logger.debug(`Version check interval set to ${checkIntervalSeconds} seconds`)
 
   // Check immediately on start
-  checkForUpdates(currentVersion, userHash).catch((error) => {
+  checkForUpdates(currentVersion, userHash, mqtt).catch((error) => {
     logger.debug('Version check failed:', error)
   })
 
   // Set up periodic check
   const interval = setInterval(() => {
-    checkForUpdates(currentVersion, userHash).catch((error) => {
+    checkForUpdates(currentVersion, userHash, mqtt).catch((error) => {
       logger.debug('Version check failed:', error)
     })
   }, checkIntervalMs)
