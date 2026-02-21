@@ -243,7 +243,7 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
         currentVersion,
         status: 'update-available',
         latestVersion: latest.version,
-        latestReleasedAt: latest.releasedAt,
+        releasedAt: latest.releasedAt,
         ...(latest.description && { description: latest.description }),
       }),
     )

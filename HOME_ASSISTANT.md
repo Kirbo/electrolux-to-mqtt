@@ -18,7 +18,7 @@ When an update is found, it will become e.g.:
   "currentVersion": "1.10.0",
   "status": "update-available",
   "latestVersion": "1.10.1",
-  "latestReleasedAt": "2026-02-21T11:12:43.317Z",
+  "releasedAt": "2026-02-21T11:12:43.317Z",
   "description": "## 1.10.1 (2026-02-21)\n\n#### Bug Fixes\n\n* re-fetch refresh token if its invalid (e70de589)"
 }
 ```
@@ -44,11 +44,11 @@ actions:
       message: >-
         A new version {{ trigger.payload_json.latestVersion | default('unknown')
         }} has been released {{
-          trigger.payload_json.latestReleasedAt
+          trigger.payload_json.releasedAt
           | as_datetime
           | as_local
           | relative_time
-          if trigger.payload_json.latestReleasedAt is defined
+          if trigger.payload_json.releasedAt is defined
           else 'unknown'
         }}. You're running version {{ trigger.payload_json.currentVersion |
         default('unknown') }}.
@@ -59,11 +59,11 @@ actions:
       message: >-
         A new version {{ trigger.payload_json.latestVersion | default('unknown')
         }} has been released {{
-          trigger.payload_json.latestReleasedAt
+          trigger.payload_json.releasedAt
           | as_datetime
           | as_local
           | relative_time
-          if trigger.payload_json.latestReleasedAt is defined
+          if trigger.payload_json.releasedAt is defined
           else 'unknown'
         }}. You're running version {{ trigger.payload_json.currentVersion |
         default('unknown') }}.

@@ -510,7 +510,7 @@ describe('version-checker', () => {
           currentVersion: 'v1.6.3',
           status: 'update-available',
           latestVersion: 'v1.6.4',
-          latestReleasedAt: '2026-01-28T12:00:00Z',
+          releasedAt: '2026-01-28T12:00:00Z',
         }),
       )
 
@@ -569,7 +569,7 @@ describe('version-checker', () => {
           currentVersion: 'v1.6.3',
           status: 'update-available',
           latestVersion: 'v1.6.4',
-          latestReleasedAt: '2026-02-01T12:00:00Z',
+          releasedAt: '2026-02-01T12:00:00Z',
         }),
       )
 
@@ -608,7 +608,7 @@ describe('version-checker', () => {
           currentVersion: 'v1.6.3',
           status: 'update-available',
           latestVersion: 'v1.6.4',
-          latestReleasedAt: '2026-01-28T12:00:00Z',
+          releasedAt: '2026-01-28T12:00:00Z',
           description,
         }),
       )
@@ -617,9 +617,8 @@ describe('version-checker', () => {
     })
 
     it('should include description in up-to-date payload when release provides it', async () => {
-      const description = '## 1.6.3 (2026-01-25)\n\n#### Fix\n\n* some bug fix\n\n'
       mockAxiosGet.mockResolvedValueOnce({
-        data: [{ tag_name: 'v1.6.3', released_at: '2026-01-25T12:00:00Z', description }],
+        data: [{ tag_name: 'v1.6.3', released_at: '2026-01-25T12:00:00Z' }],
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
@@ -631,7 +630,6 @@ describe('version-checker', () => {
           currentVersion: 'v1.6.3',
           status: 'up-to-date',
           releasedAt: '2026-01-25T12:00:00Z',
-          description,
         }),
       )
 
@@ -687,7 +685,7 @@ describe('version-checker', () => {
           currentVersion: 'v1.6.3',
           status: 'update-available',
           latestVersion: 'v1.6.4',
-          latestReleasedAt: '2026-01-28T12:00:00Z',
+          releasedAt: '2026-01-28T12:00:00Z',
           description,
         }),
       )
