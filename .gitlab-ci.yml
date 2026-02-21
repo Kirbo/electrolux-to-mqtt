@@ -470,7 +470,7 @@ update telemetry backend:
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
-        - telemetry-backend/**
+        - telemetry-backend/**/*
       when: on_success
     - when: never
   cache: []

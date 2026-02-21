@@ -228,13 +228,21 @@ app.get('/telemetry', async (_req: Request, res: Response) => {
       {} as Record<string, number>,
     )
 
-    // Format response
+    // Format response — sort by semantic version descending
     const versionsList = Object.entries(versionCounts)
       .map(([version, count]) => ({
         version,
         count,
       }))
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => {
+        const partsA = a.version.replace(/^v/, '').split('.').map(Number)
+        const partsB = b.version.replace(/^v/, '').split('.').map(Number)
+        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+          const diff = (partsB[i] || 0) - (partsA[i] || 0)
+          if (diff !== 0) return diff
+        }
+        return 0
+      })
 
     const responsePayload = {
       total,
