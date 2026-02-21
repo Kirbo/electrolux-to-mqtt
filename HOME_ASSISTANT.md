@@ -1,5 +1,28 @@
 # Home Assistant
 
+## MQTT topic info
+
+The application will create a new topic under `{topic_prefix}appliances/info`, which by default will be `electrolux_appliances/info`.
+The default payload will be e.g.:
+```json
+{
+  "currentVersion": "1.10.0",
+  "status": "up-to-date",
+  "releasedAt": "2026-02-21T11:07:02.068Z"
+}
+```
+
+When an update is found, it will become e.g.:
+```json
+{
+  "currentVersion": "1.10.0",
+  "status": "update-available",
+  "latestVersion": "1.10.1",
+  "latestReleasedAt": "2026-02-21T11:12:43.317Z",
+  "description": "## 1.10.1 (2026-02-21)\n\n#### Bug Fixes\n\n* re-fetch refresh token if its invalid (e70de589)"
+}
+```
+
 ## Automation examples
 
 ### When the MQTT topic status changes to "update-available"
