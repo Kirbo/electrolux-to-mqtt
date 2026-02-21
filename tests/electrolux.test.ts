@@ -48,12 +48,14 @@ interface MockAppliance {
   getModelName: () => string
 }
 
+const loggerWarnSpy = vi.hoisted(() => vi.fn())
+
 vi.mock('axios')
 vi.mock('../src/logger.js', () => ({
   default: () => ({
     debug: vi.fn(),
     info: vi.fn(),
-    warn: vi.fn(),
+    warn: loggerWarnSpy,
     error: vi.fn(),
   }),
 }))
@@ -1833,6 +1835,189 @@ describe('electrolux', () => {
         const result = await client.getAppliances()
 
         expect(result).toBeUndefined()
+      })
+    })
+
+    describe('429 Rate Limit Handling', () => {
+      // Test config: refreshInterval=30, applianceDiscoveryInterval=300
+      // With 0 known appliances → numAppliances=max(1,0)=1:
+      //   stateCallsPerDay = ceil(86400/30 * 1) = 2880
+      //   discoveryCallsPerDay = ceil(86400/300) = 288 → total 3168 < 5000 (burst path)
+      // With 2 known appliances (from mockAppliancesResponse):
+      //   stateCallsPerDay = ceil(86400/30 * 2) = 5760 → total 6048 > 5000 (suggestion path)
+      //   minRefreshInterval = ceil(86400*2 / (5000-288)) = ceil(172800/4712) = 37
+
+      let isAxiosErrorSpy: ReturnType<typeof vi.spyOn>
+
+      const make429Error = () => {
+        const error = new Error('Too Many Requests') as AxiosError
+        error.response = { status: 429 } as AxiosResponse
+        return error
+      }
+
+      beforeEach(() => {
+        loggerWarnSpy.mockClear()
+        isAxiosErrorSpy = vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+      })
+
+      afterEach(() => {
+        isAxiosErrorSpy.mockRestore()
+      })
+
+      it('should return undefined when the API responds with 429', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        const result = await client.getAppliances()
+
+        expect(result).toBeUndefined()
+      })
+
+      it('should not retry the request after 429', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        // Unlike 403, a 429 must not trigger a second attempt
+        expect(mockAxiosInstance.get).toHaveBeenCalledTimes(1)
+      })
+
+      it('should not trigger a token refresh after 429', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        expect(mockAxiosInstance.post).not.toHaveBeenCalled()
+      })
+
+      it('should log a warning that names both configurable intervals', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('429'))
+        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('electrolux.refreshInterval'))
+        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('electrolux.applianceDiscoveryInterval'))
+      })
+
+      it('should log the current refreshInterval, applianceDiscoveryInterval and appliance count', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const settingsLine = warnCalls.find((msg) => msg.includes('Current settings:'))
+
+        expect(settingsLine).toBeDefined()
+        expect(settingsLine).toContain(`refreshInterval=${client.refreshInterval}s`)
+        expect(settingsLine).toContain('applianceDiscoveryInterval=')
+        expect(settingsLine).toContain('monitored appliances=')
+      })
+
+      it('should log all three Electrolux API rate limits', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const limitsLine = warnCalls.find((msg) => msg.includes('5000 calls/day'))
+
+        expect(limitsLine).toBeDefined()
+        expect(limitsLine).toContain('10 calls/second')
+        expect(limitsLine).toContain('5 concurrent calls')
+      })
+
+      it('should log estimated daily call breakdown (state polls + discovery polls)', async () => {
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const estimatedLine = warnCalls.find((msg) => msg.includes('Estimated API calls'))
+
+        expect(estimatedLine).toBeDefined()
+        expect(estimatedLine).toContain('state polls')
+        expect(estimatedLine).toContain('discovery polls')
+      })
+
+      it('should calculate correct daily estimate with no prior known appliances (uses 1 as minimum)', async () => {
+        // previousAppliances.size = 0 → numAppliances = max(1,0) = 1
+        // stateCallsPerDay = ceil(86400/30 * 1) = 2880
+        // discoveryCallsPerDay = ceil(86400/300) = 288
+        // estimatedCallsPerDay = 3168
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const estimatedLine = warnCalls.find((msg) => msg.includes('Estimated API calls'))
+
+        expect(estimatedLine).toContain('~3168')
+        expect(estimatedLine).toContain('~2880') // state polls
+        expect(estimatedLine).toContain('~288') // discovery polls
+      })
+
+      it('should warn about burst limits (not daily limit) when estimated calls are within 5000/day', async () => {
+        // 1 appliance, 30s refresh → 3168 calls/day < 5000 → burst warning path
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+
+        await client.initialize()
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const burstLine = warnCalls.find((msg) => msg.includes('within the'))
+
+        expect(burstLine).toBeDefined()
+        expect(burstLine).toContain('bursting')
+        // Must NOT suggest a minimum interval on the burst path
+        expect(warnCalls.find((msg) => msg.includes('Suggested fix:'))).toBeUndefined()
+      })
+
+      it('should suggest a minimum refreshInterval when 2 appliances push calls over 5000/day', async () => {
+        // First call succeeds and populates previousAppliances with 2 appliances
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
+        await client.initialize()
+        await client.getAppliances()
+        loggerWarnSpy.mockClear()
+
+        // With 2 appliances and refreshInterval=30:
+        //   stateCallsPerDay = ceil(86400/30 * 2) = 5760, total = 6048 > 5000
+        //   minRefreshInterval = ceil(86400*2 / (5000-288)) = ceil(172800/4712) = 37
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const suggestionLine = warnCalls.find((msg) => msg.includes('Suggested fix:'))
+
+        expect(suggestionLine).toBeDefined()
+        expect(suggestionLine).toContain('electrolux.refreshInterval')
+        expect(suggestionLine).toContain('37s') // ceil(172800/4712) = 37
+        // Must NOT show the burst warning on this path
+        expect(warnCalls.find((msg) => msg.includes('within the'))).toBeUndefined()
+      })
+
+      it('should use the correct appliance count in the suggestion when appliances are known', async () => {
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
+        await client.initialize()
+        await client.getAppliances()
+        loggerWarnSpy.mockClear()
+
+        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
+        await client.getAppliances()
+
+        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const settingsLine = warnCalls.find((msg) => msg.includes('Current settings:'))
+        const suggestionLine = warnCalls.find((msg) => msg.includes('Suggested fix:'))
+
+        expect(settingsLine).toContain('monitored appliances=2')
+        expect(suggestionLine).toContain('2 appliances')
       })
     })
   })

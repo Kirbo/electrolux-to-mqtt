@@ -530,6 +530,54 @@ export class ElectroluxClient {
     }
   }
 
+  private logRateLimitAdvice(): void {
+    const RATE_LIMIT_CALLS_PER_DAY = 5000
+    const SECONDS_PER_DAY = 86400
+    const numAppliances = Math.max(1, this.previousAppliances.size)
+    const currentRefreshInterval = this.refreshInterval
+    const currentDiscoveryInterval = config.electrolux.applianceDiscoveryInterval ?? 300
+
+    // Recurring calls per day:
+    // - State polling: numAppliances × (86400 / refreshInterval)
+    // - Appliance discovery: 86400 / applianceDiscoveryInterval
+    const stateCallsPerDay = Math.ceil((SECONDS_PER_DAY / currentRefreshInterval) * numAppliances)
+    const discoveryCallsPerDay = Math.ceil(SECONDS_PER_DAY / currentDiscoveryInterval)
+    const estimatedCallsPerDay = stateCallsPerDay + discoveryCallsPerDay
+
+    // Minimum refreshInterval so that state + discovery calls stay within the daily limit
+    const availableForStatePolls = RATE_LIMIT_CALLS_PER_DAY - discoveryCallsPerDay
+    const minRefreshInterval = Math.ceil((SECONDS_PER_DAY * numAppliances) / availableForStatePolls)
+
+    logger.warn(
+      'Received 429 Too Many Requests from the Electrolux API — you are being rate limited. ' +
+        'Please increase `electrolux.refreshInterval` or `electrolux.applianceDiscoveryInterval` in your configuration.',
+    )
+    logger.warn(
+      `Current settings: refreshInterval=${currentRefreshInterval}s, ` +
+        `applianceDiscoveryInterval=${currentDiscoveryInterval}s, ` +
+        `monitored appliances=${numAppliances}`,
+    )
+    logger.warn(
+      `Estimated API calls per day with current settings: ~${estimatedCallsPerDay} ` +
+        `(state polls: ~${stateCallsPerDay}, discovery polls: ~${discoveryCallsPerDay})`,
+    )
+    logger.warn(
+      `Electrolux API rate limits: ${RATE_LIMIT_CALLS_PER_DAY} calls/day · 10 calls/second · 5 concurrent calls`,
+    )
+    if (estimatedCallsPerDay > RATE_LIMIT_CALLS_PER_DAY) {
+      logger.warn(
+        `Suggested fix: set electrolux.refreshInterval to at least ${minRefreshInterval}s ` +
+          `(with ${numAppliances} appliance${numAppliances === 1 ? '' : 's'} and applianceDiscoveryInterval=${currentDiscoveryInterval}s)`,
+      )
+    } else {
+      logger.warn(
+        `Your estimated daily calls (~${estimatedCallsPerDay}) are within the ${RATE_LIMIT_CALLS_PER_DAY}/day limit — ` +
+          `the 429 may be due to bursting (10 calls/second or 5 concurrent calls). ` +
+          `Consider increasing refreshInterval above ${currentRefreshInterval}s as a precaution.`,
+      )
+    }
+  }
+
   private async handleApiRequest<T>(requestFn: () => Promise<T>, errorMessage: string): Promise<T | undefined> {
     try {
       return await requestFn()
@@ -544,6 +592,8 @@ export class ElectroluxClient {
         } catch (retryError) {
           logger.error(`${errorMessage} after token refresh: ${formatAxiosError(retryError)}`)
         }
+      } else if (axios.isAxiosError(error) && error.response?.status === 429) {
+        this.logRateLimitAdvice()
       } else {
         logger.error(`${errorMessage}: ${formatAxiosError(error)}`)
       }
