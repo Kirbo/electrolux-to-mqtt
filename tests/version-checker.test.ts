@@ -477,7 +477,7 @@ describe('version-checker', () => {
 
     beforeEach(() => {
       mockPublishInfo = vi.fn()
-      mockMqtt = { publishInfo: mockPublishInfo }
+      mockMqtt = { publishInfo: mockPublishInfo as (message: string) => void }
     })
 
     it('should publish up-to-date status when running the latest version', async () => {
