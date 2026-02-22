@@ -240,6 +240,8 @@ docker cp $(docker ps --filter name=electrolux-to-mqtt --format '{{.Names}}' | h
 
 # Or specify the container name explicitly
 docker cp <container-name>:/app/CHANGELOG.md ./CHANGELOG.md
+
+cat CHANGELOG.md
 ```
 
 ## Contributing
