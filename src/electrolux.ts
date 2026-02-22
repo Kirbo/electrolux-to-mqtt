@@ -344,10 +344,9 @@ export class ElectroluxClient {
             .split('.')
             .slice(0, 3)
             .join('.')
-          const tokenPayload = JSON.parse(Buffer.from(this.accessToken.split('.')[1], 'base64').toString('utf-8'))
-          this.eat = new Date(tokenPayload.exp * 1000)
-          this.iat = new Date(tokenPayload.iat * 1000)
-          logger.debug('tokenPayload', tokenPayload)
+          const { eat, iat } = this.parseAccessTokenPayload(this.accessToken)
+          this.eat = eat
+          this.iat = iat
         }
 
         if (refreshTokenCookie) {
@@ -359,21 +358,9 @@ export class ElectroluxClient {
         throw new Error('Failed to retrieve access or refresh token')
       }
 
-      const tokens: Partial<Tokens> = {
-        accessToken: this.accessToken,
-        refreshToken: this.refreshToken,
-        eat: this.eat.getTime() / 1000,
-        iat: this.iat.getTime() / 1000,
-      }
-
+      const tokens = this.buildTokensObject()
       logger.info('Logged in, Tokens', this.retainTokensForOutput(tokens))
-
-      const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
-      try {
-        fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
-      } catch (writeError) {
-        logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
-      }
+      this.saveTokens(tokens)
 
       this.createApiClient()
 
@@ -396,6 +383,33 @@ export class ElectroluxClient {
 
   private readonly sanitizeToken = (token: string) => {
     return token.replace('s%3A', '')
+  }
+
+  private parseAccessTokenPayload(accessToken: string): { eat: Date; iat: Date } {
+    const tokenPayload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString('utf-8'))
+    return {
+      eat: new Date(tokenPayload.exp * 1000),
+      iat: new Date(tokenPayload.iat * 1000),
+    }
+  }
+
+  private buildTokensObject(): Partial<Tokens> {
+    return {
+      accessToken: this.accessToken,
+      refreshToken: this.refreshToken,
+      eat: this.eat ? this.eat.getTime() / 1000 : undefined,
+      iat: this.iat ? this.iat.getTime() / 1000 : undefined,
+    }
+  }
+
+  private saveTokens(tokens: Partial<Tokens>): void {
+    const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
+      logger.debug('Tokens saved to', filePath)
+    } catch (writeError) {
+      logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
+    }
   }
 
   private readonly retainTokensForOutput = (tokens: Partial<Tokens>) => {
@@ -448,28 +462,15 @@ export class ElectroluxClient {
         throw new Error('Access token is undefined')
       }
 
-      const tokenPayload = JSON.parse(Buffer.from(this.accessToken.split('.')[1], 'base64').toString('utf-8'))
-      this.eat = new Date(tokenPayload.exp * 1000)
-      this.iat = new Date(tokenPayload.iat * 1000)
+      const { eat, iat } = this.parseAccessTokenPayload(this.accessToken)
+      this.eat = eat
+      this.iat = iat
 
       this.isLoggedIn = true
 
-      const tokens: Partial<Tokens> = {
-        accessToken: this.accessToken,
-        refreshToken: this.refreshToken,
-        eat: this.eat.getTime() / 1000,
-        iat: this.iat.getTime() / 1000,
-      }
-
+      const tokens = this.buildTokensObject()
       logger.info('Refreshed tokens', this.retainTokensForOutput(tokens))
-
-      const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
-      try {
-        fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
-        logger.debug('Tokens saved to', filePath)
-      } catch (writeError) {
-        logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
-      }
+      this.saveTokens(tokens)
 
       // Recreate API client with new access token
       await this.createApiClient()
