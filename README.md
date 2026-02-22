@@ -230,15 +230,17 @@ pnpm test:watch
 ```
 </details>
 
-## Viewing the changelog from a running container
+## Viewing the changelog
 
-The Docker image uses a hardened base with no shell. To print the changelog to the container logs while it's running, send a `SIGUSR2` signal:
+The `CHANGELOG.md` is baked into the Docker image at `/app/CHANGELOG.md`. To extract it from a running container:
 
 ```bash
-docker kill --signal=SIGUSR2 electrolux-to-mqtt
-```
+# Auto-detect the container name (assumes it contains "electrolux-to-mqtt")
+docker cp $(docker ps --filter name=electrolux-to-mqtt --format '{{.Names}}' | head -1):/app/CHANGELOG.md ./CHANGELOG.md
 
-The changelog will appear in the container's log output.
+# Or specify the container name explicitly
+docker cp <container-name>:/app/CHANGELOG.md ./CHANGELOG.md
+```
 
 ## Contributing
 
