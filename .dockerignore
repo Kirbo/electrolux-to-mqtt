@@ -45,6 +45,7 @@ vitest.setup.ts
 # Documentation
 *.md
 !README.md
+!CHANGELOG.md
 docs
 LICENSE
 CONTRIBUTING.md

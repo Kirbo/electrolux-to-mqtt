@@ -100,7 +100,7 @@ bump version:
     paths:
       - .version-unreleased
       - build.env
-      - CHANGELOG.md
+      - UNRELEASED-CHANGELOG.md
       - sonar-project.properties
     expire_in: never
   before_script:
@@ -109,11 +109,11 @@ bump version:
     - git fetch --tags --force || true
     - git fetch origin "$CI_DEFAULT_BRANCH" || true
   script:
-    - semantic-release --version-file --allow-no-changes --changelog CHANGELOG.md --dry
+    - semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
     - export VERSION=$(cat .version-unreleased)
     - echo "VERSION=${VERSION}" > build.env
     - echo "sonar.projectVersion=${VERSION}" >> sonar-project.properties
-    - cat CHANGELOG.md
+    - cat UNRELEASED-CHANGELOG.md
 
 install dependencies:
   stage: init
@@ -377,6 +377,22 @@ try to build docker images:
 
 ################################################################# RELEASE STAGE JOBS ##################################################################
 
+generate changelog:
+  image: kirbownz/combine-changelogs:latest
+  stage: build
+  interruptible: true
+  allow_failure: false
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: bump version
+      artifacts: true
+  artifacts:
+    paths:
+      - CHANGELOG.md
+  script:
+    - combine-changelogs -include UNRELEASED-CHANGELOG.md
+
 build and deploy docker images:
   stage: release
   image: docker:latest
@@ -405,6 +421,8 @@ build and deploy docker images:
       artifacts: true
     - job: sonarcloud-check
       artifacts: false
+    - job: generate changelog
+      artifacts: true
   before_script:
     - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
     - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
@@ -461,7 +479,7 @@ create gitlab release:
     - git fetch --tags --force || true
     - git fetch origin "$CI_DEFAULT_BRANCH" || true
   script:
-    - semantic-release
+    - semantic-release --allow-no-changes
 
 update telemetry backend:
   stage: release

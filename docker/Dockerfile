@@ -36,7 +36,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Copy only dependency manifests first for better layer caching
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml CHANGELOG.md ./
 
 # Install dependencies (including dev dependencies for building)
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
@@ -81,6 +81,7 @@ RUN corepack enable && \
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/CHANGELOG.md ./CHANGELOG.md
 
 
 
@@ -124,6 +125,7 @@ WORKDIR /app
 COPY --from=purge --chown=node:node /app/node_modules ./node_modules
 COPY --from=purge --chown=node:node /app/package.json ./package.json
 COPY --from=purge --chown=node:node /app/dist ./dist
+COPY --from=purge --chown=node:node /app/CHANGELOG.md ./CHANGELOG.md
 
 # Add signal handling for graceful shutdown
 STOPSIGNAL SIGTERM
