@@ -43,12 +43,9 @@ default:
   tags:
     - macos
 
-################################################################### INIT STAGE JOBS ###################################################################
+################################################################### SHARED RULES ######################################################################
 
-initialise variables:
-  stage: init
-  image: alpine:latest
-  interruptible: true
+.rules_code_changes: &rules_code_changes
   rules:
     - if: '$CI_COMMIT_TAG == null'
       changes:
@@ -65,6 +62,30 @@ initialise variables:
         - vitest.setup.ts
       when: on_success
     - when: never
+
+.rules_node_changes: &rules_node_changes
+  rules:
+    - if: '$CI_COMMIT_TAG == null'
+      changes:
+        - .gitlab-ci.yml
+        - biome.jsonc
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
+      when: on_success
+    - when: never
+
+################################################################### INIT STAGE JOBS ###################################################################
+
+initialise variables:
+  stage: init
+  image: alpine:latest
+  interruptible: true
+  <<: *rules_code_changes
   cache: []
   artifacts:
     reports:
@@ -79,22 +100,7 @@ bump version:
     name: registry.gitlab.com/go-semantic-release/semantic-release:latest
     entrypoint: [""]
   interruptible: true
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-      changes:
-        - .gitlab-ci.yml
-        - docker-compose*.yml
-        - Dockerfile
-        - entrypoint.sh
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tests/**/*
-        - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
-      when: on_success
-    - when: never
+  <<: *rules_code_changes
   cache: []
   artifacts:
     paths:
@@ -119,20 +125,7 @@ install dependencies:
   stage: init
   image: node:${NODE_VERSION}
   interruptible: true
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-      changes:
-        - .gitlab-ci.yml
-        - biome.jsonc
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tests/**/*
-        - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
-      when: on_success
-    - when: never
+  <<: *rules_node_changes
   cache:
     key:
       prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
@@ -164,20 +157,7 @@ test:
   stage: test
   image: node:${NODE_VERSION}
   interruptible: true
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-      changes:
-        - .gitlab-ci.yml
-        - biome.jsonc
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tests/**/*
-        - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
-      when: on_success
-    - when: never
+  <<: *rules_node_changes
   cache:
     key:
       prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
@@ -214,20 +194,7 @@ lint:
   stage: test
   image: node:${NODE_VERSION}
   interruptible: true
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-      changes:
-        - .gitlab-ci.yml
-        - biome.jsonc
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tests/**/*
-        - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
-      when: on_success
-    - when: never
+  <<: *rules_node_changes
   cache:
     key:
       prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
@@ -288,20 +255,7 @@ audit:
 
 sonarcloud-check:
   stage: test
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-      changes:
-        - .gitlab-ci.yml
-        - biome.jsonc
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tests/**/*
-        - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
-      when: on_success
-    - when: never
+  <<: *rules_node_changes
   image:
     name: sonarsource/sonar-scanner-cli:latest
     entrypoint: [""]
@@ -382,22 +336,7 @@ generate changelog:
   stage: build
   interruptible: true
   allow_failure: false
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-      changes:
-        - .gitlab-ci.yml
-        - docker-compose*.yml
-        - Dockerfile
-        - entrypoint.sh
-        - package.json
-        - pnpm-lock.yaml
-        - src/**/*
-        - tests/**/*
-        - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
-      when: on_success
-    - when: never
+  <<: *rules_code_changes
   needs:
     - job: initialise variables
       artifacts: true
