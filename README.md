@@ -230,6 +230,16 @@ pnpm test:watch
 ```
 </details>
 
+## Viewing the changelog from a running container
+
+The Docker image uses a hardened base with no shell. To print the changelog to the container logs while it's running, send a `SIGUSR2` signal:
+
+```bash
+docker kill --signal=SIGUSR2 electrolux-to-mqtt
+```
+
+The changelog will appear in the container's log output.
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines on:
