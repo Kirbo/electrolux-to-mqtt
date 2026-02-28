@@ -10,6 +10,9 @@ import Mqtt from './mqtt.js'
 import type { ApplianceStub } from './types.js'
 import { startVersionChecker } from './version-checker.js'
 
+const LOGIN_POLL_INTERVAL_MS = 1_000
+const LOGIN_RETRY_DELAY_MS = 10_000
+
 const currentVersion = packageJson.version
 const logger = createLogger('app')
 const mqtt = new Mqtt()
@@ -76,13 +79,13 @@ const waitForLogin = async () => {
   while (!client.isLoggedIn) {
     if (client.isLoggingIn) {
       logger.debug('Already logging in, waiting for login to complete...')
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, LOGIN_POLL_INTERVAL_MS))
     } else {
       try {
         await client.login()
       } catch (error) {
         logger.error('Login failed:', error)
-        await new Promise((resolve) => setTimeout(resolve, 10000))
+        await new Promise((resolve) => setTimeout(resolve, LOGIN_RETRY_DELAY_MS))
       }
     }
   }
@@ -91,10 +94,7 @@ const waitForLogin = async () => {
 /**
  * Initialize a single appliance with state polling and MQTT subscription
  */
-const initializeAppliance = async (
-  applianceStub: { applianceId: string; applianceName: string; applianceType: string; created: string },
-  delayMs: number = 0,
-) => {
+const initializeAppliance = async (applianceStub: ApplianceStub, delayMs: number = 0) => {
   const { applianceId } = applianceStub
 
   try {
@@ -197,8 +197,9 @@ const cleanupAppliance = (applianceId: string) => {
   // Unsubscribe from MQTT commands
   mqtt.unsubscribe(`${applianceId}/command`)
 
-  // Remove from instances map
+  // Remove from instances map and clean up client tracking data
   applianceInstances.delete(applianceId)
+  client.removeAppliance(applianceId)
 
   // Optionally publish offline status
   if (config.homeAssistant.autoDiscovery) {

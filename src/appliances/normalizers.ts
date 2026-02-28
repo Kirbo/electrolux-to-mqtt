@@ -176,11 +176,3 @@ export function normalizeClimateAppliance(rawState: Appliance): NormalizedState 
     evapDefrostState: toLowercase(reported.evapDefrostState) as OnOffNullableState,
   } as NormalizedState
 }
-
-/**
- * @deprecated Use normalizeClimateAppliance instead
- * Kept for backward compatibility
- */
-export function normalizeFromApiResponse(rawState: Appliance): NormalizedState {
-  return normalizeClimateAppliance(rawState)
-}

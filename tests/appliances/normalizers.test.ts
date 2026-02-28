@@ -6,7 +6,6 @@ import {
   normalizeBaseFields,
   normalizeClimateAppliance,
   normalizeConnectionState,
-  normalizeFromApiResponse,
 } from '../../src/appliances/normalizers.js'
 import type { Appliance } from '../../src/types.js'
 
@@ -289,22 +288,6 @@ describe('normalizers', () => {
       expect(result.fourWayValveState).toBe('on')
       expect(result.evapDefrostState).toBe('off')
       expect(result.hepaFilterLifeTime).toBe(2000)
-    })
-  })
-
-  describe('normalizeFromApiResponse (deprecated)', () => {
-    it('should work as alias for normalizeClimateAppliance', () => {
-      const appliance: Appliance = {
-        applianceId: 'test-123',
-        properties: {
-          reported: {
-            mode: 'COOL',
-          },
-        },
-      } as unknown as Appliance
-
-      const result = normalizeFromApiResponse(appliance)
-      expect(result.mode).toBe('cool')
     })
   })
 })

@@ -197,6 +197,16 @@ export class ElectroluxClient {
     activeTimeouts.clear()
   }
 
+  /**
+   * Remove tracking data for a specific appliance
+   * Should be called when an appliance is removed
+   */
+  public removeAppliance(applianceId: string) {
+    this.lastCommandTime.delete(applianceId)
+    this.lastActiveMode.delete(applianceId)
+    this.previousAppliances.delete(applianceId)
+  }
+
   public async initialize() {
     await this.createApiClient()
   }
