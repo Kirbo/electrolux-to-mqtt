@@ -38,7 +38,8 @@ conditions:
   - condition: template
     value_template: "{{ trigger.payload_json.status == 'update-available' }}"
 actions:
-  - data:
+  - action: persistent_notification.create
+    data:
       title: Electrolux to MQTT
       notification_id: electrolux-to-mqtt
       message: >-
@@ -52,7 +53,7 @@ actions:
           else 'unknown'
         }}. You're running version {{ trigger.payload_json.currentVersion |
         default('unknown') }}.
-    action: persistent_notification.create
+        Read the release notes in https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases/v{{ trigger.payload_json.latestVersion }}
   - action: notify.notify
     data:
       title: Electrolux to MQTT
@@ -67,5 +68,6 @@ actions:
           else 'unknown'
         }}. You're running version {{ trigger.payload_json.currentVersion |
         default('unknown') }}.
+        Read the release notes in https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases/v{{ trigger.payload_json.latestVersion }}
 mode: single
 ```
