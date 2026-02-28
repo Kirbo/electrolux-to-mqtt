@@ -13,12 +13,12 @@ workflow:
     # Run pipeline for merge requests
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     # Run pipeline for pushes to default branch
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
     # Run pipeline for pushes to branches without open merge requests
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+    - if: "$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS"
       when: never
     # Run pipeline for all other branch pushes
-    - if: '$CI_COMMIT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH"
     # Run pipeline for web/api triggers
     - if: '$CI_PIPELINE_SOURCE == "web"'
 
@@ -31,8 +31,8 @@ variables:
   DOCKERHUB_REPOSITORY: kirbownz/electrolux-to-mqtt
   DOCKERHUB_USERNAME: ${CI_REGISTRY_USERNAME}
   README_FILEPATH: ${CI_PROJECT_DIR}/README.md
-  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
-  GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar" # Defines the location of the analysis task cache
+  GIT_DEPTH: "0" # Tells git to fetch all the branches of the project, required by the analysis task
   GIT_STRATEGY: clone
   GITLAB_TOKEN: ${CI_JOB_TOKEN}
 
@@ -47,7 +47,29 @@ default:
 
 .rules_code_changes: &rules_code_changes
   rules:
-    - if: '$CI_COMMIT_TAG == null'
+    - if: $SCHEDULE
+      when: never
+    - if: "$CI_COMMIT_TAG == null"
+      changes:
+        - .gitlab-ci.yml
+        - docker-compose*.yml
+        - Dockerfile
+        - entrypoint.sh
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
+      when: on_success
+    - when: never
+
+.rules_code_changes_or_schedule: &rules_code_changes_or_schedule
+  rules:
+    - if: $SCHEDULE
+      when: on_success
+    - if: "$CI_COMMIT_TAG == null"
       changes:
         - .gitlab-ci.yml
         - docker-compose*.yml
@@ -65,7 +87,27 @@ default:
 
 .rules_node_changes: &rules_node_changes
   rules:
-    - if: '$CI_COMMIT_TAG == null'
+    - if: $SCHEDULE
+      when: never
+    - if: "$CI_COMMIT_TAG == null"
+      changes:
+        - .gitlab-ci.yml
+        - biome.jsonc
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
+      when: on_success
+    - when: never
+
+.rules_node_changes_or_schedule: &rules_node_changes_or_schedule
+  rules:
+    - if: $SCHEDULE
+      when: on_success
+    - if: "$CI_COMMIT_TAG == null"
       changes:
         - .gitlab-ci.yml
         - biome.jsonc
@@ -85,7 +127,7 @@ initialise variables:
   stage: init
   image: alpine:latest
   interruptible: true
-  <<: *rules_code_changes
+  <<: *rules_code_changes_or_schedule
   cache: []
   artifacts:
     reports:
@@ -125,7 +167,7 @@ install dependencies:
   stage: init
   image: node:${NODE_VERSION}
   interruptible: true
-  <<: *rules_node_changes
+  <<: *rules_node_changes_or_schedule
   cache:
     key:
       prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
@@ -223,7 +265,9 @@ audit:
   image: node:${NODE_VERSION}
   interruptible: true
   rules:
-    - if: '$CI_COMMIT_TAG == null'
+    - if: '$SCHEDULE == "AUDIT"'
+      when: on_success
+    - if: "$CI_COMMIT_TAG == null"
       changes:
         - .gitlab-ci.yml
         - package.json
@@ -288,6 +332,8 @@ try to build docker images:
   retry: 1
   interruptible: true
   rules:
+    - if: $SCHEDULE
+      when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main"'
       changes:
         - .gitlab-ci.yml
@@ -301,7 +347,7 @@ try to build docker images:
     - when: never
   cache: []
   variables:
-    DOCKER_HOST: "unix:///var/run/docker.sock"  # Use local Docker for shell executor
+    DOCKER_HOST: "unix:///var/run/docker.sock" # Use local Docker for shell executor
   needs:
     - job: initialise variables
       artifacts: true
@@ -355,6 +401,8 @@ build and deploy docker images:
   interruptible: true
   allow_failure: false
   rules:
+    - if: $SCHEDULE
+      when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
@@ -368,7 +416,7 @@ build and deploy docker images:
     - when: never
   cache: []
   variables:
-    DOCKER_HOST: "unix:///var/run/docker.sock"  # Use local Docker for shell executor
+    DOCKER_HOST: "unix:///var/run/docker.sock" # Use local Docker for shell executor
   needs:
     - job: initialise variables
       artifacts: true
@@ -409,6 +457,8 @@ create gitlab release:
     entrypoint: [""]
   interruptible: true
   rules:
+    - if: $SCHEDULE
+      when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
@@ -440,6 +490,8 @@ update telemetry backend:
   stage: release
   image: alpine:latest
   rules:
+    - if: $SCHEDULE
+      when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - .gitlab-ci.yml
@@ -466,6 +518,8 @@ update dockerhub description:
   image: peterevans/dockerhub-description:4
   interruptible: true
   rules:
+    - if: $SCHEDULE
+      when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       when: on_success
     - when: never
