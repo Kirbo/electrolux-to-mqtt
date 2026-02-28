@@ -1760,8 +1760,8 @@ describe('electrolux', () => {
 
         await client.initialize()
 
-        // Mock a token that expires soon (less than 6 hours)
-        const nearExpiryTime = new Date(Date.now() + 5 * 60 * 60 * 1000) // 5 hours
+        // Mock a token that expires soon (less than 1 hour)
+        const nearExpiryTime = new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
         client.accessToken = 'test-token'
         client.refreshToken = 'test-refresh-token'
         client.eat = nearExpiryTime

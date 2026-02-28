@@ -227,12 +227,16 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     return
   }
 
+  const currentTag = currentVersion.startsWith('v') ? currentVersion : `v${currentVersion}`
+  const latestVersion = latest.version.startsWith('v') ? latest.version.slice(1) : latest.version
+  const versionTag = latest.version.startsWith('v') ? latest.version : `v${latest.version}`
+
   // Compare versions
-  const comparison = compareVersions(currentVersion, latest.version)
+  const comparison = compareVersions(currentVersion, latestVersion)
 
   if (comparison < 0) {
     // Current version is older
-    const versionTag = latest.version.startsWith('v') ? latest.version : `v${latest.version}`
+
     logger.info(
       `A newer version of the application available, please check https://gitlab.com/${GITLAB_REPO}/-/releases/${versionTag}`,
     )
@@ -240,9 +244,9 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     publishInfoIfChanged(
       mqtt,
       JSON.stringify({
-        currentVersion,
+        currentVersion: currentTag,
         status: 'update-available',
-        latestVersion: latest.version,
+        latestVersion: versionTag,
         releasedAt: latest.releasedAt,
         ...(latest.description && { description: latest.description }),
       }),
@@ -250,16 +254,16 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
 
     // Send ntfy notification if configured and we haven't already notified about this version
     const webhookUrl = config.versionCheck?.ntfyWebhookUrl
-    if (webhookUrl && hasNotifiedVersion !== latest.version) {
-      await sendNtfyNotification(currentVersion, latest.version, webhookUrl)
-      hasNotifiedVersion = latest.version
+    if (webhookUrl && hasNotifiedVersion !== latestVersion) {
+      await sendNtfyNotification(currentTag, versionTag, webhookUrl)
+      hasNotifiedVersion = latestVersion
     }
   } else {
-    logger.debug(`Running latest version: ${currentVersion}`)
+    logger.debug(`Running latest version: ${currentTag}`)
     publishInfoIfChanged(
       mqtt,
       JSON.stringify({
-        currentVersion,
+        currentVersion: currentTag,
         status: 'up-to-date',
         releasedAt: latest.releasedAt,
       }),
