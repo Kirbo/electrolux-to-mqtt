@@ -115,16 +115,15 @@ async function getUserKeys(): Promise<string[]> {
   return keys
 }
 
-// Badge generation function
+// Badge generation and telemetry cache update function
 async function generateBadge(): Promise<void> {
   try {
-    // Get total user count
     const keys = await getUserKeys()
     const total = keys.length
 
+    // Update badge SVG
     const badgePath = path.join(process.cwd(), 'badge', 'users.svg')
 
-    // Generate SVG badge
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
   <linearGradient id="b" x2="0" y2="100%">
@@ -147,13 +146,38 @@ async function generateBadge(): Promise<void> {
   </g>
 </svg>`.trim()
 
-    // Ensure badge directory exists
     await fsp.mkdir(path.dirname(badgePath), { recursive: true })
-
-    // Write SVG to disk
     await fsp.writeFile(badgePath, svg)
 
-    console.log(`Badge updated: ${total} users`)
+    // Update cached telemetry
+    if (total === 0) {
+      await redis.setEx('cached:telemetry', 60 * 60, JSON.stringify({ total: 0, versions: [] }))
+    } else {
+      const versions = await Promise.all(keys.map((key: string) => redis.get(key)))
+      const versionCounts = versions.reduce(
+        (acc, version) => {
+          if (version) {
+            acc[version] = (acc[version] || 0) + 1
+          }
+          return acc
+        },
+        {} as Record<string, number>,
+      )
+      const versionsList = Object.entries(versionCounts)
+        .map(([version, count]) => ({ version, count }))
+        .sort((a, b) => {
+          const partsA = a.version.replace(/^v/, '').split('.').map(Number)
+          const partsB = b.version.replace(/^v/, '').split('.').map(Number)
+          for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const diff = (partsB[i] || 0) - (partsA[i] || 0)
+            if (diff !== 0) return diff
+          }
+          return 0
+        })
+      await redis.setEx('cached:telemetry', 60 * 60, JSON.stringify({ total, versions: versionsList }))
+    }
+
+    console.log(`Badge and telemetry cache updated: ${total} users`)
   } catch (error) {
     console.error('Error generating badge:', error)
   }
@@ -199,58 +223,12 @@ app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
 // GET /telemetry - Get aggregated telemetry data
 app.get('/telemetry', async (_req: Request, res: Response) => {
   try {
-    const cached = await redis.get('cached:telemetry')
-    if (cached) {
-      return res.json(JSON.parse(cached))
+    let cached = await redis.get('cached:telemetry')
+    if (!cached) {
+      await generateBadge()
+      cached = await redis.get('cached:telemetry')
     }
-
-    // Get all user keys
-    const keys = await getUserKeys()
-    const total = keys.length
-
-    if (total === 0) {
-      const emptyResponse = { total: 0, versions: [] }
-      await redis.setEx('cached:telemetry', 5 * 60, JSON.stringify(emptyResponse))
-      return res.json(emptyResponse)
-    }
-
-    // Get all versions
-    const versions = await Promise.all(keys.map((key: string) => redis.get(key)))
-
-    // Count versions
-    const versionCounts = versions.reduce(
-      (acc, version) => {
-        if (version) {
-          acc[version] = (acc[version] || 0) + 1
-        }
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // Format response — sort by semantic version descending
-    const versionsList = Object.entries(versionCounts)
-      .map(([version, count]) => ({
-        version,
-        count,
-      }))
-      .sort((a, b) => {
-        const partsA = a.version.replace(/^v/, '').split('.').map(Number)
-        const partsB = b.version.replace(/^v/, '').split('.').map(Number)
-        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-          const diff = (partsB[i] || 0) - (partsA[i] || 0)
-          if (diff !== 0) return diff
-        }
-        return 0
-      })
-
-    const responsePayload = {
-      total,
-      versions: versionsList,
-    }
-
-    await redis.setEx('cached:telemetry', 5 * 60, JSON.stringify(responsePayload))
-    res.json(responsePayload)
+    res.json(cached ? JSON.parse(cached) : { total: 0, versions: [] })
   } catch (error) {
     console.error('Error fetching telemetry:', error)
     res.status(500).json({ error: 'Internal server error' })
