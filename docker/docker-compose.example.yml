@@ -31,3 +31,5 @@ services:
       # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime      # Comma-separated list of keys to ignore in state change logs
       # - LOGGING_SHOW_VERSION_NUMBER=true                        # Show version number in logs
       # - LOGGING_SKIP_CACHE_LOGGING=true                         # Skip cache debug logs (default: true)
+      # - VERSION_CHECK_INTERVAL=3600                              # Version check interval in seconds (default: 3600)
+      # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here  # ntfy.sh webhook URL for update notifications
