@@ -106,10 +106,7 @@ export class YourModelAppliance extends BaseAppliance {
    * Normalize raw API state to standard format
    */
   public normalizeState(rawState: Appliance): NormalizedState {
-    return normalizeClimateAppliance(rawState, this.applianceInfo, {
-      // Add model-specific overrides here
-      // Example: ambientTemperatureF: rawState.state.reported.tempF
-    })
+    return normalizeClimateAppliance(rawState)
   }
 
   /**

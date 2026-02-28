@@ -27,6 +27,7 @@ A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Ho
 - **Well Tested** - Unit tests with >70% coverage
 - **Docker Ready** - Multi-platform Docker images (amd64/arm64)
 - **Update Notifications** - Periodically check for newer releases and optionally push-notify you via https://ntfy.sh/ webhook.
+- **Anonymous Telemetry** - Sends an irreversible hash of your username and the app version to `e2m.devaus.eu` during version checks, used to generate the "Active Users" badge above. No personal data is collected or stored.
 
 Relevant links:
 - [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
@@ -96,6 +97,7 @@ docker run --rm \
   # -e LOG_LEVEL=info \
   # -e LOGGING_SHOW_CHANGES=false \
   # -e LOGGING_IGNORED_KEYS=networkInterface.rssi \
+  # -e LOGGING_SHOW_VERSION_NUMBER=true \
   # -e LOGGING_SKIP_CACHE_LOGGING=true \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
@@ -160,6 +162,7 @@ services:
       # - LOG_LEVEL=info
       # - LOGGING_SHOW_CHANGES=false
       # - LOGGING_IGNORED_KEYS=networkInterface.rssi
+      # - LOGGING_SHOW_VERSION_NUMBER=true
       # - LOGGING_SKIP_CACHE_LOGGING=true
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
@@ -242,6 +245,17 @@ docker cp $(docker ps --filter name=electrolux-to-mqtt --format '{{.Names}}' | h
 docker cp <container-name>:/app/CHANGELOG.md ./CHANGELOG.md
 
 cat CHANGELOG.md
+```
+
+## Token persistence
+
+The application automatically creates and updates a `tokens.json` file to cache OAuth tokens between restarts, avoiding unnecessary re-authentication. If you're running in Docker, consider mounting this file as a volume to persist tokens across container recreations:
+
+```bash
+docker run --rm \
+  -v ./config.yml:/app/config.yml \
+  -v ./tokens.json:/app/tokens.json \
+  --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 
 ## Contributing
