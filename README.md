@@ -187,7 +187,8 @@ code config.yml
 fnm use
 
 # Install correct pnpm version if not installed already
-npm install -g $(node -p "require('./package.json').packageManager")
+corepack enable
+corepack install
 
 # Install the dependencies
 pnpm install
@@ -249,14 +250,7 @@ cat CHANGELOG.md
 
 ## Token persistence
 
-The application automatically creates and updates a `tokens.json` file to cache OAuth tokens between restarts, avoiding unnecessary re-authentication. If you're running in Docker, consider mounting this file as a volume to persist tokens across container recreations:
-
-```bash
-docker run --rm \
-  -v ./config.yml:/app/config.yml \
-  -v ./tokens.json:/app/tokens.json \
-  --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
-```
+The application automatically creates and updates a `tokens.json` file to cache OAuth tokens between restarts, avoiding unnecessary re-authentication.
 
 ## Contributing
 
