@@ -14,7 +14,7 @@ const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
 // Configuration constants
-const TOKEN_REFRESH_THRESHOLD_HOURS = 6
+const TOKEN_REFRESH_THRESHOLD_HOURS = 1 // Refresh token if it's set to expire within 1 hour
 const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_DELAY_MS = 5_000 // Retry login after 5s on failure
