@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { IMqtt } from '../src/mqtt.js'
 
 // Mock dependencies before importing the module
 vi.mock('axios')
@@ -23,11 +24,7 @@ vi.mock('../src/config.js', () => ({
 }))
 
 describe('version-checker', () => {
-  let startVersionChecker: (
-    currentVersion: string,
-    userHash: string,
-    mqtt?: { publishInfo: (message: string) => void },
-  ) => () => void
+  let startVersionChecker: typeof import('../src/version-checker.js')['startVersionChecker']
   let mockAxiosGet: ReturnType<typeof vi.fn>
   let mockAxiosPost: ReturnType<typeof vi.fn>
 
@@ -282,6 +279,40 @@ describe('version-checker', () => {
       stopChecker()
     })
 
+    it('should sort tags by commit created_at date when falling back to tags', async () => {
+      mockAxiosGet
+        .mockResolvedValueOnce({ data: [] }) // Empty releases
+        .mockResolvedValueOnce({
+          // Tags in wrong order
+          data: [
+            {
+              name: 'v1.6.2',
+              commit: { created_at: '2026-01-20T12:00:00Z' },
+            },
+            {
+              name: 'v1.6.4',
+              commit: { created_at: '2026-01-28T12:00:00Z' },
+            },
+            {
+              name: 'v1.6.3',
+              commit: { created_at: '2026-01-25T12:00:00Z' },
+            },
+          ],
+        })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const mockPublishInfo = vi.fn()
+      const mockMqtt = { publishInfo: mockPublishInfo } as unknown as IMqtt
+      const stopChecker = startVersionChecker('v1.6.1', 'test-hash-123', mockMqtt)
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Should have detected v1.6.4 as the latest (sorted by created_at)
+      expect(mockPublishInfo).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v1.6.4"'))
+
+      stopChecker()
+    })
+
     it('should handle GitLab API errors gracefully', async () => {
       const error = new Error('Network error')
       mockAxiosGet.mockRejectedValueOnce(error)
@@ -469,15 +500,34 @@ describe('version-checker', () => {
 
       stopChecker()
     })
+
+    it('should handle ntfy notification failure with axios error', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      const axiosError = { message: 'Connection refused', isAxiosError: true }
+      mockAxiosPost
+        .mockResolvedValueOnce({ data: { success: true } }) // telemetry succeeds
+        .mockRejectedValueOnce(axiosError) // ntfy fails with axios error
+      vi.mocked(axios.isAxiosError).mockReturnValue(true)
+
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', 'test-hash-123')
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Should have attempted ntfy notification
+      expect(mockAxiosPost).toHaveBeenCalledTimes(2)
+
+      stopChecker()
+    })
   })
 
   describe('MQTT version info publishing', () => {
     let mockPublishInfo: ReturnType<typeof vi.fn>
-    let mockMqtt: { publishInfo: (message: string) => void }
+    let mockMqtt: IMqtt
 
     beforeEach(() => {
       mockPublishInfo = vi.fn()
-      mockMqtt = { publishInfo: mockPublishInfo as (message: string) => void }
+      mockMqtt = { publishInfo: mockPublishInfo } as unknown as IMqtt
     })
 
     it('should publish up-to-date status when running the latest version', async () => {
@@ -632,6 +682,26 @@ describe('version-checker', () => {
           releasedAt: '2026-01-25T12:00:00Z',
         }),
       )
+
+      stopChecker()
+    })
+
+    it('should handle errors in periodic version check gracefully', async () => {
+      // First check succeeds
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Second check (periodic) throws
+      mockAxiosPost.mockRejectedValueOnce(new Error('Telemetry crash'))
+      mockAxiosGet.mockRejectedValueOnce(new Error('Network down'))
+
+      // Should not throw even when periodic check fails
+      await vi.advanceTimersByTimeAsync(3600 * 1000)
 
       stopChecker()
     })

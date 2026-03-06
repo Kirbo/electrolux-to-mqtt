@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import fs from 'node:fs'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('logger', () => {
   describe('log levels', () => {
@@ -238,6 +239,80 @@ describe('logger', () => {
       const arg = [1, 2, 3, 'test']
       const isObject = typeof arg === 'object' && arg !== null
       expect(isObject).toBe(true)
+    })
+  })
+
+  describe('actual logger module', () => {
+    beforeEach(() => {
+      vi.resetModules()
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+      delete process.env.TZ
+    })
+
+    it('should use TZ environment variable when set', async () => {
+      process.env.TZ = 'Europe/Helsinki'
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: true, showVersionNumber: true } },
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('TZ env var'))
+      expect(logger).toBeDefined()
+    })
+
+    it('should fall back to UTC when timezone detection fails', async () => {
+      delete process.env.TZ
+      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        throw new Error('ENOENT')
+      })
+      vi.spyOn(fs, 'readlinkSync').mockImplementation(() => {
+        throw new Error('ENOENT')
+      })
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: true, showVersionNumber: true } },
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to UTC'))
+      expect(logger).toBeDefined()
+    })
+
+    it('should create a logger that can log objects via util.inspect', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: true, showVersionNumber: false } },
+      }))
+
+      vi.doMock('pino', () => ({
+        default: () => ({
+          child: () => ({
+            info: vi.fn(),
+            error: vi.fn(),
+            warn: vi.fn(),
+            debug: vi.fn(),
+          }),
+        }),
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+
+      // Should not throw when logging objects (exercises stringifyArgs with util.inspect)
+      expect(() => logger.info({ key: 'value' })).not.toThrow()
+      expect(() => logger.error({ errorDetail: 'test' })).not.toThrow()
     })
   })
 })

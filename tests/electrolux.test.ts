@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosResponse } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BaseAppliance } from '../src/appliances/base.js'
+import config from '../src/config.js'
 import { ElectroluxClient, formatStateDifferences, getStateDifferences } from '../src/electrolux.js'
 import type { IMqtt } from '../src/mqtt.js'
 import type { NormalizedState } from '../src/types/normalized.js'
@@ -49,14 +50,16 @@ interface MockAppliance {
 }
 
 const loggerWarnSpy = vi.hoisted(() => vi.fn())
+const loggerErrorSpy = vi.hoisted(() => vi.fn())
+const loggerInfoSpy = vi.hoisted(() => vi.fn())
 
 vi.mock('axios')
 vi.mock('../src/logger.js', () => ({
   default: () => ({
     debug: vi.fn(),
-    info: vi.fn(),
+    info: loggerInfoSpy,
     warn: loggerWarnSpy,
-    error: vi.fn(),
+    error: loggerErrorSpy,
   }),
 }))
 vi.mock('../src/cache.js', () => ({
@@ -352,6 +355,57 @@ describe('electrolux', () => {
 
       const differences = getStateDifferences(oldState, newState)
       expect(differences.mode).toEqual({ from: '', to: 'cool' })
+    })
+
+    describe('with ignoredKeys', () => {
+      const logging = config.logging as NonNullable<typeof config.logging>
+      const originalIgnoredKeys = logging.ignoredKeys
+
+      afterEach(() => {
+        logging.ignoredKeys = originalIgnoredKeys
+      })
+
+      it('should exclude exact-match ignored keys from differences', () => {
+        logging.ignoredKeys = ['mode']
+
+        const oldState = { applianceId: 'test-123', mode: 'cool', targetTemperatureC: 20 } as NormalizedState
+        const newState = { applianceId: 'test-123', mode: 'heat', targetTemperatureC: 25 } as NormalizedState
+
+        const differences = getStateDifferences(oldState, newState)
+        expect(differences.mode).toBeUndefined()
+        expect(differences.targetTemperatureC).toEqual({ from: 20, to: 25 })
+      })
+
+      it('should exclude nested keys when parent path is ignored', () => {
+        logging.ignoredKeys = ['networkInterface']
+
+        const oldState = {
+          applianceId: 'test-123',
+          networkInterface: { rssi: -45, linkQualityIndicator: 'GOOD' },
+          mode: 'cool',
+        } as unknown as NormalizedState
+
+        const newState = {
+          applianceId: 'test-123',
+          networkInterface: { rssi: -60, linkQualityIndicator: 'FAIR' },
+          mode: 'heat',
+        } as unknown as NormalizedState
+
+        const differences = getStateDifferences(oldState, newState)
+        expect(differences['networkInterface.rssi']).toBeUndefined()
+        expect(differences['networkInterface.linkQualityIndicator']).toBeUndefined()
+        expect(differences.mode).toEqual({ from: 'cool', to: 'heat' })
+      })
+
+      it('should exclude top-level ignored keys from the main comparison loop', () => {
+        logging.ignoredKeys = ['targetTemperatureC']
+
+        const oldState = { applianceId: 'test-123', targetTemperatureC: 20 } as NormalizedState
+        const newState = { applianceId: 'test-123', targetTemperatureC: 25 } as NormalizedState
+
+        const differences = getStateDifferences(oldState, newState)
+        expect(Object.keys(differences)).toHaveLength(0)
+      })
     })
   })
 
@@ -2021,6 +2075,455 @@ describe('electrolux', () => {
 
         expect(settingsLine).toContain('monitored appliances=2')
         expect(suggestionLine).toContain('2 appliances')
+      })
+    })
+
+    describe('removeAppliance', () => {
+      it('should clear tracking data for a removed appliance', async () => {
+        const { cache } = await import('../src/cache.js')
+        vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+        mockAxiosInstance.put.mockResolvedValue({ data: {} })
+
+        await client.initialize()
+
+        const mockAppl = createMockAppliance()
+        // Send a command to populate internal tracking maps
+        await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
+
+        // Remove the appliance
+        client.removeAppliance('test-appliance-123')
+
+        // After removal, the command delay should no longer apply (tracking cleared)
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+        const state = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+        expect(state).toEqual(mockApplianceStateResponse)
+      })
+    })
+
+    describe('logStateChanges without showChanges', () => {
+      const logging = config.logging as NonNullable<typeof config.logging>
+      const originalShowChanges = logging.showChanges
+
+      afterEach(() => {
+        logging.showChanges = originalShowChanges
+      })
+
+      it('should log state changed without details when showChanges is false', async () => {
+        logging.showChanges = false
+
+        const { cache } = await import('../src/cache.js')
+        const cachedState = {
+          ...mockApplianceStateResponse,
+          properties: {
+            ...mockApplianceStateResponse.properties,
+            reported: {
+              ...mockApplianceStateResponse.properties.reported,
+              targetTemperatureC: 20,
+            },
+          },
+        }
+        vi.mocked(cache.get).mockReturnValue(cachedState)
+
+        const newState = {
+          ...mockApplianceStateResponse,
+          properties: {
+            ...mockApplianceStateResponse.properties,
+            reported: {
+              ...mockApplianceStateResponse.properties.reported,
+              targetTemperatureC: 25,
+            },
+          },
+        }
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: newState })
+
+        await client.initialize()
+        loggerInfoSpy.mockClear()
+
+        const mockAppl = createMockAppliance()
+        await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+
+        const infoCalls = loggerInfoSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const stateChangedLog = infoCalls.find((msg) => msg.includes('State changed'))
+        expect(stateChangedLog).toBeDefined()
+        // Should NOT contain the arrow notation from formatStateDifferences
+        expect(stateChangedLog).not.toContain('→')
+      })
+    })
+
+    describe('formatAxiosError via real error paths', () => {
+      it('should include method and URL path in error log for axios errors', async () => {
+        const axiosError = new Error('Request failed') as AxiosError
+        axiosError.response = { status: 500, statusText: 'Internal Server Error' } as AxiosResponse
+        ;(axiosError as Record<string, unknown>).config = {
+          method: 'get',
+          url: 'https://api.developer.electrolux.one/api/v1/appliances',
+        }
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+
+        mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
+
+        await client.initialize()
+        loggerErrorSpy.mockClear()
+        await client.getAppliances()
+
+        const errorCalls = loggerErrorSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const errorLog = errorCalls.find((msg) => msg.includes('Error getting appliances'))
+        expect(errorLog).toContain('[GET /api/v1/appliances]')
+        expect(errorLog).toContain('500 Internal Server Error')
+      })
+
+      it('should include response data in error log when available and short', async () => {
+        const axiosError = new Error('Request failed') as AxiosError
+        axiosError.response = {
+          status: 400,
+          statusText: 'Bad Request',
+          data: { error: 'invalid_param' },
+        } as AxiosResponse
+        ;(axiosError as Record<string, unknown>).config = { method: 'get', url: '/api/v1/appliances' }
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+
+        mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
+
+        await client.initialize()
+        loggerErrorSpy.mockClear()
+        await client.getAppliances()
+
+        const errorCalls = loggerErrorSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const errorLog = errorCalls.find((msg) => msg.includes('Error getting appliances'))
+        expect(errorLog).toContain('invalid_param')
+      })
+
+      it('should handle axios error with relative URL path', async () => {
+        const axiosError = new Error('Request failed') as AxiosError
+        axiosError.response = { status: 404, statusText: 'Not Found' } as AxiosResponse
+        ;(axiosError as Record<string, unknown>).config = { method: 'get', url: '/api/v1/appliances' }
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+
+        mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
+
+        await client.initialize()
+        loggerErrorSpy.mockClear()
+        await client.getAppliances()
+
+        const errorCalls = loggerErrorSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const errorLog = errorCalls.find((msg) => msg.includes('Error getting appliances'))
+        expect(errorLog).toContain('[GET /api/v1/appliances]')
+      })
+    })
+
+    describe('Token error branches', () => {
+      it('should warn when token persistence fails', async () => {
+        const fsMock = await import('node:fs')
+        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {
+          throw new Error('EROFS: read-only file system')
+        })
+
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        loggerWarnSpy.mockClear()
+        await client.login()
+
+        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist tokens'))
+        vi.restoreAllMocks()
+      })
+
+      it('should handle 401 during token refresh by clearing tokens and re-logging in', async () => {
+        const error401 = new Error('Unauthorized') as AxiosError
+        error401.response = { status: 401 } as AxiosResponse
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+
+        mockAxiosInstance.post.mockRejectedValueOnce(error401)
+
+        // Mock login to succeed after 401 triggers re-authentication
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        client.accessToken = 'old-token'
+        client.refreshToken = 'old-refresh-token'
+
+        await client.refreshTokens()
+
+        // Tokens should have been cleared before re-login
+        expect(client.isLoggedIn).toBe(true) // Re-login succeeded
+      })
+
+      it('should schedule retry on transient token refresh error', async () => {
+        mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network timeout'))
+        vi.useFakeTimers()
+
+        await client.initialize()
+        const refreshPromise = client.refreshTokens()
+
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        await refreshPromise
+        // The retry timeout was created and executed
+        expect(mockAxiosInstance.post).toHaveBeenCalled()
+      })
+
+      it('should throw when refreshTokens returns undefined tokens', async () => {
+        mockAxiosInstance.post.mockResolvedValueOnce({
+          data: { accessToken: undefined, refreshToken: undefined },
+        })
+        vi.useFakeTimers()
+
+        await client.initialize()
+        const refreshPromise = client.refreshTokens()
+
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        await refreshPromise
+        // Should have logged error about undefined token
+        expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error refreshing access token'))
+      })
+    })
+
+    describe('403 retry failure logging', () => {
+      it('should log error with "after token refresh" when retry also fails', async () => {
+        const error403 = new Error('Forbidden') as AxiosError
+        error403.response = { status: 403 } as AxiosResponse
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+
+        // First call: 403, second call (retry): also fails
+        mockAxiosInstance.get.mockRejectedValueOnce(error403).mockRejectedValueOnce(new Error('Still forbidden'))
+
+        mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
+
+        await client.initialize()
+        client.isLoggedIn = true
+        client.accessToken = 'test-token'
+        client.refreshToken = 'test-refresh-token'
+        client.eat = new Date(Date.now() + 10 * 60 * 60 * 1000)
+
+        loggerErrorSpy.mockClear()
+        await client.getAppliances()
+
+        const errorCalls = loggerErrorSpy.mock.calls.map((args: unknown[]) => args[0] as string)
+        const retryErrorLog = errorCalls.find((msg) => msg.includes('after token refresh'))
+        expect(retryErrorLog).toBeDefined()
+      })
+    })
+
+    describe('buildCombinedCommandState mode preservation', () => {
+      it('should keep lastActiveMode when explicitly turning off', async () => {
+        const { cache } = await import('../src/cache.js')
+
+        const normalizeForModeTest = (state: Appliance): NormalizedState =>
+          ({
+            applianceId: state.applianceId,
+            mode: state.properties.reported.mode,
+            applianceState: state.properties.reported.applianceState,
+          }) as NormalizedState
+
+        const mockAppl = createMockAppliance({
+          normalizeState: vi.fn(normalizeForModeTest),
+        })
+
+        const onState = {
+          ...mockApplianceStateResponse,
+          properties: {
+            ...mockApplianceStateResponse.properties,
+            reported: {
+              ...mockApplianceStateResponse.properties.reported,
+              mode: 'cool',
+              applianceState: 'on',
+            },
+          },
+        }
+        vi.mocked(cache.get).mockReturnValue(onState)
+        mockAxiosInstance.put.mockResolvedValue({ data: {} })
+
+        await client.initialize()
+
+        // First send cool to set lastActiveMode
+        await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
+
+        // Now send off - should keep cool as the mode in published state
+        vi.mocked(mockMqtt.publish).mockClear()
+        await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'off' })
+
+        const publishCall = vi.mocked(mockMqtt.publish).mock.calls[0]
+        const publishedState = JSON.parse(publishCall[1] as string)
+        expect(publishedState.mode).toBe('cool')
+      })
+
+      it('should restore lastActiveMode and turn on when non-mode command sent to off appliance', async () => {
+        const { cache } = await import('../src/cache.js')
+
+        const normalizeForModeTest = (state: Appliance): NormalizedState =>
+          ({
+            applianceId: state.applianceId,
+            mode: state.properties.reported.mode,
+            applianceState: state.properties.reported.applianceState,
+            targetTemperatureC: state.properties.reported.targetTemperatureC,
+          }) as NormalizedState
+
+        const mockAppl = createMockAppliance({
+          normalizeState: vi.fn(normalizeForModeTest),
+        })
+
+        // Start with on state so we can set lastActiveMode
+        const onState = {
+          ...mockApplianceStateResponse,
+          properties: {
+            ...mockApplianceStateResponse.properties,
+            reported: {
+              ...mockApplianceStateResponse.properties.reported,
+              mode: 'heat',
+              applianceState: 'on',
+            },
+          },
+        }
+        vi.mocked(cache.get).mockReturnValue(onState)
+        mockAxiosInstance.put.mockResolvedValue({ data: {} })
+
+        await client.initialize()
+
+        // Send heat command to set lastActiveMode
+        await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'heat' })
+
+        // Now set cached state to off
+        const offState = {
+          ...mockApplianceStateResponse,
+          properties: {
+            ...mockApplianceStateResponse.properties,
+            reported: {
+              ...mockApplianceStateResponse.properties.reported,
+              mode: 'off',
+              applianceState: 'off',
+              targetTemperatureC: 22,
+            },
+          },
+        }
+        vi.mocked(cache.get).mockReturnValue(offState)
+
+        // Send non-mode command while off
+        vi.mocked(mockMqtt.publish).mockClear()
+        await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { targetTemperatureC: 25 })
+
+        const publishCall = vi.mocked(mockMqtt.publish).mock.calls[0]
+        const publishedState = JSON.parse(publishCall[1] as string)
+        expect(publishedState.applianceState).toBe('on')
+        expect(publishedState.mode).toBe('heat')
+      })
+    })
+
+    describe('State publishing edge cases', () => {
+      it('should use cached state when normalizeState returns null for new data', async () => {
+        const { cache } = await import('../src/cache.js')
+
+        const cachedNormalized = {
+          applianceId: 'test-appliance-123',
+          mode: 'cool',
+          targetTemperatureC: 22,
+        } as NormalizedState
+
+        // normalizeState: first call for cached state returns valid, second for new state returns null
+        const normalizeStateFn = vi.fn().mockReturnValueOnce(cachedNormalized).mockReturnValueOnce(null)
+
+        const mockAppl = createMockAppliance({
+          normalizeState: normalizeStateFn,
+        })
+
+        vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+
+        await client.initialize()
+        const result = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+
+        // normalizeState should have been called twice (cached + new)
+        expect(normalizeStateFn).toHaveBeenCalledTimes(2)
+        // Should not throw and return the response data
+        expect(result).toEqual(mockApplianceStateResponse)
+      })
+
+      it('should return early without publishing when both states are null', async () => {
+        const { cache } = await import('../src/cache.js')
+
+        const normalizeStateAlwaysNull = (): NormalizedState | null => null
+
+        const mockAppl = createMockAppliance({
+          normalizeState: vi.fn(normalizeStateAlwaysNull) as MockAppliance['normalizeState'],
+        })
+
+        // No cached state
+        vi.mocked(cache.get).mockReturnValue(undefined)
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+
+        await client.initialize()
+        vi.mocked(mockMqtt.publish).mockClear()
+        await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+
+        // Should not publish
+        expect(mockMqtt.publish).not.toHaveBeenCalled()
+      })
+
+      it('should handle sendApplianceCommand without client initialized', async () => {
+        const mockAppl = createMockAppliance()
+        const result = await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
+        expect(result).toBeUndefined()
+      })
+    })
+
+    describe('Request interceptor', () => {
+      it('should wait for login to complete before proceeding with requests', async () => {
+        let interceptorCallback: ((config: Record<string, unknown>) => Promise<Record<string, unknown>>) | undefined
+
+        vi.mocked(axios.create).mockReturnValue({
+          ...mockAxiosInstance,
+          interceptors: {
+            request: {
+              use: vi.fn((callback) => {
+                interceptorCallback = callback
+              }),
+            },
+            response: { use: vi.fn() },
+          },
+        } as unknown as ReturnType<typeof axios.create>)
+
+        await client.initialize()
+        expect(interceptorCallback).toBeDefined()
+
+        // Simulate being in login state
+        client.isLoggingIn = true
+
+        const requestConfig = { url: '/api/v1/appliances' }
+
+        // Start the interceptor and resolve it by clearing isLoggingIn
+        setTimeout(() => {
+          client.isLoggingIn = false
+        }, 50)
+
+        const result = await interceptorCallback?.(requestConfig)
+        expect(result).toEqual(requestConfig)
+      })
+
+      it('should not wait for token refresh requests', async () => {
+        let interceptorCallback: ((config: Record<string, unknown>) => Promise<Record<string, unknown>>) | undefined
+
+        vi.mocked(axios.create).mockReturnValue({
+          ...mockAxiosInstance,
+          interceptors: {
+            request: {
+              use: vi.fn((callback) => {
+                interceptorCallback = callback
+              }),
+            },
+            response: { use: vi.fn() },
+          },
+        } as unknown as ReturnType<typeof axios.create>)
+
+        await client.initialize()
+        client.isLoggingIn = true
+
+        const requestConfig = { url: '/api/v1/token/refresh' }
+        const result = await interceptorCallback?.(requestConfig)
+        expect(result).toEqual(requestConfig)
       })
     })
   })

@@ -363,4 +363,11 @@ describe('ApplianceFactory', () => {
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
   })
+
+  describe('getSupportedModels', () => {
+    it('should return list of supported models', () => {
+      const models = ApplianceFactory.getSupportedModels()
+      expect(models).toEqual(['COMFORT600'])
+    })
+  })
 })

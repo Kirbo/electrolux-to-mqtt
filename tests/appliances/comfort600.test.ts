@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Comfort600Appliance } from '../../src/appliances/comfort600.js'
-import type { ApplianceInfo, ApplianceStub } from '../../src/types.js'
+import type { Appliance, ApplianceInfo, ApplianceStub } from '../../src/types.js'
 
 // Mock data
 const mockStub: ApplianceStub = {
@@ -442,6 +442,36 @@ describe('Comfort600Appliance', () => {
       const config = appliance.generateAutoDiscoveryConfig('custom_prefix')
       expect(config.mode_state_topic).toContain('custom_prefix')
       expect(config.mode_command_topic).toContain('custom_prefix')
+    })
+  })
+
+  describe('normalizeState', () => {
+    it('should normalize raw API state using climate appliance normalizer', () => {
+      const rawState: Appliance = {
+        applianceId: 'test-appliance-123',
+        connectionState: 'Connected',
+        status: 'enabled',
+        properties: {
+          reported: {
+            applianceState: 'RUNNING',
+            mode: 'COOL',
+            fanSpeedSetting: 'AUTO',
+            targetTemperatureC: 24,
+            ambientTemperatureC: 26,
+            verticalSwing: 'ON',
+            sleepMode: 'OFF',
+            uiLockMode: false,
+            Workmode_1: 1,
+            WorkMode: 1,
+          },
+        },
+      }
+
+      const normalized = appliance.normalizeState(rawState)
+
+      expect(normalized).toBeDefined()
+      expect(normalized.applianceId).toBe('test-appliance-123')
+      expect(normalized.targetTemperatureC).toBe(24)
     })
   })
 })

@@ -406,5 +406,19 @@ describe('Mqtt', () => {
       // This should not throw even though the callback receives an error
       expect(() => mqttInstance.unsubscribe('device-123')).not.toThrow()
     })
+
+    it('should log success when unsubscribe completes without error', () => {
+      const mockClient = mqttInstance.client as unknown as {
+        unsubscribe: ReturnType<typeof vi.fn>
+      }
+
+      // Mock unsubscribe to call callback with no error (success)
+      mockClient.unsubscribe = vi.fn((_topic, callback) => {
+        if (callback) callback(null)
+      })
+
+      expect(() => mqttInstance.unsubscribe('device-123')).not.toThrow()
+      expect(mockClient.unsubscribe).toHaveBeenCalledWith(expect.stringContaining('device-123'), expect.any(Function))
+    })
   })
 })

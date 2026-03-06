@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Cache } from '../src/cache'
 
 describe('Cache', () => {
@@ -116,5 +116,34 @@ describe('Cache', () => {
     const num = 123
     expect(cache.matchByValue('num-key', num)).toBe(false)
     expect(cache.matchByValue('num-key', num)).toBe(true)
+  })
+
+  describe('with skipCacheLogging disabled', () => {
+    const loggerDebugSpy = vi.fn()
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+      vi.resetModules()
+    })
+
+    it('should log debug messages when skipCacheLogging is false', async () => {
+      vi.resetModules()
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { skipCacheLogging: false } },
+      }))
+      vi.doMock('../src/logger.js', () => ({
+        default: () => ({ debug: loggerDebugSpy, info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+      }))
+
+      const { cache } = await import('../src/cache.js')
+
+      cache.set('test-key', { name: 'value' })
+      expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('Set "test-key"'), expect.anything())
+
+      // matchByValue with matching value should log
+      loggerDebugSpy.mockClear()
+      cache.matchByValue('test-key', { name: 'value' })
+      expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('has not changed'))
+    })
   })
 })
