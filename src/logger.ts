@@ -37,7 +37,7 @@ const timeZone = getTimezone()
 const showTimestamp = config.logging?.showTimestamp ?? true
 
 const baseLogger = pino({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL || (process.env.VITEST ? 'silent' : 'info'),
   timestamp: showTimestamp
     ? () =>
         `,"time":"${new Date().toLocaleString(undefined, {
