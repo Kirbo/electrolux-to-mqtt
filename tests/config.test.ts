@@ -791,7 +791,8 @@ logging:
   showChanges: true
   ignoredKeys: []
   showVersionNumber: true
-  skipCacheLogging: true`
+  skipCacheLogging: true
+  showTimestamp: true`
 
       fs.writeFileSync(configPath, validConfig, 'utf8')
 

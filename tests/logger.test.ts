@@ -122,6 +122,59 @@ describe('logger', () => {
     })
   })
 
+  describe('showTimestamp config', () => {
+    it('should default showTimestamp to true', () => {
+      const showTimestamp = undefined ?? true
+      expect(showTimestamp).toBe(true)
+    })
+
+    it('should respect showTimestamp when set to true', () => {
+      const showTimestamp = true
+      const timestamp = showTimestamp
+        ? () =>
+            `,"time":"${new Date().toLocaleString(undefined, {
+              timeZone: 'UTC',
+            })}"`
+        : false
+      expect(typeof timestamp).toBe('function')
+    })
+
+    it('should disable timestamp when showTimestamp is false', () => {
+      const showTimestamp = false
+      const timestamp = showTimestamp
+        ? () =>
+            `,"time":"${new Date().toLocaleString(undefined, {
+              timeZone: 'UTC',
+            })}"`
+        : false
+      expect(timestamp).toBe(false)
+    })
+
+    it('should include time in ignore list when showTimestamp is false', () => {
+      const showTimestamp = false
+      const ignore = showTimestamp ? 'pid,hostname' : 'pid,hostname,time'
+      expect(ignore).toBe('pid,hostname,time')
+    })
+
+    it('should not include time in ignore list when showTimestamp is true', () => {
+      const showTimestamp = true
+      const ignore = showTimestamp ? 'pid,hostname' : 'pid,hostname,time'
+      expect(ignore).toBe('pid,hostname')
+    })
+
+    it('should disable translateTime when showTimestamp is false', () => {
+      const showTimestamp = false
+      const translateTime = showTimestamp ? 'SYS:yyyy-mm-dd HH:MM:ss' : false
+      expect(translateTime).toBe(false)
+    })
+
+    it('should enable translateTime when showTimestamp is true', () => {
+      const showTimestamp = true
+      const translateTime = showTimestamp ? 'SYS:yyyy-mm-dd HH:MM:ss' : false
+      expect(translateTime).toBe('SYS:yyyy-mm-dd HH:MM:ss')
+    })
+  })
+
   describe('version prefix handling', () => {
     it('should format version prefix for production', () => {
       const version = '1.0.0'

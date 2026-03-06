@@ -20,3 +20,4 @@ logging:
   ignoredKeys: []
   showVersionNumber: true
   skipCacheLogging: true
+  showTimestamp: true
