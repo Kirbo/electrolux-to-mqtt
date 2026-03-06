@@ -184,7 +184,7 @@ const getTokensFilename = (): string => {
   return 'tokens.json'
 }
 
-export function createConfigFromEnv(): void {
+export function createConfigFromEnv(): string | undefined {
   console.info('Config file not found. Creating from environment variables...')
 
   let envConfig: z.infer<typeof envSchema>
@@ -241,16 +241,29 @@ versionCheck:
 ${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL && envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL !== 'https://ntfy.sh/your_topic_here' ? `  ntfyWebhookUrl: ${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL}` : ''}
 `
 
-  fs.writeFileSync(configPath, configContent, 'utf8')
-  console.info('Config file created successfully.')
+  try {
+    fs.writeFileSync(configPath, configContent, 'utf8')
+    console.info('Config file created successfully.')
+  } catch {
+    console.warn('Could not write config file to disk (read-only filesystem). Using in-memory config.')
+  }
+
+  return configContent
 }
 
 // Create config from environment variables if it doesn't exist
+let generatedConfig: string | undefined
 if (!fs.existsSync(configPath)) {
-  createConfigFromEnv()
+  generatedConfig = createConfigFromEnv()
 }
 
-const file = fs.readFileSync(configPath, 'utf8')
+const file = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : generatedConfig
+
+if (!file) {
+  console.error('No config file found and could not generate from environment variables.')
+  process.exit(1)
+}
+
 const rawConfig = yaml.parse(file)
 
 // Validate configuration with Zod
