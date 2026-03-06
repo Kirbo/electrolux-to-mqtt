@@ -307,20 +307,20 @@ LOG_LEVEL=error pnpm test
 
 **Quick Reference:**
 
-| LOG_LEVEL | Shows | Best For |
-|-----------|-------|----------|
-| *(not set)* | None | Default - fastest feedback, clean output |
-| `debug` | All logs, debug info | Troubleshooting test failures |
-| `info` | Info, warnings, errors | Standard debugging |
-| `warn` | Warnings, errors only | Production-like testing |
-| `error` | Errors only | Minimal output, catch failures |
+| LOG_LEVEL   | Shows                   | Best For                                  |
+|-------------|-------------------------|-------------------------------------------|
+| *(not set)* | None                    | Default - fastest feedback, clean output  |
+| `debug`     | All logs, debug info    | Troubleshooting test failures             |
+| `info`      | Info, warnings, errors  | Standard debugging                        |
+| `warn`      | Warnings, errors only   | Production-like testing                   |
+| `error`     | Errors only             | Minimal output, catch failures            |
 
 ### Writing Tests
 
 - Use **Vitest** for testing
 - Place tests in `tests/` directory mirroring `src/` structure
 - Name test files with `.test.ts` extension
-- Aim for >70% code coverage for new code
+- Aim for >80% code coverage for new code
 - Test both success and error cases
 
 ### Coverage Requirements
