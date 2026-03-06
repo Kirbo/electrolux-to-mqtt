@@ -308,6 +308,56 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should return config content and warn when writeFileSync fails (read-only filesystem)', async () => {
+      process.env.MQTT_URL = 'mqtt://test-broker'
+      process.env.MQTT_USERNAME = 'test-user'
+      process.env.MQTT_PASSWORD = 'test-pass'
+      process.env.ELECTROLUX_API_KEY = 'test-key'
+      process.env.ELECTROLUX_USERNAME = 'test@example.com'
+      process.env.ELECTROLUX_PASSWORD = 'electrolux-pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        throw new Error('EACCES: permission denied')
+      })
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Could not write config file to disk (read-only filesystem). Using in-memory config.',
+      )
+      expect(result).toBeDefined()
+      expect(result).toContain('mqtt:')
+      expect(result).toContain('url: mqtt://test-broker')
+
+      writeSpy.mockRestore()
+      warnSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should return undefined when env validation fails', async () => {
+      delete process.env.MQTT_URL
+      delete process.env.MQTT_USERNAME
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toBeUndefined()
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
     it('should use custom MQTT settings when provided', async () => {
       process.env.MQTT_URL = 'mqtt://custom'
       process.env.MQTT_USERNAME = 'user'
@@ -332,6 +382,30 @@ homeAssistant:
       expect(content).toContain('clientId: my-client')
       expect(content).toContain('topicPrefix: my_prefix_')
       expect(content).toContain('qos: 1')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should include showTimestamp in generated config content', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.LOGGING_SHOW_TIMESTAMP = 'false'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('showTimestamp: false')
 
       writeSpy.mockRestore()
       infoSpy.mockRestore()
