@@ -127,6 +127,9 @@ COPY --from=purge --chown=node:node /app/package.json ./package.json
 COPY --from=purge --chown=node:node /app/dist ./dist
 COPY --from=purge --chown=node:node /app/CHANGELOG.md ./CHANGELOG.md
 
+# Ensure the node user can create files (e.g., config.yml) in /app at runtime
+RUN chown node:node /app
+
 # Add signal handling for graceful shutdown
 STOPSIGNAL SIGTERM
 
