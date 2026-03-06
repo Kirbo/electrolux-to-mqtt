@@ -117,18 +117,11 @@ LABEL org.opencontainers.image.licenses="MIT"
 LABEL maintainer="Kimmo Saari <kirbo@kirbo-designs.com>"
 LABEL description="Electrolux to MQTT bridge"
 
-# Set working directory
+# Copy all app files from purge with node ownership
+# This creates /app owned by node:node without needing a shell (hardened image has no /bin/sh)
+COPY --from=purge --chown=node:node /app /app
+
 WORKDIR /app
-
-# Copy only the necessary files from the purge stage
-# Use the built-in 'node' user from the base image (uid 1000)
-COPY --from=purge --chown=node:node /app/node_modules ./node_modules
-COPY --from=purge --chown=node:node /app/package.json ./package.json
-COPY --from=purge --chown=node:node /app/dist ./dist
-COPY --from=purge --chown=node:node /app/CHANGELOG.md ./CHANGELOG.md
-
-# Ensure the node user can create files (e.g., config.yml) in /app at runtime
-RUN chown node:node /app
 
 # Add signal handling for graceful shutdown
 STOPSIGNAL SIGTERM
