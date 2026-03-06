@@ -246,6 +246,46 @@ describe('Mqtt', () => {
     })
   })
 
+  describe('publishInfo', () => {
+    it('should publish to info topic with retain and qos 2', () => {
+      const message = JSON.stringify({ version: '1.0.0' })
+      mqttInstance.publishInfo(message)
+
+      expect(mqttInstance.client.publish).toHaveBeenCalledWith(
+        'test_appliances/info',
+        message,
+        expect.objectContaining({ retain: true, qos: 2 }),
+        expect.any(Function),
+      )
+    })
+
+    it('should merge custom options for publishInfo', () => {
+      const message = JSON.stringify({ status: 'online' })
+      mqttInstance.publishInfo(message, { qos: 1 as const })
+
+      expect(mqttInstance.client.publish).toHaveBeenCalledWith(
+        'test_appliances/info',
+        message,
+        expect.objectContaining({ retain: true, qos: 1 }),
+        expect.any(Function),
+      )
+    })
+  })
+
+  describe('publish with non-JSON message', () => {
+    it('should handle non-JSON message in _publish without throwing', () => {
+      const nonJsonMessage = 'plain text message'
+      expect(() => mqttInstance.publish('device-123', nonJsonMessage)).not.toThrow()
+
+      expect(mqttInstance.client.publish).toHaveBeenCalledWith(
+        'test_appliances/device-123',
+        nonJsonMessage,
+        expect.any(Object),
+        expect.any(Function),
+      )
+    })
+  })
+
   describe('error handling', () => {
     it('should handle publish errors gracefully', () => {
       const mockClientWithError = {

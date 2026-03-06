@@ -387,6 +387,57 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should include versionCheck in generated config content', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_INTERVAL = '7200'
+      process.env.VERSION_CHECK_NTFY_WEBHOOK_URL = 'https://ntfy.sh/test-topic'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('checkInterval: 7200')
+      expect(result).toContain('ntfyWebhookUrl: https://ntfy.sh/test-topic')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should validate VERSION_CHECK_INTERVAL too low', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_INTERVAL = '10'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('VERSION_CHECK_INTERVAL'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
     it('should include showTimestamp in generated config content', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'
