@@ -40,6 +40,8 @@ logging:
   showVersionNumber: true
   # Skip cache debug logs (default: true)
   skipCacheLogging: true
+  # Show timestamp in log messages (default: true)
+  showTimestamp: true
 
 versionCheck:
   # Check interval in seconds (how often to check for new version)
