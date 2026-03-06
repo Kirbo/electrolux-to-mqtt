@@ -18,8 +18,10 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Change ownership of the working directory
-RUN chown nodejs:nodejs /app
+# Change ownership of the working directory and enable corepack as root
+# (corepack enable needs write access to /usr/local/bin)
+RUN chown nodejs:nodejs /app && \
+  corepack enable
 
 # Switch to non-root user
 USER nodejs
@@ -29,7 +31,6 @@ COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml ./
 
 # Install package manager and dependencies
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
-  corepack enable && \
   corepack install && \
   echo "=========================================================" && \
   echo "  Node version:                 $(node --version)" && \
