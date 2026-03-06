@@ -99,6 +99,7 @@ docker run --rm \
   # -e LOGGING_IGNORED_KEYS=networkInterface.rssi \
   # -e LOGGING_SHOW_VERSION_NUMBER=true \
   # -e LOGGING_SKIP_CACHE_LOGGING=true \
+  # -e LOGGING_SHOW_TIMESTAMP=true \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
@@ -164,6 +165,7 @@ services:
       # - LOGGING_IGNORED_KEYS=networkInterface.rssi
       # - LOGGING_SHOW_VERSION_NUMBER=true
       # - LOGGING_SKIP_CACHE_LOGGING=true
+      # - LOGGING_SHOW_TIMESTAMP=true
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
 ```
