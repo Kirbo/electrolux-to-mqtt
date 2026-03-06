@@ -703,6 +703,9 @@ describe('version-checker', () => {
       // Should not throw even when periodic check fails
       await vi.advanceTimersByTimeAsync(3600 * 1000)
 
+      // publishInfo should only have been called once (from the successful first check)
+      expect(mockPublishInfo).toHaveBeenCalledTimes(1)
+
       stopChecker()
     })
 
