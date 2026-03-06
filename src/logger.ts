@@ -34,18 +34,22 @@ const getTimezone = () => {
 
 const timeZone = getTimezone()
 
+const showTimestamp = config.logging?.showTimestamp ?? true
+
 const baseLogger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  timestamp: () =>
-    `,"time":"${new Date().toLocaleString(undefined, {
-      timeZone,
-    })}"`,
+  timestamp: showTimestamp
+    ? () =>
+        `,"time":"${new Date().toLocaleString(undefined, {
+          timeZone,
+        })}"`
+    : false,
   transport: {
     target: 'pino-pretty',
     options: {
       colorize: true,
-      ignore: 'pid,hostname',
-      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
+      ignore: showTimestamp ? 'pid,hostname' : 'pid,hostname,time',
+      translateTime: showTimestamp ? 'SYS:yyyy-mm-dd HH:MM:ss' : false,
     },
   },
 })

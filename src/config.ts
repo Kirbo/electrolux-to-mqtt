@@ -47,6 +47,7 @@ const configSchema = z.object({
       ignoredKeys: z.array(z.string()).optional(),
       showVersionNumber: z.boolean().optional(),
       skipCacheLogging: z.boolean().optional(),
+      showTimestamp: z.boolean().optional(),
     })
     .optional(),
   versionCheck: z
@@ -120,6 +121,10 @@ const envSchema = z.object({
     .default('true')
     .transform((val) => val.toLowerCase() === 'true'),
   LOGGING_SKIP_CACHE_LOGGING: z
+    .string()
+    .default('true')
+    .transform((val) => val.toLowerCase() === 'true'),
+  LOGGING_SHOW_TIMESTAMP: z
     .string()
     .default('true')
     .transform((val) => val.toLowerCase() === 'true'),
@@ -229,6 +234,7 @@ logging:
   ignoredKeys: [${formattedIgnoredKeys}]
   showVersionNumber: ${envConfig.LOGGING_SHOW_VERSION_NUMBER}
   skipCacheLogging: ${envConfig.LOGGING_SKIP_CACHE_LOGGING}
+  showTimestamp: ${envConfig.LOGGING_SHOW_TIMESTAMP}
 
 versionCheck:
   checkInterval: ${envConfig.VERSION_CHECK_INTERVAL}
