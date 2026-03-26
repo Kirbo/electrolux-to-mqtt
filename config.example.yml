@@ -28,6 +28,8 @@ homeAssistant:
   autoDiscovery: true
 
 logging:
+  # Log level (fatal, error, warn, info, debug, trace, silent)
+  logLevel: info
   # Should we output the changes detected in appliance state
   showChanges: true
   # Optional: keys to ignore when detecting state changes (e.g., networkInterface.rssi)

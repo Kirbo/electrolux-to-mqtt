@@ -43,6 +43,7 @@ const configSchema = z.object({
   }),
   logging: z
     .object({
+      logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
       showChanges: z.boolean().optional(),
       ignoredKeys: z.array(z.string()).optional(),
       showVersionNumber: z.boolean().optional(),
@@ -108,6 +109,7 @@ const envSchema = z.object({
     .string()
     .default('true')
     .transform((val) => val.toLowerCase() === 'true'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   LOGGING_SHOW_CHANGES: z
     .string()
     .default('true')
@@ -230,6 +232,7 @@ homeAssistant:
   autoDiscovery: ${envConfig.HOME_ASSISTANT_AUTO_DISCOVERY}
 
 logging:
+  logLevel: ${envConfig.LOG_LEVEL}
   showChanges: ${envConfig.LOGGING_SHOW_CHANGES}
   ignoredKeys: [${formattedIgnoredKeys}]
   showVersionNumber: ${envConfig.LOGGING_SHOW_VERSION_NUMBER}

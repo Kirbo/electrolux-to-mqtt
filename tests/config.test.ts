@@ -438,6 +438,79 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should include logLevel in generated config content', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.LOG_LEVEL = 'debug'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('logLevel: debug')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should default LOG_LEVEL to info when not provided', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      delete process.env.LOG_LEVEL
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('logLevel: info')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should reject invalid LOG_LEVEL value', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.LOG_LEVEL = 'invalid'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('LOG_LEVEL'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
     it('should include showTimestamp in generated config content', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'
@@ -894,6 +967,37 @@ homeAssistant:
       errorSpy.mockRestore()
     })
 
+    it('should validate config file and catch invalid logLevel', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+homeAssistant:
+  autoDiscovery: true
+logging:
+  logLevel: invalid`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('logging.logLevel'))).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
     it('should handle valid config file successfully', async () => {
       const validConfig = `mqtt:
   url: mqtt://localhost
@@ -913,6 +1017,7 @@ electrolux:
 homeAssistant:
   autoDiscovery: true
 logging:
+  logLevel: info
   showChanges: true
   ignoredKeys: []
   showVersionNumber: true

@@ -95,8 +95,8 @@ docker run --rm \
   # -e ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e LOG_LEVEL=info \
-  # -e LOGGING_SHOW_CHANGES=false \
-  # -e LOGGING_IGNORED_KEYS=networkInterface.rssi \
+  # -e LOGGING_SHOW_CHANGES=true \
+  # -e LOGGING_IGNORED_KEYS=networkInterface,totalRuntime \
   # -e LOGGING_SHOW_VERSION_NUMBER=true \
   # -e LOGGING_SKIP_CACHE_LOGGING=true \
   # -e LOGGING_SHOW_TIMESTAMP=true \
@@ -161,8 +161,8 @@ services:
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - LOG_LEVEL=info
-      # - LOGGING_SHOW_CHANGES=false
-      # - LOGGING_IGNORED_KEYS=networkInterface.rssi
+      # - LOGGING_SHOW_CHANGES=true
+      # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime
       # - LOGGING_SHOW_VERSION_NUMBER=true
       # - LOGGING_SKIP_CACHE_LOGGING=true
       # - LOGGING_SHOW_TIMESTAMP=true
