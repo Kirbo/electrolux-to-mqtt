@@ -7,8 +7,8 @@
 export type OnOffState = 'on' | 'off'
 export type OnOffNullableState = 'on' | 'off' | null
 export type UpgradeState = 'idle' | 'upgrading' | null
-export type LinkQuality = 'excellent' | 'good' | 'fair' | 'poor'
-export type FilterState = 'clean' | 'dirty'
+export type LinkQuality = 'excellent' | 'very_good' | 'good' | 'fair' | 'poor' | 'very_poor' | 'undefined'
+export type FilterState = 'clean' | 'good' | 'dirty'
 export type TemperatureUnit = 'celsius' | 'fahrenheit'
 export type ConnectionState = 'connected' | 'disconnected'
 export type EnabledState = 'enabled' | 'disabled'
