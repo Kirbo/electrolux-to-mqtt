@@ -1132,6 +1132,75 @@ describe('electrolux', () => {
         expect(client.isLoggedIn).toBe(false)
       })
 
+      it('should handle malformed access token in cookie', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce(mockLoginResponse)
+          .mockResolvedValueOnce({
+            status: 200,
+            headers: {
+              'set-cookie': [
+                'accessToken=s%3Anot-a-jwt; Path=/; HttpOnly',
+                'refreshToken=s%3Amock-refresh-token; Path=/; HttpOnly',
+              ],
+            },
+          })
+        vi.useFakeTimers()
+
+        const loginPromise = client.login()
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        const result = await loginPromise
+        expect(result).toBe(false)
+      })
+
+      it('should handle access token with invalid payload JSON', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce(mockLoginResponse)
+          .mockResolvedValueOnce({
+            status: 200,
+            headers: {
+              'set-cookie': [
+                `accessToken=s%3Aheader.${Buffer.from('not-json').toString('base64')}.signature; Path=/; HttpOnly`,
+                'refreshToken=s%3Amock-refresh-token; Path=/; HttpOnly',
+              ],
+            },
+          })
+        vi.useFakeTimers()
+
+        const loginPromise = client.login()
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        const result = await loginPromise
+        expect(result).toBe(false)
+      })
+
+      it('should handle access token with missing exp/iat fields', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce(mockLoginResponse)
+          .mockResolvedValueOnce({
+            status: 200,
+            headers: {
+              'set-cookie': [
+                `accessToken=s%3Aheader.${Buffer.from(JSON.stringify({ sub: 'user' })).toString('base64')}.signature; Path=/; HttpOnly`,
+                'refreshToken=s%3Amock-refresh-token; Path=/; HttpOnly',
+              ],
+            },
+          })
+        vi.useFakeTimers()
+
+        const loginPromise = client.login()
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        const result = await loginPromise
+        expect(result).toBe(false)
+      })
+
       it('should handle missing authorization code in redirect', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce({
