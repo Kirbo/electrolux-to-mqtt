@@ -64,8 +64,6 @@ const stringifyArgs = (args: unknown[]): string => {
   return args
     .map((arg) => {
       if (typeof arg === 'object' && arg !== null) {
-        // Colorize JSON using util.inspect
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         return util.inspect(arg, { colors: true, depth: null })
       }
       return String(arg)
