@@ -64,14 +64,11 @@ const configSchema = z.object({
     .optional(),
 })
 
-export type AppConfig = z.infer<typeof configSchema>
+type AppConfig = z.infer<typeof configSchema>
 
 const tokensSchema = z.object({
   accessToken: z.string(),
-  expiresIn: z.number(),
-  tokenType: z.string(),
   refreshToken: z.string(),
-  scope: z.string(),
   eat: z.number(),
   iat: z.number(),
 })
