@@ -77,7 +77,7 @@ export interface BaseNormalizedFields {
 /**
  * Climate-specific fields for portable air conditioners and similar devices
  */
-export interface ClimateNormalizedFields {
+interface ClimateNormalizedFields {
   // Climate control
   mode: NormalizedClimateMode
   targetTemperatureC: number

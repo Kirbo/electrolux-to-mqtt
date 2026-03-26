@@ -7,16 +7,6 @@ export type HAClimateMode = 'auto' | 'cool' | 'dry' | 'fan_only' | 'heat' | 'off
 export type HAFanMode = 'auto' | 'high' | 'medium' | 'low'
 export type HASwingMode = 'on' | 'off'
 
-export interface HAClimateState {
-  applianceState: 'on' | 'off'
-  mode: HAClimateMode
-  targetTemperatureC: number
-  ambientTemperatureC: number | null
-  fanSpeedSetting: HAFanMode
-  verticalSwing: HASwingMode
-  connectionState: 'connected' | 'disconnected'
-}
-
 export interface HAClimateDiscoveryConfig {
   name: string
   object_id: string
