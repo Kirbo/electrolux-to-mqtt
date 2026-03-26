@@ -19,7 +19,7 @@ electrolux:
   # e.g. FI, SE, NO, DK...
   countryCode: your_country_code_here
   # Refresh interval in seconds (how often to poll appliance state)
-  refreshInterval: 10
+  refreshInterval: 30
   # Appliance discovery interval in seconds (how often to check for added/removed appliances)
   applianceDiscoveryInterval: 300
 
