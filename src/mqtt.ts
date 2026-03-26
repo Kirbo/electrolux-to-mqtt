@@ -4,10 +4,19 @@ import createLogger from './logger.js'
 
 type QoS = 0 | 1 | 2
 
+const VALID_QOS = new Set<number>([0, 1, 2])
+
+function validateQoS(value: number): QoS {
+  if (!VALID_QOS.has(value)) {
+    throw new Error(`Invalid QoS value: ${value}. Must be 0, 1, or 2.`)
+  }
+  return value as QoS
+}
+
 const logger = createLogger('mqtt')
 
 const retain = config.mqtt.retain ?? false
-const qos = (config.mqtt.qos ?? 2) as QoS
+const qos = validateQoS(config.mqtt.qos ?? 2)
 
 const defaultOptions: IClientPublishOptions = {
   retain,
@@ -61,16 +70,15 @@ export interface IMqtt {
   resolveApplianceTopic(applianceId: string): string
   publish(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
   publishInfo(message: string, options?: mqtt.IClientPublishOptions): void
+  autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
   subscribe(applianceId: string, callback: (applianceId: string, message: Buffer) => void): void
   unsubscribe(applianceId: string): void
   disconnect(): void
 }
 
-class Mqtt {
+class Mqtt implements IMqtt {
   public client: mqtt.MqttClient
   public topicPrefix: string
-  public qos: QoS = qos
-  public retain: boolean = retain
 
   constructor() {
     this.client = client
