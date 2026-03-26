@@ -7,7 +7,7 @@ type QoS = 0 | 1 | 2
 const logger = createLogger('mqtt')
 
 const retain = config.mqtt.retain ?? false
-const qos = (config.mqtt.qos ?? 0) as QoS
+const qos = (config.mqtt.qos ?? 2) as QoS
 
 const defaultOptions: IClientPublishOptions = {
   retain,

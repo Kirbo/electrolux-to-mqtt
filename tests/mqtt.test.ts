@@ -100,7 +100,7 @@ describe('Mqtt', () => {
       expect(mqttInstance.client.publish).toHaveBeenCalledWith(
         'test_appliances/device-456',
         message,
-        expect.objectContaining({ qos: 0, retain: false }),
+        expect.objectContaining({ qos: 2, retain: false }),
         expect.any(Function),
       )
     })
