@@ -8,8 +8,6 @@ Update **all of**:
 - `README.md` (Configuration section, environment variables table)
 - `tests/config.test.ts` (schema validation tests — valid and invalid cases)
 
-All example files must stay in sync — if a config option appears in one example, it must appear in all of them.
-
 ## When adding or modifying appliance support
 
 Update:
@@ -78,8 +76,3 @@ Update:
 - `telemetry-backend/README.md` (environment variables, API endpoints, deployment)
 
 The telemetry backend is a standalone service with its own `package.json` and `tsconfig.json`. Changes here do not require running the main project's test suite, but do require verifying the Dockerfile builds correctly.
-
-## No empty directories
-
-- Do not create placeholder/empty directories. Only create directories when adding files to them.
-- Clean up directories that become empty after file removals.

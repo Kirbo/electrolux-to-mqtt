@@ -12,26 +12,25 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 - State/config files read from disk must be validated, not blindly cast.
 
 ### Code quality
-- No `console.log` — use `src/logger.ts` (pino). Exception: `console.*` is acceptable in `src/config.ts`, `src/init.ts`, and `src/logger.ts` for bootstrap messages that run before the pino logger is initialized.
+- No `console.log` in the main project (`src/`) — use `src/logger.ts` (pino). Exception: `console.*` is acceptable in `src/config.ts`, `src/init.ts`, and `src/logger.ts` for bootstrap messages that run before the pino logger is initialized. (`telemetry-backend/` is a separate service and uses `console.*` directly.)
 - No silent error swallowing (empty `catch {}`) unless the fallback behavior is documented. No try/catch fallback patterns (try A, catch and silently retry B).
 - No hardcoded secrets outside test fixtures.
 - No dead exports — if a function/type is exported but never imported outside its own module, remove it.
 - No dead fields in interfaces/types. If a field is not read anywhere, remove it.
 - No dead type variants — if a union type includes a variant that no code path ever produces, remove it.
 - Every config/schema field must be functional — never expose an option that has no implementation.
+- No empty directories. Only create directories when adding files to them. Clean up directories that become empty after file removals.
 
 ### Tooling
 - Always use `pnpm`. Never `npm` or `yarn`.
 - Biome for linting/formatting. No ESLint or Prettier. Single quotes everywhere (matching `biome.jsonc` `quoteStyle: "single"`).
 - Always use `Number.parseInt` / `Number.parseFloat`, never the global forms.
-- TDD: write tests first, then implement.
 
 ### Schemas
 - Numeric schema fields that must be positive must use `.positive()` (or `.min(1)`). Numeric schema fields that must be whole numbers must also use `.int()`. Port-like fields must use `.int().min(1).max(65535)`.
 
 ### Conventions
 - Conventional Commits. Semantic Versioning.
-- `check`/`lint`/`format` script scopes must all cover `src/` and `tests/`.
 - `.gitignore` must cover all generated/cached artifacts including CI-specific directories (e.g., `.pnpm-store/`).
 
 ### Sync
@@ -51,8 +50,6 @@ After any code change:
    - Run `pnpm typecheck` — fix any type errors.
    - Run `pnpm test` — all tests must pass.
 3. Skip typecheck/test for documentation-only or config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
-
-> **Note:** `pnpm check`, `pnpm typecheck`, and `pnpm test` only cover the main project (`src/` and `tests/`). The `telemetry-backend/` is a standalone service with its own `package.json` and `tsconfig.json` — changes there require separate verification (see `.claude/rules/implementation.md` § "When telemetry backend changes").
 
 ## Skills
 
