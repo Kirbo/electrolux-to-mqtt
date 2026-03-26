@@ -21,15 +21,13 @@ export default defineConfig({
         'src/index.ts', // Main entry point (integration tested separately)
         'package.json',
       ],
-      // Coverage thresholds set to maintain high test quality
-      // Current coverage: ~80% statements/lines, ~65% branches, ~86% functions
-      // Thresholds set slightly below current values to allow flexibility
+      // Coverage thresholds set slightly below current values to allow flexibility
       // Disabled for E2E tests which only test real API integration
       thresholds: {
-        lines: 75,
-        functions: 80,
-        branches: 60,
-        statements: 75,
+        lines: 95,
+        functions: 95,
+        branches: 80,
+        statements: 95,
       },
     },
   },

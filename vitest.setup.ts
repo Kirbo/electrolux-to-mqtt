@@ -34,4 +34,4 @@ if (!activeLevel.has('debug')) console.debug = () => {}
 if (!activeLevel.has('warn')) console.warn = () => {}
 if (!activeLevel.has('error')) console.error = () => {}
 
-export { originalLog, originalInfo, originalDebug, originalWarn, originalError }
+export { originalDebug, originalError, originalInfo, originalLog, originalWarn }
