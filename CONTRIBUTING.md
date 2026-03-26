@@ -82,8 +82,11 @@ src/
 ├── config.ts            # Configuration management
 ├── electrolux.ts        # Electrolux API client
 ├── index.ts             # Main application entry point
+├── init.ts              # Startup logging
 ├── logger.ts            # Logging utilities
-└── mqtt.ts              # MQTT client wrapper
+├── mqtt.ts              # MQTT client wrapper
+├── types.d.ts           # Electrolux API type definitions
+└── version-checker.ts   # Update checker and telemetry
 
 tests/                   # Test files (mirrors src/ structure)
 ```
@@ -320,7 +323,7 @@ LOG_LEVEL=error pnpm test
 - Use **Vitest** for testing
 - Place tests in `tests/` directory mirroring `src/` structure
 - Name test files with `.test.ts` extension
-- Aim for >80% code coverage for new code
+- Aim to maintain the project's coverage thresholds (95% lines/statements/functions, 80% branches)
 - Test both success and error cases
 
 ### Coverage Requirements
@@ -328,16 +331,16 @@ LOG_LEVEL=error pnpm test
 The project maintains test coverage with the following requirements:
 
 **Minimum Coverage Thresholds:**
-- **Lines**: 75%
-- **Statements**: 75%
-- **Branches**: 60%
-- **Functions**: 80%
+- **Lines**: 95%
+- **Statements**: 95%
+- **Branches**: 80%
+- **Functions**: 95%
 
-Up-to-date thresholds can be found [here](./vitest.config.ts#L28)
+Up-to-date thresholds can be found [here](./vitest.config.ts#L26)
 
 **New Code Coverage:**
-- New code should have **≥80% coverage** where possible
-- The `src/appliances/` directory has excellent coverage (90%+) as a reference
+- New code should maintain or improve the existing thresholds
+- The `src/appliances/` directory has excellent coverage as a reference
 
 **Coverage Regression Protection:**
 - The GitLab CI pipeline enforces these thresholds

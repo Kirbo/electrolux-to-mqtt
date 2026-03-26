@@ -14,8 +14,9 @@ Implement the following: $ARGUMENTS
 2. Determine which checklists apply based on what this change touches:
    - Config options → update config.ts, config.example.yml, docker-compose examples, README, tests
    - Appliance support → update appliance class, factory, normalizers, tests
-   - MQTT / Home Assistant integration → update mqtt.ts, HA types, tests
-   - Docker configuration → update Dockerfile, compose files, README
+   - Version-checker or telemetry → update version-checker.ts, tests, HOME_ASSISTANT.md, config examples
+   - MQTT / Home Assistant integration → update mqtt.ts, HA types, tests, HOME_ASSISTANT.md
+   - Docker configuration → update Dockerfile, compose files (both examples), README
    - User-facing feature or behavioral change → update README in the same pass
    - Telemetry backend → update endpoints, Dockerfile, compose, README
    - Dependency updates → follow the dependency checklist

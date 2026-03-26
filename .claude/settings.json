@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^(npm |yarn )'; then echo 'Use pnpm, not npm/yarn' >&2; exit 2; fi; exit 0"
+            "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^(npm |npx |yarn )'; then echo 'Use pnpm (or pnpm dlx instead of npx), not npm/yarn/npx' >&2; exit 2; fi; exit 0"
           }
         ]
       }

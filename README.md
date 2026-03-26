@@ -24,7 +24,7 @@ A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Ho
 - **Modular Architecture** - Easy to extend with new appliance models
 - **Secure Token Management** - Automatic OAuth token refresh
 - **Production Ready** - Comprehensive error handling and graceful shutdown
-- **Well Tested** - Unit tests with >70% coverage
+- **Well Tested** - Unit tests with >95% coverage
 - **Docker Ready** - Multi-platform Docker images (amd64/arm64)
 - **Update Notifications** - Periodically check for newer releases and optionally push-notify you via https://ntfy.sh/ webhook.
 - **Anonymous Telemetry** - Sends an irreversible hash of your username and the app version to `e2m.devaus.eu` during version checks, used to generate the "Active Users" badge above. No personal data is collected or stored.

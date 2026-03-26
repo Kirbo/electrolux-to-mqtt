@@ -32,7 +32,12 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] Every config field has a code path that uses it
 - [ ] Every config field has test coverage (valid and invalid cases)
 
-### 3. Appliance support
+### 3. TypeScript patterns
+- [ ] All `as` type assertions have a preceding runtime check (`Set.has`, `typeof`, `in` operator, etc.) — grep for ` as ` in `src/`
+- [ ] Classes that have a corresponding interface declare `implements` — no silent drift between interface and implementation
+- [ ] Retry/reconnect logic uses exponential backoff with a cap (no fixed-delay infinite loops)
+
+### 4. Appliance support
 - [ ] Every appliance class in `src/appliances/` extends `BaseAppliance` correctly
 - [ ] `factory.ts` handles all known device types and models
 - [ ] Normalizers produce consistent `NormalizedState` output
@@ -40,42 +45,50 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] `deriveImmediateStateFromCommand()` handles all command types
 - [ ] `generateAutoDiscoveryConfig()` produces valid HA discovery payloads
 
-### 4. MQTT / Home Assistant integration
+### 5. MQTT / Home Assistant integration
 - [ ] MQTT topic structure is consistent (`{prefix}/{applianceId}/state`, `/command`)
 - [ ] HA auto-discovery payloads conform to HA MQTT discovery spec
 - [ ] QoS and retain settings are applied correctly
 - [ ] MQTT reconnection and error handling is robust
 - [ ] Command messages are validated before forwarding to Electrolux API
 
-### 5. Test coverage
+### 6. Test coverage
 - [ ] Every public function in `src/` has unit tests in `tests/`
 - [ ] Config loading tested: YAML file, environment variables, missing config, invalid values
 - [ ] Appliance classes tested: state normalization, command transformation, HA discovery
 - [ ] MQTT events tested: connect, disconnect, message, error
 - [ ] Edge cases: empty state, malformed API responses, network errors, invalid commands
 
-### 6. Doc/code sync
+### 7. Doc/code sync
 - [ ] Docker compose example files (`docker/docker-compose.example.yml`, `docker/docker-compose.local.example.yml`) include all current config/env options
 - [ ] Environment variables documented match what `envSchema` in `src/config.ts` reads
 - [ ] `package.json` scripts match README development section
 - [ ] `engines` field matches README requirements section
 - [ ] Supported appliances list in README matches actual appliance classes
+- [ ] `HOME_ASSISTANT.md` MQTT topic payloads and automation examples match actual implementation
+- [ ] `CONTRIBUTING.md` coverage thresholds match `vitest.config.ts` thresholds
+- [ ] `CONTRIBUTING.md` project structure and development workflow match actual codebase
 
-### 7. Configuration files
+### 8. Configuration files
 - [ ] `biome.jsonc` includes scope matches `check`/`lint` script scope
 - [ ] `tsconfig.json` strict settings enabled
 - [ ] `vitest.config.ts` coverage excludes match actual project structure (no phantom paths)
 - [ ] `vitest.config.ts` coverage thresholds are maintained or improved
+- [ ] `vitest.setup.ts` global test setup is correct (mocks, utilities)
+- [ ] `.nvmrc`, `package.json` `engines` field, and Docker build args agree on the Node.js version
+- [ ] `.semrelrc` release configuration is correct (if release behavior changed)
 - [ ] CI pipeline stages match local development workflow
 - [ ] Docker builds produce correct, minimal images (including `telemetry-backend/Dockerfile`)
 
-### 8. Security
+### 9. Security
 - [ ] Credentials (API keys, passwords, tokens) are never logged
 - [ ] `config.yml` is in `.gitignore` (`tokens.json` is auto-populated from credentials in `config.yml` at runtime — no manual creation needed)
 - [ ] Docker images don't include dev dependencies or source maps
+- [ ] `.dockerignore` excludes secrets (`config.yml`, `tokens.json`, `.env`) from the build context
+- [ ] Production Dockerfile uses hardened `dhi.io/node` base images (not standard Node images)
 - [ ] Environment variable fallbacks don't expose defaults for sensitive fields
 
-### 9. Telemetry backend (`telemetry-backend/`)
+### 10. Telemetry backend (`telemetry-backend/`)
 - [ ] Dockerfile uses multi-stage build and strips dev dependencies
 - [ ] No hardcoded secrets or unsafe defaults in `src/index.ts`
 - [ ] Input validation on all API endpoints (userHash, version)
@@ -85,9 +98,14 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] `docker-compose.yml` environment variables match what `src/index.ts` reads
 - [ ] `README.md` documents all environment variables
 
-### 10. E2E snapshot validation
+### 11. Verify before reporting
+- [ ] Every finding must be confirmed by reading the actual file content — do not report a type, field, or function as missing based on assumptions or line-number estimates alone
+- [ ] Check findings against the rules in `CLAUDE.md` before flagging — known conventions documented there are intentional, not bugs
+- [ ] When checking for dead exports, search `tests/` as well — test imports count as external usage (a function exported solely for testing is not dead)
 
-> **Pre-check:** Run `test -f config.yml && grep -qE '(apiKey|username|password)' config.yml && echo "CREDENTIALS_AVAILABLE" || echo "NO_CREDENTIALS"`. If `CREDENTIALS_AVAILABLE`, run all items below. If `NO_CREDENTIALS`, skip this section.
+### 12. E2E snapshot validation
+
+> **Pre-check:** Run `test -f config.yml && echo "CREDENTIALS_AVAILABLE" || echo "NO_CREDENTIALS"`. If `CREDENTIALS_AVAILABLE`, run all items below. If `NO_CREDENTIALS`, skip this section.
 
 - [ ] Run `pnpm test:e2e` — all tests pass
 - [ ] Compare `tests/e2e/snapshots/appliance-state.json` reported keys against `Appliance['properties']['reported']` in `src/types.d.ts` — types must cover all keys the API reports

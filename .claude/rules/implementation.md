@@ -6,6 +6,7 @@ Update **all of**:
 - `docker/docker-compose.example.yml` (environment variables in the example service)
 - `docker/docker-compose.local.example.yml` (same — local dev example)
 - `README.md` (Configuration section, environment variables table)
+- `CONTRIBUTING.md` (if the change affects development workflow, coverage thresholds, or project structure)
 - `tests/config.test.ts` (schema validation tests — valid and invalid cases)
 
 ## When adding or modifying appliance support
@@ -17,8 +18,10 @@ Update:
 - `src/types/normalized.ts` (if new state fields are introduced)
 - `src/types/homeassistant.ts` (if new HA discovery config fields are needed)
 - `tests/appliances/<model>.test.ts` (unit tests for all methods)
+- `tests/appliances/base.test.ts` (if the `BaseAppliance` interface changed)
 - `tests/appliances/factory.test.ts` (factory creates the new model correctly)
-- `tests/appliances/normalizers.test.ts` (if normalizers changed)
+- `tests/normalizers.test.ts` (if individual normalizer functions changed)
+- `tests/appliances/normalizers.test.ts` (if higher-level normalizer logic changed)
 - `README.md` (supported appliances list)
 
 ## When modifying API types (`src/types.d.ts`, `src/types/normalized.ts`)
@@ -30,6 +33,15 @@ If the user has valid credentials (`config.yml` — `tokens.json` is auto-popula
 
 Every value the API can send must be represented in both the raw and normalized types.
 
+## When version-checker or telemetry changes (`src/version-checker.ts`)
+
+Update:
+- `src/version-checker.ts` (update checking, telemetry reporting, ntfy.sh notifications)
+- `tests/version-checker.test.ts` (unit tests)
+- `HOME_ASSISTANT.md` (if MQTT info topic payloads change)
+- `README.md` (if user-facing behavior changes)
+- `config.example.yml` and docker-compose examples (if `versionCheck.*` config fields change)
+
 ## When MQTT or Home Assistant integration changes
 
 Update:
@@ -37,7 +49,12 @@ Update:
 - `src/types/homeassistant.ts` (HA discovery payload types)
 - Relevant appliance class `generateAutoDiscoveryConfig()` method
 - `tests/mqtt.test.ts` and `tests/mqtt-events.test.ts`
+- `tests/electrolux.test.ts` (if state publishing or command handling changed)
+- `tests/state-differences.test.ts` (if state diffing logic changed)
+- `HOME_ASSISTANT.md` (if MQTT topics, payloads, or HA automation examples are affected)
 - `README.md` (if MQTT topic structure or HA integration docs are affected)
+
+**Important:** HA command templates send values in uppercase (`'AUTO'`, `'ON'`, `'FANONLY'`), but normalized state and HA state templates expect lowercase (`'auto'`, `'on'`, `'fan_only'`). Any code that processes incoming MQTT commands must normalize values to lowercase before merging with cached state or publishing feedback to MQTT. See the command-to-state merging logic in `src/electrolux.ts` (grep for `buildCombinedCommandState` or similar).
 
 ## When adding any user-facing feature or behavioral change
 
@@ -49,6 +66,8 @@ Update `README.md` in the same pass. This includes but is not limited to:
 - New Docker configuration
 - New pnpm scripts
 
+Also update `CONTRIBUTING.md` if the change affects development workflow, project structure, testing conventions, or coverage thresholds.
+
 Do not wait to be asked. If the user can see it or use it, it belongs in README.
 
 ## When Docker configuration changes
@@ -56,6 +75,7 @@ Do not wait to be asked. If the user can see it or use it, it belongs in README.
 Update:
 - `docker/Dockerfile` and/or `docker/Dockerfile.local`
 - `docker/docker-compose.example.yml` (if compose config changed)
+- `docker/docker-compose.local.example.yml` (same — local dev example)
 - `.dockerignore` (if new files should be excluded)
 - `README.md` (Docker section)
 
