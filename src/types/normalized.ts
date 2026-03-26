@@ -24,26 +24,13 @@ export type NormalizedClimateMode = 'cool' | 'heat' | 'fan_only' | 'dry' | 'auto
 export type NormalizedFanMode = 'low' | 'medium' | 'high' | 'auto'
 
 /**
- * Normalized appliance state
- * This is the standardized format used for MQTT publishing and internal state management
+ * Base fields common to all Electrolux appliances
  */
-export interface NormalizedState {
+export interface BaseNormalizedFields {
   applianceId: string
   status: EnabledState
   applianceState: OnOffState
   connectionState: ConnectionState
-
-  // Climate control
-  mode: NormalizedClimateMode
-  targetTemperatureC: number
-  ambientTemperatureC: number | null
-  ambientTemperatureF: number | null
-  temperatureRepresentation: TemperatureUnit
-
-  // Fan control
-  fanSpeedSetting: NormalizedFanMode
-  verticalSwing: OnOffState
-  sleepMode: OnOffState
 
   // Device information
   deviceId: string
@@ -62,20 +49,6 @@ export interface NormalizedState {
     rssi: number
   }
 
-  // Status information
-  compressorState: OnOffState
-  compressorCoolingRuntime: number
-  compressorHeatingRuntime: number
-  totalRuntime: number
-  filterState: FilterState
-  filterRuntime: number
-  hepaFilterLifeTime: number | null
-
-  // Advanced states
-  fourWayValveState: OnOffNullableState
-  evapDefrostState: OnOffNullableState
-  upgradeState: UpgradeState
-
   // Scheduler
   schedulerMode: OnOffNullableState
   schedulerSession: OnOffNullableState
@@ -84,6 +57,7 @@ export interface NormalizedState {
 
   // UI
   uiLockMode: boolean
+  upgradeState: UpgradeState
 
   // Capabilities and diagnostics
   capabilities: Record<string, unknown>
@@ -99,3 +73,41 @@ export interface NormalizedState {
   VmNo_MCU: string | null
   VmNo_NIU: string | null
 }
+
+/**
+ * Climate-specific fields for portable air conditioners and similar devices
+ */
+export interface ClimateNormalizedFields {
+  // Climate control
+  mode: NormalizedClimateMode
+  targetTemperatureC: number
+  ambientTemperatureC: number | null
+  ambientTemperatureF: number | null
+  temperatureRepresentation: TemperatureUnit
+
+  // Fan control
+  fanSpeedSetting: NormalizedFanMode
+  verticalSwing: OnOffState
+  sleepMode: OnOffState
+
+  // Compressor states
+  compressorState: OnOffState
+  compressorCoolingRuntime: number
+  compressorHeatingRuntime: number
+  totalRuntime: number
+
+  // Filter states
+  filterState: FilterState
+  filterRuntime: number
+  hepaFilterLifeTime: number | null
+
+  // Advanced states
+  fourWayValveState: OnOffNullableState
+  evapDefrostState: OnOffNullableState
+}
+
+/**
+ * Normalized appliance state
+ * This is the standardized format used for MQTT publishing and internal state management
+ */
+export interface NormalizedState extends BaseNormalizedFields, ClimateNormalizedFields {}

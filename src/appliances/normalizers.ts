@@ -1,4 +1,5 @@
 import type {
+  BaseNormalizedFields,
   ConnectionState,
   EnabledState,
   FilterState,
@@ -103,27 +104,35 @@ export function denormalizeClimateMode(mode: string | undefined): string {
  * Handles both nested (properties.reported) and flat structure
  */
 export function extractReportedState(rawState: Appliance): Appliance['properties']['reported'] {
-  return rawState?.properties?.reported || (rawState as unknown as Appliance['properties']['reported'])
+  if (rawState?.properties?.reported) {
+    return rawState.properties.reported
+  }
+  // Flat structure: the raw state IS the reported state (e.g., from cache after normalization)
+  // Validate by checking for fields that exist on reported but not on the Appliance wrapper
+  if (typeof rawState === 'object' && rawState !== null && 'applianceState' in rawState) {
+    return rawState as unknown as Appliance['properties']['reported']
+  }
+  throw new Error('Invalid appliance state: missing properties.reported and not a flat reported structure')
 }
 
 /**
  * Base normalization for fields common to ALL Electrolux appliances
  * This handles universal fields like identity, network, device info, etc.
  */
-export function normalizeBaseFields(rawState: Appliance): Partial<NormalizedState> {
+export function normalizeBaseFields(rawState: Appliance): BaseNormalizedFields {
   const reported = extractReportedState(rawState)
 
   return {
-    // Identity - universal
+    // Identity
     applianceId: rawState.applianceId,
     status: toLowercase(rawState.status) as EnabledState,
     connectionState: normalizeConnectionState(rawState.connectionState),
     applianceState: normalizeApplianceState(reported.applianceState),
 
-    // Device information - universal
+    // Device information
     deviceId: reported.deviceId,
     dataModelVersion: reported.dataModelVersion,
-    version: reported.$version,
+    version: reported.$version ?? 0,
     applianceData: reported.applianceData
       ? {
           elc: reported.applianceData.elc,
@@ -133,35 +142,35 @@ export function normalizeBaseFields(rawState: Appliance): Partial<NormalizedStat
         }
       : null,
 
-    // Network - universal
+    // Network
     networkInterface: {
       linkQualityIndicator: toLowercase(reported.networkInterface?.linkQualityIndicator) as LinkQuality,
-      rssi: reported.networkInterface?.rssi,
+      rssi: reported.networkInterface?.rssi ?? 0,
     },
 
-    // Scheduler - common to many appliances
+    // Scheduler
     schedulerMode: toLowercase(reported.schedulerMode) as OnOffNullableState,
     schedulerSession: toLowercase(reported.schedulerSession) as OnOffNullableState,
-    startTime: reported.startTime,
-    stopTime: reported.stopTime,
+    startTime: reported.startTime ?? 0,
+    stopTime: reported.stopTime ?? 0,
 
-    // UI - universal
-    uiLockMode: reported.uiLockMode,
+    // UI
+    uiLockMode: reported.uiLockMode ?? false,
     upgradeState: toLowercase(reported.upgradeState) as UpgradeState,
 
-    // Capabilities and diagnostics - universal
-    capabilities: reported.capabilities,
-    tasks: reported.tasks,
-    logE: reported.logE,
-    logW: reported.logW,
+    // Capabilities and diagnostics
+    capabilities: reported.capabilities ?? {},
+    tasks: reported.tasks ?? {},
+    logE: reported.logE ?? null,
+    logW: reported.logW ?? null,
 
-    // Timezone - universal
-    TimeZoneDaylightRule: reported.TimeZoneDaylightRule,
-    TimeZoneStandardName: reported.TimeZoneStandardName,
+    // Timezone
+    TimeZoneDaylightRule: reported.TimeZoneDaylightRule ?? null,
+    TimeZoneStandardName: reported.TimeZoneStandardName ?? null,
 
-    // Firmware versions - universal
-    VmNo_MCU: reported.VmNo_MCU,
-    VmNo_NIU: reported.VmNo_NIU,
+    // Firmware versions
+    VmNo_MCU: reported.VmNo_MCU ?? null,
+    VmNo_NIU: reported.VmNo_NIU ?? null,
   }
 }
 
@@ -176,31 +185,31 @@ export function normalizeClimateAppliance(rawState: Appliance): NormalizedState 
   return {
     ...baseFields,
 
-    // Climate control - specific to climate devices
+    // Climate control
     mode: normalizeClimateMode(reported.mode),
-    targetTemperatureC: reported.targetTemperatureC,
-    ambientTemperatureC: reported.ambientTemperatureC,
-    ambientTemperatureF: reported.ambientTemperatureF,
+    targetTemperatureC: reported.targetTemperatureC ?? 0,
+    ambientTemperatureC: reported.ambientTemperatureC ?? null,
+    ambientTemperatureF: reported.ambientTemperatureF ?? null,
     temperatureRepresentation: toLowercase(reported.temperatureRepresentation) as TemperatureUnit,
 
-    // Fan control - climate devices
+    // Fan control
     fanSpeedSetting: normalizeFanSpeed(reported.fanSpeedSetting),
     verticalSwing: toLowercase(reported.verticalSwing) as OnOffState,
     sleepMode: toLowercase(reported.sleepMode) as OnOffState,
 
-    // Compressor states - cooling/heating devices
+    // Compressor states
     compressorState: toLowercase(reported.compressorState) as OnOffState,
-    compressorCoolingRuntime: reported.compressorCoolingRuntime,
-    compressorHeatingRuntime: reported.compressorHeatingRuntime,
-    totalRuntime: reported.totalRuntime,
+    compressorCoolingRuntime: reported.compressorCoolingRuntime ?? 0,
+    compressorHeatingRuntime: reported.compressorHeatingRuntime ?? 0,
+    totalRuntime: reported.totalRuntime ?? 0,
 
-    // Filter states - climate devices
+    // Filter states
     filterState: toLowercase(reported.filterState) as FilterState,
-    filterRuntime: reported.filterRuntime,
-    hepaFilterLifeTime: reported.hepaFilterLifeTime,
+    filterRuntime: reported.filterRuntime ?? 0,
+    hepaFilterLifeTime: reported.hepaFilterLifeTime ?? null,
 
-    // Advanced states - climate devices
+    // Advanced states
     fourWayValveState: toLowercase(reported.fourWayValveState) as OnOffNullableState,
     evapDefrostState: toLowercase(reported.evapDefrostState) as OnOffNullableState,
-  } as NormalizedState
+  }
 }
