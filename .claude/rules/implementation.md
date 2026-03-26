@@ -49,7 +49,7 @@ Update `README.md` in the same pass. This includes but is not limited to:
 - New appliance support
 - New MQTT topics or message formats
 - New Docker configuration
-- New npm scripts
+- New pnpm scripts
 
 Do not wait to be asked. If the user can see it or use it, it belongs in README.
 

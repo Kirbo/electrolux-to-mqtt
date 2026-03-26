@@ -17,6 +17,7 @@ Implement the following: $ARGUMENTS
    - MQTT / Home Assistant integration → update mqtt.ts, HA types, tests
    - Docker configuration → update Dockerfile, compose files, README
    - User-facing feature or behavioral change → update README in the same pass
+   - Telemetry backend → update endpoints, Dockerfile, compose, README
    - Dependency updates → follow the dependency checklist
 
 3. Write tests first (TDD), then implement.
