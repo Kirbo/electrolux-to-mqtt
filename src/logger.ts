@@ -26,9 +26,10 @@ const getTimezone = () => {
         return tz
       }
     } catch {
-      console.warn('Could not detect timezone, falling back to UTC')
-      return 'UTC'
+      // /etc/localtime not readable
     }
+    console.warn('Could not detect timezone, falling back to UTC')
+    return 'UTC'
   }
 }
 
