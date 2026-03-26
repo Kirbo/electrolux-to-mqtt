@@ -13,6 +13,20 @@ import { Appliance, ApplianceInfo, ApplianceStub } from './types.js'
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
+function isAppliance(value: unknown): value is Appliance {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'applianceId' in value &&
+    'properties' in value &&
+    typeof (value as Record<string, unknown>).properties === 'object'
+  )
+}
+
+function isApplianceInfo(value: unknown): value is ApplianceInfo {
+  return typeof value === 'object' && value !== null && 'applianceInfo' in value && 'capabilities' in value
+}
+
 // Configuration constants
 const TOKEN_REFRESH_THRESHOLD_HOURS = 1 // Refresh token if it's set to expire within 1 hour
 const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
@@ -101,9 +115,10 @@ export function getStateDifferences(
   }
 
   // Compare all keys in newState
+  // NormalizedState is a plain data object — index dynamically for key-by-key comparison
   for (const key of Object.keys(newState)) {
-    const oldValue = (oldState as unknown as Record<string, unknown>)[key]
-    const newValue = (newState as unknown as Record<string, unknown>)[key]
+    const oldValue = oldState[key as keyof NormalizedState]
+    const newValue = newState[key as keyof NormalizedState]
 
     // Skip if this key is ignored
     if (shouldIgnore(key)) {
@@ -682,7 +697,8 @@ export class ElectroluxClient {
     applianceId: string,
     cacheKey: string,
   ): void {
-    const cachedRawState = cache.get(cacheKey) as Appliance | null
+    const cached = cache.get(cacheKey)
+    const cachedRawState = isAppliance(cached) ? cached : null
     const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
 
     if (!cachedNormalizedState) {
@@ -726,7 +742,11 @@ export class ElectroluxClient {
       }
       const response = await this.client.get(`/api/v1/appliances/${applianceId}/info`)
       logger.debug('Appliance info:', response.data)
-      return response.data as ApplianceInfo
+      const data: unknown = response.data
+      if (!isApplianceInfo(data)) {
+        throw new Error('Invalid appliance info response')
+      }
+      return data
     }, 'Error getting appliance info')
   }
 
@@ -802,7 +822,8 @@ export class ElectroluxClient {
     }
     const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
 
-    const cachedRawState = cache.get(cacheKey) as Appliance | null
+    const cachedData = cache.get(cacheKey)
+    const cachedRawState = isAppliance(cachedData) ? cachedData : null
     const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
     const normalizedState = appliance.normalizeState(response.data)
 
@@ -837,7 +858,8 @@ export class ElectroluxClient {
       logger.debug(
         `Skipping state fetch for ${applianceId}: only ${Math.round(timeSinceCommand / 1000)}s since command was sent (waiting ${Math.round((COMMAND_STATE_DELAY_MS - timeSinceCommand) / 1000)}s more)`,
       )
-      return cache.get(cacheKey) as Appliance
+      const cached = cache.get(cacheKey)
+      return isAppliance(cached) ? cached : undefined
     }
 
     return this.handleApiRequest(async () => {
