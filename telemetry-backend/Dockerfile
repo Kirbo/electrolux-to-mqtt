@@ -3,8 +3,8 @@
 # Define build argument for Node version (passed from docker-compose)
 ARG NODE_VERSION=24
 
-# Use official Node image
-FROM node:${NODE_VERSION}-alpine
+# ── Stage 1: build ──────────────────────────────────────────────────
+FROM node:${NODE_VERSION}-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY ./package.json ./application.json
 # Copy source files
 COPY ./telemetry-backend/ .
 
-# Install package manager if specified and install dependencies
+# Install package manager, all dependencies, and compile TypeScript
 ENV CI=true
 RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
     npm pkg set packageManager="${PACKAGE_MANAGER}" && \
@@ -26,6 +26,32 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
     echo "====================================================================================" && \
     pnpm install && \
     pnpm run build
+
+# ── Stage 2: production ────────────────────────────────────────────
+FROM node:${NODE_VERSION}-alpine
+
+WORKDIR /app
+
+# Copy root package.json for package manager detection
+COPY ./package.json ./application.json
+
+# Copy package manifest and lock file from builder
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-lock.yaml ./
+
+# Install only production dependencies
+ENV CI=true
+RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
+    npm pkg set packageManager="${PACKAGE_MANAGER}" && \
+    corepack enable && \
+    corepack install && \
+    pnpm install --prod && \
+    rm -f application.json
+
+# Copy compiled output
+COPY --from=builder /app/dist ./dist
+
+ENV NODE_ENV=production
 
 # Expose port
 EXPOSE 3001

@@ -40,7 +40,7 @@ redis.on('error', (err: Error) => console.error('Redis Client Error', err))
 
 await redis.connect()
 
-app.use(express.json())
+app.use(express.json({ limit: '10kb' }))
 
 type RateLimitEntry = {
   count: number
@@ -73,8 +73,6 @@ function enforceRateLimit(key: string, store: Map<string, RateLimitEntry>, max: 
 }
 
 function rateLimitByIp(req: Request, res: Response, next: () => void) {
-  const now = Date.now()
-  void now
   const ip = req.ip || 'unknown'
   const ipKey = `ip:${hashIp(ip)}`
   if (!enforceRateLimit(ipKey, ipRateLimitStore, RATE_LIMIT_IP_MAX, res)) {
