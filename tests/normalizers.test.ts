@@ -30,6 +30,14 @@ describe('Normalizers', () => {
       expect(normalizeApplianceState('on')).toBe('on')
       expect(normalizeApplianceState('OFF')).toBe('off')
     })
+
+    it('should default to "off" for undefined', () => {
+      expect(normalizeApplianceState(undefined)).toBe('off')
+    })
+
+    it('should default to "off" for unknown values', () => {
+      expect(normalizeApplianceState('UNKNOWN_STATE')).toBe('off')
+    })
   })
 
   describe('normalizeConnectionState', () => {
@@ -54,6 +62,14 @@ describe('Normalizers', () => {
       expect(normalizeClimateMode('Heat')).toBe('heat')
       expect(normalizeClimateMode('auto')).toBe('auto')
     })
+
+    it('should default to "off" for undefined', () => {
+      expect(normalizeClimateMode(undefined)).toBe('off')
+    })
+
+    it('should default to "off" for unknown values', () => {
+      expect(normalizeClimateMode('UNKNOWN_MODE')).toBe('off')
+    })
   })
 
   describe('normalizeFanSpeed', () => {
@@ -66,6 +82,14 @@ describe('Normalizers', () => {
       expect(normalizeFanSpeed('HIGH')).toBe('high')
       expect(normalizeFanSpeed('Low')).toBe('low')
       expect(normalizeFanSpeed('auto')).toBe('auto')
+    })
+
+    it('should default to "auto" for undefined', () => {
+      expect(normalizeFanSpeed(undefined)).toBe('auto')
+    })
+
+    it('should default to "auto" for unknown values', () => {
+      expect(normalizeFanSpeed('UNKNOWN_SPEED')).toBe('auto')
     })
   })
 })

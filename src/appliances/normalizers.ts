@@ -17,6 +17,18 @@ import type { Appliance } from '../types.js'
  * Utility functions for normalizing Electrolux API data to standard format
  */
 
+const VALID_ON_OFF: ReadonlySet<string> = new Set<OnOffState>(['on', 'off'])
+const VALID_CONNECTION: ReadonlySet<string> = new Set<ConnectionState>(['connected', 'disconnected'])
+const VALID_CLIMATE_MODES: ReadonlySet<string> = new Set<NormalizedClimateMode>([
+  'cool',
+  'heat',
+  'fan_only',
+  'dry',
+  'auto',
+  'off',
+])
+const VALID_FAN_MODES: ReadonlySet<string> = new Set<NormalizedFanMode>(['low', 'medium', 'high', 'auto'])
+
 /**
  * Normalize a string to lowercase
  */
@@ -29,14 +41,22 @@ export function toLowercase<T extends string>(value: T | undefined | null): Lowe
  */
 export function normalizeApplianceState(state: string | undefined): OnOffState {
   const normalized = state?.toLowerCase()
-  return normalized === 'running' ? 'on' : (normalized as OnOffState)
+  const mapped = normalized === 'running' ? 'on' : normalized
+  if (mapped !== undefined && VALID_ON_OFF.has(mapped)) {
+    return mapped as OnOffState
+  }
+  return 'off'
 }
 
 /**
  * Normalize connection state from API format to standard format
  */
 export function normalizeConnectionState(state: string | undefined): ConnectionState {
-  return (state?.toLowerCase() as ConnectionState) ?? 'disconnected'
+  const normalized = state?.toLowerCase()
+  if (normalized !== undefined && VALID_CONNECTION.has(normalized)) {
+    return normalized as ConnectionState
+  }
+  return 'disconnected'
 }
 
 /**
@@ -44,7 +64,11 @@ export function normalizeConnectionState(state: string | undefined): ConnectionS
  */
 export function normalizeClimateMode(mode: string | undefined): NormalizedClimateMode {
   const normalized = mode?.toLowerCase()
-  return (normalized === 'fanonly' ? 'fan_only' : normalized) as NormalizedClimateMode
+  const mapped = normalized === 'fanonly' ? 'fan_only' : normalized
+  if (mapped !== undefined && VALID_CLIMATE_MODES.has(mapped)) {
+    return mapped as NormalizedClimateMode
+  }
+  return 'off'
 }
 
 /**
@@ -52,7 +76,11 @@ export function normalizeClimateMode(mode: string | undefined): NormalizedClimat
  */
 export function normalizeFanSpeed(speed: string | undefined): NormalizedFanMode {
   const normalized = speed?.toLowerCase()
-  return (normalized === 'middle' ? 'medium' : normalized) as NormalizedFanMode
+  const mapped = normalized === 'middle' ? 'medium' : normalized
+  if (mapped !== undefined && VALID_FAN_MODES.has(mapped)) {
+    return mapped as NormalizedFanMode
+  }
+  return 'auto'
 }
 
 /**
