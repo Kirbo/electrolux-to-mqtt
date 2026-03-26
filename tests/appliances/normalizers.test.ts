@@ -3,9 +3,19 @@ import {
   denormalizeClimateMode,
   denormalizeFanSpeed,
   extractReportedState,
+  normalizeApplianceState,
   normalizeBaseFields,
   normalizeClimateAppliance,
+  normalizeClimateMode,
   normalizeConnectionState,
+  normalizeEnabledState,
+  normalizeFanSpeed,
+  normalizeFilterState,
+  normalizeLinkQuality,
+  normalizeOnOffNullable,
+  normalizeOnOffState,
+  normalizeTemperatureUnit,
+  normalizeUpgradeState,
 } from '../../src/appliances/normalizers.js'
 import type { Appliance } from '../../src/types.js'
 
@@ -56,6 +66,155 @@ describe('normalizers', () => {
     })
   })
 
+  describe('normalizeApplianceState', () => {
+    it('should convert "running" to "on"', () => {
+      expect(normalizeApplianceState('running')).toBe('on')
+      expect(normalizeApplianceState('RUNNING')).toBe('on')
+    })
+
+    it('should handle on/off states', () => {
+      expect(normalizeApplianceState('on')).toBe('on')
+      expect(normalizeApplianceState('OFF')).toBe('off')
+    })
+
+    it('should default to "off" for undefined or unknown values', () => {
+      expect(normalizeApplianceState(undefined)).toBe('off')
+      expect(normalizeApplianceState('UNKNOWN_STATE')).toBe('off')
+    })
+  })
+
+  describe('normalizeClimateMode', () => {
+    it('should convert "fanonly" to "fan_only"', () => {
+      expect(normalizeClimateMode('fanonly')).toBe('fan_only')
+      expect(normalizeClimateMode('FANONLY')).toBe('fan_only')
+    })
+
+    it('should lowercase other modes', () => {
+      expect(normalizeClimateMode('COOL')).toBe('cool')
+      expect(normalizeClimateMode('Heat')).toBe('heat')
+      expect(normalizeClimateMode('auto')).toBe('auto')
+    })
+
+    it('should default to "off" for undefined or unknown values', () => {
+      expect(normalizeClimateMode(undefined)).toBe('off')
+      expect(normalizeClimateMode('UNKNOWN_MODE')).toBe('off')
+    })
+  })
+
+  describe('normalizeFanSpeed', () => {
+    it('should convert "middle" to "medium"', () => {
+      expect(normalizeFanSpeed('middle')).toBe('medium')
+      expect(normalizeFanSpeed('MIDDLE')).toBe('medium')
+    })
+
+    it('should lowercase other modes', () => {
+      expect(normalizeFanSpeed('HIGH')).toBe('high')
+      expect(normalizeFanSpeed('Low')).toBe('low')
+      expect(normalizeFanSpeed('auto')).toBe('auto')
+    })
+
+    it('should default to "auto" for undefined or unknown values', () => {
+      expect(normalizeFanSpeed(undefined)).toBe('auto')
+      expect(normalizeFanSpeed('UNKNOWN_SPEED')).toBe('auto')
+    })
+  })
+
+  describe('normalizeEnabledState', () => {
+    it('should normalize valid states', () => {
+      expect(normalizeEnabledState('enabled')).toBe('enabled')
+      expect(normalizeEnabledState('DISABLED')).toBe('disabled')
+      expect(normalizeEnabledState('Enabled')).toBe('enabled')
+    })
+
+    it('should default to "disabled" for undefined or unknown', () => {
+      expect(normalizeEnabledState(undefined)).toBe('disabled')
+      expect(normalizeEnabledState('UNKNOWN')).toBe('disabled')
+    })
+  })
+
+  describe('normalizeLinkQuality', () => {
+    it('should normalize valid qualities', () => {
+      expect(normalizeLinkQuality('EXCELLENT')).toBe('excellent')
+      expect(normalizeLinkQuality('VERY_GOOD')).toBe('very_good')
+      expect(normalizeLinkQuality('GOOD')).toBe('good')
+      expect(normalizeLinkQuality('POOR')).toBe('poor')
+      expect(normalizeLinkQuality('VERY_POOR')).toBe('very_poor')
+      expect(normalizeLinkQuality('UNDEFINED')).toBe('undefined')
+    })
+
+    it('should default to "undefined" for null/undefined/unknown', () => {
+      expect(normalizeLinkQuality(undefined)).toBe('undefined')
+      expect(normalizeLinkQuality(null)).toBe('undefined')
+      expect(normalizeLinkQuality('UNKNOWN')).toBe('undefined')
+    })
+  })
+
+  describe('normalizeOnOffState', () => {
+    it('should normalize valid states', () => {
+      expect(normalizeOnOffState('ON')).toBe('on')
+      expect(normalizeOnOffState('off')).toBe('off')
+    })
+
+    it('should default to "off" for null/undefined/unknown', () => {
+      expect(normalizeOnOffState(undefined)).toBe('off')
+      expect(normalizeOnOffState(null)).toBe('off')
+      expect(normalizeOnOffState('UNKNOWN')).toBe('off')
+    })
+  })
+
+  describe('normalizeOnOffNullable', () => {
+    it('should normalize valid states', () => {
+      expect(normalizeOnOffNullable('ON')).toBe('on')
+      expect(normalizeOnOffNullable('off')).toBe('off')
+    })
+
+    it('should return null for null/undefined/unknown', () => {
+      expect(normalizeOnOffNullable(undefined)).toBeNull()
+      expect(normalizeOnOffNullable(null)).toBeNull()
+      expect(normalizeOnOffNullable('UNKNOWN')).toBeNull()
+    })
+  })
+
+  describe('normalizeUpgradeState', () => {
+    it('should normalize valid states', () => {
+      expect(normalizeUpgradeState('IDLE')).toBe('idle')
+      expect(normalizeUpgradeState('upgrading')).toBe('upgrading')
+    })
+
+    it('should return null for null/undefined/unknown', () => {
+      expect(normalizeUpgradeState(undefined)).toBeNull()
+      expect(normalizeUpgradeState(null)).toBeNull()
+      expect(normalizeUpgradeState('UNKNOWN')).toBeNull()
+    })
+  })
+
+  describe('normalizeTemperatureUnit', () => {
+    it('should normalize valid units', () => {
+      expect(normalizeTemperatureUnit('celsius')).toBe('celsius')
+      expect(normalizeTemperatureUnit('FAHRENHEIT')).toBe('fahrenheit')
+    })
+
+    it('should default to "celsius" for null/undefined/unknown', () => {
+      expect(normalizeTemperatureUnit(undefined)).toBe('celsius')
+      expect(normalizeTemperatureUnit(null)).toBe('celsius')
+      expect(normalizeTemperatureUnit('KELVIN')).toBe('celsius')
+    })
+  })
+
+  describe('normalizeFilterState', () => {
+    it('should normalize valid states', () => {
+      expect(normalizeFilterState('CLEAN')).toBe('clean')
+      expect(normalizeFilterState('good')).toBe('good')
+      expect(normalizeFilterState('DIRTY')).toBe('dirty')
+    })
+
+    it('should default to "clean" for null/undefined/unknown', () => {
+      expect(normalizeFilterState(undefined)).toBe('clean')
+      expect(normalizeFilterState(null)).toBe('clean')
+      expect(normalizeFilterState('UNKNOWN')).toBe('clean')
+    })
+  })
+
   describe('extractReportedState', () => {
     it('should extract nested reported state', () => {
       const appliance = {
@@ -77,6 +236,8 @@ describe('normalizers', () => {
       const appliance = {
         applianceState: 'ON',
         mode: 'COOL',
+        deviceId: 'device-123',
+        dataModelVersion: '1.0.0',
       } as unknown as Appliance
 
       const result = extractReportedState(appliance)
