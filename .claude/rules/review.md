@@ -10,6 +10,7 @@ This checklist is a **minimum baseline**, not an exhaustive list. The review mus
 - **Code quality** — readability, maintainability, no dead code, no code smells
 - **Performance** — unnecessary allocations, polling efficiency, caching correctness
 - **DevOps / CI** — pipeline correctness, Docker build, reproducible builds
+- **Telemetry backend** — `telemetry-backend/` service: Dockerfile quality, dependency hygiene, input validation
 
 If something looks wrong or outdated but isn't on the checklist below, flag it anyway. When a finding falls outside the checklist, suggest adding it as a new checklist item so future reviews catch it automatically.
 
@@ -67,17 +68,27 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] `vitest.config.ts` coverage excludes match actual project structure (no phantom paths)
 - [ ] `vitest.config.ts` coverage thresholds are maintained or improved
 - [ ] CI pipeline stages match local development workflow
-- [ ] Docker builds produce correct, minimal images
+- [ ] Docker builds produce correct, minimal images (including `telemetry-backend/Dockerfile`)
 
 ### 8. Security
 - [ ] Credentials (API keys, passwords, tokens) are never logged
-- [ ] `tokens.json` and `config.yml` are in `.gitignore`
+- [ ] `config.yml` is in `.gitignore` (`tokens.json` is auto-populated from credentials in `config.yml` at runtime — no manual creation needed)
 - [ ] Docker images don't include dev dependencies or source maps
 - [ ] Environment variable fallbacks don't expose defaults for sensitive fields
 
-### 9. E2E snapshot validation
+### 9. Telemetry backend (`telemetry-backend/`)
+- [ ] Dockerfile uses multi-stage build and strips dev dependencies
+- [ ] No hardcoded secrets or unsafe defaults in `src/index.ts`
+- [ ] Input validation on all API endpoints (userHash, version)
+- [ ] Rate limiting configured and functional on mutation endpoints (POST). Read-only endpoints (GET) intentionally have no rate limiting since they serve cached responses.
+- [ ] Rate limiting runs before input validation (malformed requests must still consume rate limit quota to prevent flooding)
+- [ ] `express.json()` has a payload size limit configured
+- [ ] `docker-compose.yml` environment variables match what `src/index.ts` reads
+- [ ] `README.md` documents all environment variables
 
-> **Note:** Requires valid `config.yml` and `tokens.json`. Skip if credentials are not available.
+### 10. E2E snapshot validation
+
+> **Pre-check:** Run `test -f config.yml && grep -qE '(apiKey|username|password)' config.yml && echo "CREDENTIALS_AVAILABLE" || echo "NO_CREDENTIALS"`. If `CREDENTIALS_AVAILABLE`, run all items below. If `NO_CREDENTIALS`, skip this section.
 
 - [ ] Run `pnpm test:e2e` — all tests pass
 - [ ] Compare `tests/e2e/snapshots/appliance-state.json` reported keys against `Appliance['properties']['reported']` in `src/types.d.ts` — no missing fields, no extra fields unaccounted for

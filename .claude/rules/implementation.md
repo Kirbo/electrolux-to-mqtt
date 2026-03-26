@@ -25,7 +25,7 @@ Update:
 
 ## When modifying API types (`src/types.d.ts`, `src/types/normalized.ts`)
 
-If the user has valid credentials (`config.yml` + `tokens.json`), run `pnpm test:e2e` and compare the snapshots in `tests/e2e/snapshots/` against the type definitions:
+If the user has valid credentials (`config.yml` — `tokens.json` is auto-populated at runtime), run `pnpm test:e2e` and compare the snapshots in `tests/e2e/snapshots/` against the type definitions:
 - `appliance-state.json` reported keys → `Appliance['properties']['reported']` fields
 - `appliance-info.json` capabilities enum values → raw type unions in `src/types.d.ts`
 - Raw type enum values → normalized type unions in `src/types/normalized.ts`
@@ -68,6 +68,16 @@ Update:
 - Always re-run `pnpm check`, `pnpm typecheck`, and `pnpm test` after updating.
 - Watch for breaking changes (e.g., Zod v3 -> v4 nested defaults behavior).
 - Update `packageManager` field via `corepack use pnpm@latest` if pnpm itself is outdated.
+
+## When telemetry backend changes (`telemetry-backend/`)
+
+Update:
+- `telemetry-backend/src/index.ts` (API endpoints, rate limiting, Redis logic)
+- `telemetry-backend/Dockerfile` (if build or runtime changes)
+- `telemetry-backend/docker-compose.yml` (if compose config changed)
+- `telemetry-backend/README.md` (environment variables, API endpoints, deployment)
+
+The telemetry backend is a standalone service with its own `package.json` and `tsconfig.json`. Changes here do not require running the main project's test suite, but do require verifying the Dockerfile builds correctly.
 
 ## No empty directories
 

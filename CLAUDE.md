@@ -2,7 +2,7 @@
 
 ## Project
 
-Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux appliances to Home Assistant via MQTT auto-discovery. Uses pnpm, Biome, Vitest.
+Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux appliances to Home Assistant via MQTT auto-discovery. Uses pnpm, Biome, Vitest. Includes a standalone `telemetry-backend/` service for anonymous usage statistics.
 
 ## Rules
 
@@ -23,7 +23,7 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 
 ### Tooling
 - Always use `pnpm`. Never `npm` or `yarn`.
-- Biome for linting/formatting. No ESLint or Prettier. Double quotes everywhere (including config files and README code blocks).
+- Biome for linting/formatting. No ESLint or Prettier. Single quotes everywhere (matching `biome.jsonc` `quoteStyle: "single"`).
 - Always use `Number.parseInt` / `Number.parseFloat`, never the global forms.
 - TDD: write tests first, then implement.
 
@@ -65,7 +65,7 @@ Read the relevant file **before starting work** — the skills do this automatic
 
 | File | Read when… |
 |------|-----------|
-| [.claude/rules/implementation.md](.claude/rules/implementation.md) | You are about to write, edit, or delete any code in `src/` or `tests/` |
+| [.claude/rules/implementation.md](.claude/rules/implementation.md) | You are about to write, edit, or delete any code in `src/`, `telemetry-backend/`, `docker/`, or `tests/` |
 | [.claude/rules/review.md](.claude/rules/review.md) | You are asked to review, audit, or check the codebase |
 
 ## Self-maintenance
