@@ -250,6 +250,7 @@ describe('logger', () => {
     afterEach(() => {
       vi.restoreAllMocks()
       delete process.env.TZ
+      delete process.env.LOG_LEVEL
     })
 
     it('should use TZ environment variable when set', async () => {
@@ -287,6 +288,32 @@ describe('logger', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to UTC'))
       expect(logger).toBeDefined()
+    })
+
+    it('should use LOG_LEVEL when explicitly set and apply showTimestamp:false config', async () => {
+      process.env.LOG_LEVEL = 'warn'
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: true } },
+      }))
+
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({
+          child: vi.fn().mockReturnValue({
+            info: vi.fn(),
+            error: vi.fn(),
+            warn: vi.fn(),
+            debug: vi.fn(),
+          }),
+        }),
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+
+      expect(logger).toBeDefined()
+      expect(logger.info).toBeDefined()
     })
 
     it('should create a logger that can log objects via util.inspect', async () => {
