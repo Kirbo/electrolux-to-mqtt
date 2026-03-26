@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import axios, { AxiosInstance } from 'axios'
 import type { BaseAppliance } from './appliances/base.js'
+import { normalizeClimateMode, normalizeFanSpeed, normalizeOnOffState } from './appliances/normalizers.js'
 import { cache } from './cache.js'
 import config, { Tokens } from './config.js'
 import createLogger from './logger.js'
@@ -23,6 +24,17 @@ function isAppliance(value: unknown): value is Appliance {
   )
 }
 
+function isNormalizedState(value: unknown): value is NormalizedState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'applianceId' in value &&
+    'deviceId' in value &&
+    'mode' in value &&
+    !('properties' in value)
+  )
+}
+
 function isApplianceInfo(value: unknown): value is ApplianceInfo {
   return typeof value === 'object' && value !== null && 'applianceInfo' in value && 'capabilities' in value
 }
@@ -31,8 +43,10 @@ function isApplianceInfo(value: unknown): value is ApplianceInfo {
 const TOKEN_REFRESH_THRESHOLD_HOURS = 1 // Refresh token if it's set to expire within 1 hour
 const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
-const LOGIN_RETRY_DELAY_MS = 5_000 // Retry login after 5s on failure
-const TOKEN_REFRESH_RETRY_DELAY_MS = 5_000 // Retry token refresh after 5s on failure
+const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (doubles each attempt)
+const LOGIN_RETRY_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
+const TOKEN_REFRESH_BASE_DELAY_MS = 5_000 // Initial retry delay for token refresh
+const TOKEN_REFRESH_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
 const API_TIMEOUT_MS = 10_000 // Default timeout for API requests
 
 // Track timeouts for cleanup
@@ -192,6 +206,8 @@ export class ElectroluxClient {
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
   private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
+  private loginRetryCount = 0
+  private refreshRetryCount = 0
 
   public isLoggingIn = false
   public isLoggedIn = false
@@ -392,16 +408,20 @@ export class ElectroluxClient {
 
       this.isLoggedIn = true
       this.isLoggingIn = false
+      this.loginRetryCount = 0
 
       return true
     } catch (error) {
       this.isLoggedIn = false
       this.isLoggingIn = false
+      const delay = Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** this.loginRetryCount, LOGIN_RETRY_MAX_DELAY_MS)
+      this.loginRetryCount++
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
+      logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${this.loginRetryCount})...`)
       const retryTimeout = setTimeout(async () => {
         activeTimeouts.delete(retryTimeout)
         await this.login()
-      }, LOGIN_RETRY_DELAY_MS)
+      }, delay)
       activeTimeouts.add(retryTimeout)
       return false
     }
@@ -519,6 +539,7 @@ export class ElectroluxClient {
 
       this.isLoggingIn = false
       this.isLoggedIn = true
+      this.refreshRetryCount = 0
 
       // Small delay to ensure the new client is fully ready
       await new Promise((resolve) => setTimeout(resolve, 100))
@@ -533,13 +554,17 @@ export class ElectroluxClient {
         this.eat = undefined
         this.iat = undefined
         this.isLoggingIn = false
+        this.refreshRetryCount = 0
         await this.login()
       } else {
-        // Transient error (network issue, 5xx) — retry the refresh after a short delay
+        // Transient error (network issue, 5xx) — retry the refresh with exponential backoff
+        const delay = Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** this.refreshRetryCount, TOKEN_REFRESH_MAX_DELAY_MS)
+        this.refreshRetryCount++
+        logger.warn(`Retrying token refresh in ${Math.round(delay / 1000)}s (attempt ${this.refreshRetryCount})...`)
         const retryTimeout = setTimeout(async () => {
           activeTimeouts.delete(retryTimeout)
           await this.refreshTokens()
-        }, TOKEN_REFRESH_RETRY_DELAY_MS)
+        }, delay)
         activeTimeouts.add(retryTimeout)
       }
     }
@@ -662,17 +687,33 @@ export class ElectroluxClient {
     rawCommand: Partial<NormalizedState>,
     applianceId: string,
   ): NormalizedState {
+    // Normalize command values — HA command templates send uppercase (e.g., 'AUTO', 'ON')
+    // but the normalized state and HA state templates expect lowercase ('auto', 'on')
+    const normalizedCommand: Partial<NormalizedState> = { ...rawCommand }
+    if (normalizedCommand.mode) {
+      normalizedCommand.mode = normalizeClimateMode(normalizedCommand.mode)
+    }
+    if (normalizedCommand.fanSpeedSetting) {
+      normalizedCommand.fanSpeedSetting = normalizeFanSpeed(normalizedCommand.fanSpeedSetting)
+    }
+    if (normalizedCommand.verticalSwing) {
+      normalizedCommand.verticalSwing = normalizeOnOffState(normalizedCommand.verticalSwing)
+    }
+    if (normalizedCommand.sleepMode) {
+      normalizedCommand.sleepMode = normalizeOnOffState(normalizedCommand.sleepMode)
+    }
+
     // Track last non-off mode from command if applicable
-    if (rawCommand.mode && rawCommand.mode.toLowerCase() !== 'off') {
-      this.lastActiveMode.set(applianceId, rawCommand.mode)
+    if (normalizedCommand.mode && normalizedCommand.mode !== 'off') {
+      this.lastActiveMode.set(applianceId, normalizedCommand.mode)
     }
 
     const lastMode = this.lastActiveMode.get(applianceId)
-    const isOffCommand = rawCommand.mode?.toLowerCase() === 'off'
+    const isOffCommand = normalizedCommand.mode === 'off'
 
     const combinedState: NormalizedState = {
       ...cachedNormalizedState,
-      ...rawCommand,
+      ...normalizedCommand,
     }
 
     // If the command explicitly turns the unit off, keep the previous non-off mode for UI state
@@ -698,8 +739,12 @@ export class ElectroluxClient {
     cacheKey: string,
   ): void {
     const cached = cache.get(cacheKey)
-    const cachedRawState = isAppliance(cached) ? cached : null
-    const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
+    let cachedNormalizedState: NormalizedState | null = null
+    if (isAppliance(cached)) {
+      cachedNormalizedState = appliance.normalizeState(cached)
+    } else if (isNormalizedState(cached)) {
+      cachedNormalizedState = cached
+    }
 
     if (!cachedNormalizedState) {
       logger.warn('No cached state available for immediate feedback after command')
@@ -892,5 +937,3 @@ export class ElectroluxClient {
     }, 'Error sending command')
   }
 }
-
-export default ElectroluxClient
