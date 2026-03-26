@@ -3,7 +3,7 @@ import { Cache } from '../src/cache'
 
 describe('Cache', () => {
   it('should store and retrieve values', () => {
-    const cache = new Cache<{ name: string }>()
+    const cache = new Cache()
     cache.set('test-key', { name: 'value' })
     const retrieved = cache.get('test-key')
     expect(retrieved).toEqual({ name: 'value' })
@@ -15,7 +15,7 @@ describe('Cache', () => {
   })
 
   it('should detect when value has not changed', () => {
-    const cache = new Cache<{ name: string }>()
+    const cache = new Cache()
     const value = { name: 'test' }
 
     // First call should return false (value changed/new)
@@ -26,7 +26,7 @@ describe('Cache', () => {
   })
 
   it('should detect when value has changed', () => {
-    const cache = new Cache<{ temp: number }>()
+    const cache = new Cache()
 
     cache.matchByValue('key', { temp: 20 })
     const hasNotChanged = cache.matchByValue('key', { temp: 25 })
@@ -43,7 +43,7 @@ describe('Cache', () => {
   })
 
   it('should clear values', () => {
-    const cache = new Cache<{ val: string }>()
+    const cache = new Cache()
     cache.set('key', { val: 'value' })
     expect(cache.get('key')).toEqual({ val: 'value' })
 
@@ -52,7 +52,7 @@ describe('Cache', () => {
   })
 
   it('should check if key exists', () => {
-    const cache = new Cache<{ test: string }>()
+    const cache = new Cache()
     expect(cache.has('key')).toBe(false)
 
     cache.set('key', { test: 'value' })
@@ -62,34 +62,35 @@ describe('Cache', () => {
     expect(cache.has('key')).toBe(false)
   })
 
-  it('should handle getting unparsed values', () => {
-    const cache = new Cache<Record<string, unknown>>()
+  it('should return parsed JSON from get', () => {
+    const cache = new Cache()
     cache.set('test-key', { data: 'value' })
-    const unparsed = cache.get('test-key', false)
-    expect(typeof unparsed).toBe('string')
+    const result = cache.get('test-key')
+    expect(typeof result).toBe('object')
+    expect(result).toEqual({ data: 'value' })
   })
 
   it('should handle number values', () => {
-    const cache = new Cache<{ count: number }>()
+    const cache = new Cache()
     cache.set('count-key', { count: 42 })
     expect(cache.get('count-key')).toEqual({ count: 42 })
   })
 
   it('should handle array values', () => {
-    const cache = new Cache<number[]>()
+    const cache = new Cache()
     cache.set('array-key', [1, 2, 3])
     expect(cache.get('array-key')).toEqual([1, 2, 3])
   })
 
   it('should handle nested objects', () => {
-    const cache = new Cache<{ nested: { deep: { value: string } } }>()
+    const cache = new Cache()
     const nested = { nested: { deep: { value: 'test' } } }
     cache.set('nested-key', nested)
     expect(cache.get('nested-key')).toEqual(nested)
   })
 
   it('should return cache instance for chaining', () => {
-    const cache = new Cache<{ val: string }>()
+    const cache = new Cache()
     const result = cache.set('key1', { val: 'value1' })
     expect(result).toBe(cache)
 
@@ -100,7 +101,7 @@ describe('Cache', () => {
   })
 
   it('should handle value comparison with different types', () => {
-    const cache = new Cache<unknown>()
+    const cache = new Cache()
 
     // Test with object
     const obj = { type: 'object' }

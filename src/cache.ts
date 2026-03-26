@@ -14,7 +14,7 @@ type CacheKeys = {
   autoDiscovery: string
 }
 
-export class Cache<T = unknown> {
+export class Cache {
   private readonly lru: LRU<string>
 
   constructor(max = maxItems, ttl = defaultTtl, resetTtl = defaultResetTtl) {
@@ -28,7 +28,7 @@ export class Cache<T = unknown> {
     }
   }
 
-  matchByValue(key: string, value: T): boolean {
+  matchByValue(key: string, value: unknown): boolean {
     const cached = this.get(key)
     const match = JSON.stringify(value) === JSON.stringify(cached)
     if (match) {
@@ -42,15 +42,15 @@ export class Cache<T = unknown> {
     return false
   }
 
-  get(key: string, parsed = true): T | undefined {
+  get(key: string): unknown {
     const value = this.lru.get(key)
     if (value === undefined) {
       return undefined
     }
-    return parsed ? (JSON.parse(value) as T) : (value as unknown as T)
+    return JSON.parse(value) as unknown
   }
 
-  set(key: string, value: T): this {
+  set(key: string, value: unknown): this {
     const toStore = typeof value === 'string' ? value : JSON.stringify(value)
     this.lru.set(key, toStore, false, true)
     if (!skipCacheLogging) {
