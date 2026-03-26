@@ -37,7 +37,7 @@ export type Appliance = {
       logW?: number | null
       mode?: 'cool' | 'heat' | 'fanonly' | 'dry' | 'auto' | 'off'
       networkInterface: {
-        linkQualityIndicator: 'EXCELLENT' | 'VERY_GOOD' | 'GOOD' | 'FAIR' | 'POOR' | 'VERY_POOR' | 'UNDEFINED'
+        linkQualityIndicator: 'EXCELLENT' | 'VERY_GOOD' | 'GOOD' | 'POOR' | 'VERY_POOR' | 'UNDEFINED'
         rssi: number
       }
       schedulerMode?: 'on' | 'off' | null

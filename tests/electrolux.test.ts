@@ -387,7 +387,7 @@ describe('electrolux', () => {
 
         const newState = {
           applianceId: 'test-123',
-          networkInterface: { rssi: -60, linkQualityIndicator: 'FAIR' },
+          networkInterface: { rssi: -60, linkQualityIndicator: 'POOR' },
           mode: 'heat',
         } as unknown as NormalizedState
 
