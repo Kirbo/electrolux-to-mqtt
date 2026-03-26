@@ -255,7 +255,7 @@ export class ElectroluxClient {
       if (setCookieHeader && Array.isArray(setCookieHeader)) {
         const csrfSecretCookie = setCookieHeader.find((cookie) => cookie.startsWith('_csrfSecret='))
         if (csrfSecretCookie) {
-          csrfSecret = csrfSecretCookie.split(';')[0].split('=')[1]
+          csrfSecret = csrfSecretCookie.split(';')[0]?.split('=')[1] ?? ''
         }
       }
 
@@ -350,7 +350,7 @@ export class ElectroluxClient {
         const refreshTokenCookie = setCookieHeader.find((cookie) => cookie.startsWith('refreshToken='))
 
         if (accessTokenCookie) {
-          this.accessToken = this.sanitizeToken(accessTokenCookie.split(';')[0].split('=')[1])
+          this.accessToken = this.sanitizeToken(accessTokenCookie.split(';')[0]?.split('=')[1] ?? '')
             .split('.')
             .slice(0, 3)
             .join('.')
@@ -360,7 +360,8 @@ export class ElectroluxClient {
         }
 
         if (refreshTokenCookie) {
-          this.refreshToken = this.sanitizeToken(refreshTokenCookie.split(';')[0].split('=')[1]).split('.')?.[0]
+          this.refreshToken =
+            this.sanitizeToken(refreshTokenCookie.split(';')[0]?.split('=')[1] ?? '').split('.')[0] ?? ''
         }
       }
 
@@ -396,10 +397,26 @@ export class ElectroluxClient {
   }
 
   private parseAccessTokenPayload(accessToken: string): { eat: Date; iat: Date } {
-    const tokenPayload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString('utf-8'))
+    const parts = accessToken.split('.')
+    if (parts.length < 2 || !parts[1]) {
+      throw new Error('Malformed access token: expected JWT with at least 2 dot-separated parts')
+    }
+    const decoded = Buffer.from(parts[1], 'base64').toString('utf-8')
+    const tokenPayload: unknown = JSON.parse(decoded)
+    if (
+      typeof tokenPayload !== 'object' ||
+      tokenPayload === null ||
+      !('exp' in tokenPayload) ||
+      !('iat' in tokenPayload) ||
+      typeof (tokenPayload as Record<string, unknown>).exp !== 'number' ||
+      typeof (tokenPayload as Record<string, unknown>).iat !== 'number'
+    ) {
+      throw new Error('Malformed access token payload: missing or invalid exp/iat fields')
+    }
+    const { exp, iat } = tokenPayload as { exp: number; iat: number }
     return {
-      eat: new Date(tokenPayload.exp * 1000),
-      iat: new Date(tokenPayload.iat * 1000),
+      eat: new Date(exp * 1000),
+      iat: new Date(iat * 1000),
     }
   }
 

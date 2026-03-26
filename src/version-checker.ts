@@ -119,7 +119,9 @@ async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
         return new Date(b.released_at).getTime() - new Date(a.released_at).getTime()
       })
       const r = sortedReleases[0]
-      return { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined }
+      if (r) {
+        return { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined }
+      }
     }
 
     // Fallback to tags if no releases found
@@ -137,7 +139,9 @@ async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
         return new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime()
       })
       const t = sortedTags[0]
-      return { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
+      if (t) {
+        return { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
+      }
     }
 
     return null
