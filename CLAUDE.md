@@ -10,7 +10,6 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 - Never use `any`. Use `unknown` + type guards. No `as` without runtime check. No `// @ts-ignore`. No non-null assertions (`!`) — use type guards or optional chaining.
 - Keep `strict: true` and `noUncheckedIndexedAccess: true`.
 - State/config files read from disk must be validated, not blindly cast.
-- Dynamic `import()` results must be validated at runtime (`typeof mod === "object"`, `"default" in mod`, etc.) — never bare `as` cast.
 
 ### Code quality
 - No `console.log` — use `src/logger.ts` (pino). Exception: `console.*` is acceptable in `src/config.ts`, `src/init.ts`, and `src/logger.ts` for bootstrap messages that run before the pino logger is initialized.
@@ -38,7 +37,6 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 ### Sync
 - All example files must stay in sync: `config.example.yml`, `docker/docker-compose.example.yml`, `docker/docker-compose.local.example.yml`. When a config option is added or changed, update every example.
 - README project structure must match the actual directory layout — no phantom paths.
-- README config example must exactly match `config.example.yml` — keep one source of truth and copy it verbatim.
 
 ### Domain
 - Appliance classes must extend `BaseAppliance` and be registered in the factory.
@@ -53,6 +51,8 @@ After any code change:
    - Run `pnpm typecheck` — fix any type errors.
    - Run `pnpm test` — all tests must pass.
 3. Skip typecheck/test for documentation-only or config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
+
+> **Note:** `pnpm check`, `pnpm typecheck`, and `pnpm test` only cover the main project (`src/` and `tests/`). The `telemetry-backend/` is a standalone service with its own `package.json` and `tsconfig.json` — changes there require separate verification (see `.claude/rules/implementation.md` § "When telemetry backend changes").
 
 ## Skills
 

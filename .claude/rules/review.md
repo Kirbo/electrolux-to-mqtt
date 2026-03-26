@@ -55,7 +55,6 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] Edge cases: empty state, malformed API responses, network errors, invalid commands
 
 ### 6. Doc/code sync
-- [ ] Config example file (`config.example.yml`) matches README config example (diff, don't eyeball)
 - [ ] Docker compose example files (`docker/docker-compose.example.yml`, `docker/docker-compose.local.example.yml`) include all current config/env options
 - [ ] Environment variables documented match what `envSchema` in `src/config.ts` reads
 - [ ] `package.json` scripts match README development section
