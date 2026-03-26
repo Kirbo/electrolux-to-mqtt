@@ -70,4 +70,3 @@ export class Cache<T = unknown> {
 }
 
 export const cache = new Cache()
-export { LRU } from 'tiny-lru'
