@@ -9,8 +9,8 @@ vi.mock('mqtt', () => {
     publish: vi.fn((_topic, _message, _options, callback) => {
       if (callback) callback(null)
     }),
-    subscribe: vi.fn((topic, _options, callback) => {
-      if (callback) callback(null, [{ topic, qos: _options?.qos ?? 0 }])
+    subscribe: vi.fn((topic, callback) => {
+      if (callback) callback(null, [{ topic, qos: 0 }])
     }),
     end: vi.fn(),
   }
@@ -121,43 +121,38 @@ describe('Mqtt', () => {
   })
 
   describe('subscribe', () => {
-    it('should subscribe to topic with prefix', () => {
+    it('should subscribe to topic with prefix', async () => {
       const callback = vi.fn()
-      mqttInstance.subscribe('commands/+', callback)
+      await mqttInstance.subscribe('commands/+', callback)
 
       expect(mqttInstance.client.subscribe).toHaveBeenCalledWith('test_appliances/commands/+', expect.any(Function))
     })
 
-    it('should store topic handler when subscribed successfully', () => {
+    it('should store topic handler when subscribed successfully', async () => {
       const callback = vi.fn()
-      mqttInstance.subscribe('status/#', callback)
+      await mqttInstance.subscribe('status/#', callback)
 
       // The client.subscribe callback should be called on success
       expect(mqttInstance.client.subscribe).toHaveBeenCalled()
     })
 
-    it('should handle different topic patterns', () => {
+    it('should handle different topic patterns', async () => {
       const callback = vi.fn()
-      mqttInstance.subscribe('alerts/+', callback)
+      await mqttInstance.subscribe('alerts/+', callback)
 
       expect(mqttInstance.client.subscribe).toHaveBeenCalledWith('test_appliances/alerts/+', expect.any(Function))
     })
 
-    it('should handle subscription errors', () => {
-      const mockClientWithError = {
-        on: vi.fn(function (this: typeof mockClientWithError) {
-          return this
-        }),
-        publish: vi.fn(),
-        subscribe: vi.fn((_topic, callback) => {
-          callback(new Error('Subscription failed'))
-        }),
-        unsubscribe: vi.fn(),
-        end: vi.fn(),
+    it('should reject when subscription fails', async () => {
+      const mockClient = mqttInstance.client as unknown as {
+        subscribe: ReturnType<typeof vi.fn>
       }
+      mockClient.subscribe = vi.fn((_topic, callback) => {
+        if (callback) callback(new Error('Subscription failed'))
+      })
 
-      // Verify the mock handles errors
-      expect(mockClientWithError.subscribe).toBeDefined()
+      const callback = vi.fn()
+      await expect(mqttInstance.subscribe('device-error', callback)).rejects.toThrow('Subscription failed')
     })
   })
 
@@ -303,7 +298,7 @@ describe('Mqtt', () => {
       expect(mockClientWithError.publish).toBeDefined()
     })
 
-    it('should handle subscribe errors', () => {
+    it('should handle subscribe errors', async () => {
       const mockClient = mqttInstance.client as unknown as {
         subscribe: ReturnType<typeof vi.fn>
       }
@@ -312,9 +307,7 @@ describe('Mqtt', () => {
       })
 
       const mockCallback = vi.fn()
-      mqttInstance.subscribe('device-error', mockCallback)
-
-      expect(mockClient.subscribe).toHaveBeenCalled()
+      await expect(mqttInstance.subscribe('device-error', mockCallback)).rejects.toThrow('Subscribe failed')
     })
 
     it('should handle unsubscribe errors', () => {
@@ -375,7 +368,7 @@ describe('Mqtt', () => {
   })
 
   describe('subscribe error handling', () => {
-    it('should handle subscribe errors in callback', () => {
+    it('should reject promise when subscribe fails', async () => {
       const mockClient = mqttInstance.client as unknown as {
         subscribe: ReturnType<typeof vi.fn>
       }
@@ -387,8 +380,7 @@ describe('Mqtt', () => {
 
       const testCallback = vi.fn()
 
-      // This should not throw even though the callback receives an error
-      expect(() => mqttInstance.subscribe('device-123', testCallback)).not.toThrow()
+      await expect(mqttInstance.subscribe('device-123', testCallback)).rejects.toThrow('Subscribe failed')
     })
   })
 

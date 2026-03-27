@@ -118,7 +118,7 @@ describe('MQTT Module Event Handlers', () => {
 
     // Subscribe to a topic
     const testCallback = vi.fn()
-    mqttInstance.subscribe('device-123', testCallback)
+    await mqttInstance.subscribe('device-123', testCallback)
 
     // Trigger message handler
     const testTopic = 'test_appliances/device-123'
@@ -150,7 +150,7 @@ describe('MQTT Module Event Handlers', () => {
       throw new Error('Handler error')
     })
 
-    mqttInstance.subscribe('error-device', errorCallback)
+    await mqttInstance.subscribe('error-device', errorCallback)
 
     // Should catch the error and not throw
     expect(() => messageHandler?.('test_appliances/error-device', Buffer.from('test'))).not.toThrow()
@@ -172,7 +172,7 @@ describe('MQTT Module Event Handlers', () => {
     expect(() => mqttInstance.publish('device-123', message)).not.toThrow()
   })
 
-  it('should handle subscribe error callback', async () => {
+  it('should reject promise on subscribe error callback', async () => {
     const Mqtt = (await import('../src/mqtt.js')).default
     const mqttInstance = new Mqtt()
 
@@ -183,8 +183,8 @@ describe('MQTT Module Event Handlers', () => {
 
     const testCallback = vi.fn()
 
-    // Should not throw even with error in callback
-    expect(() => mqttInstance.subscribe('device-123', testCallback)).not.toThrow()
+    // Should reject the promise with the subscribe error
+    await expect(mqttInstance.subscribe('device-123', testCallback)).rejects.toThrow('Subscribe failed')
   })
 
   it('should handle unsubscribe error callback', async () => {

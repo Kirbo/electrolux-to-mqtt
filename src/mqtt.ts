@@ -68,11 +68,11 @@ export interface IMqtt {
   client: mqtt.MqttClient
   topicPrefix: string
   resolveApplianceTopic(applianceId: string): string
-  publish(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
+  publish(topicSuffix: string, message: string, options?: mqtt.IClientPublishOptions): void
   publishInfo(message: string, options?: mqtt.IClientPublishOptions): void
   autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
-  subscribe(applianceId: string, callback: (applianceId: string, message: Buffer) => void): void
-  unsubscribe(applianceId: string): void
+  subscribe(topicSuffix: string, callback: (topic: string, message: Buffer) => void): Promise<void>
+  unsubscribe(topicSuffix: string): void
   disconnect(): void
 }
 
@@ -108,8 +108,8 @@ class Mqtt implements IMqtt {
     return `${this.topicPrefix}/${applianceId}`
   }
 
-  public publish(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {
-    this._publish(`${this.topicPrefix}/${applianceId}`, message, options)
+  public publish(topicSuffix: string, message: string, options?: mqtt.IClientPublishOptions) {
+    this._publish(`${this.topicPrefix}/${topicSuffix}`, message, options)
   }
 
   public publishInfo(message: string, options?: mqtt.IClientPublishOptions) {
@@ -133,23 +133,27 @@ class Mqtt implements IMqtt {
     })
   }
 
-  public subscribe(applianceId: string, callback: (topic: string, message: Buffer) => void) {
-    const topic = `${this.topicPrefix}/${applianceId}`
+  public subscribe(topicSuffix: string, callback: (topic: string, message: Buffer) => void): Promise<void> {
+    const topic = `${this.topicPrefix}/${topicSuffix}`
     logger.debug('Subscribing to topic:', topic)
 
-    this.client.subscribe(topic, (error) => {
-      if (error) {
-        logger.error('Error subscribing to topic:', error)
-        return
-      }
+    return new Promise((resolve, reject) => {
+      this.client.subscribe(topic, (error) => {
+        if (error) {
+          logger.error('Error subscribing to topic:', error)
+          reject(error)
+          return
+        }
 
-      logger.info(`Subscribed to topic "${topic}" successfully`)
-      topicHandlers.set(topic, callback)
+        logger.info(`Subscribed to topic "${topic}" successfully`)
+        topicHandlers.set(topic, callback)
+        resolve()
+      })
     })
   }
 
-  public unsubscribe(applianceId: string) {
-    const topic = `${this.topicPrefix}/${applianceId}`
+  public unsubscribe(topicSuffix: string) {
+    const topic = `${this.topicPrefix}/${topicSuffix}`
     logger.debug('Unsubscribing from topic:', topic)
 
     this.client.unsubscribe(topic, (error) => {
