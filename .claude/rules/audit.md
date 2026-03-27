@@ -104,7 +104,9 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 > **Pre-check:** Run `test -f config.yml && echo "CREDENTIALS_AVAILABLE" || echo "NO_CREDENTIALS"`. If `CREDENTIALS_AVAILABLE`, run all items below. If `NO_CREDENTIALS`, skip this section.
 
 - [ ] Run `pnpm test:e2e` — all tests pass
-- [ ] Compare `tests/e2e/snapshots/appliance-state.json` reported keys against `Appliance['properties']['reported']` in `src/types.d.ts` — types must cover all keys the API reports
-- [ ] Compare `tests/e2e/snapshots/appliance-info.json` capabilities values against `ApplianceInfo['capabilities']` in `src/types.d.ts` — types must include all API-reported enum variants (e.g., linkQualityIndicator, mode, fanSpeedSetting)
-- [ ] Compare API enum values against normalized types in `src/types/normalized.ts` — types must include a normalized variant for every raw API value (e.g., `VERY_POOR` → `'very_poor'`)
+- [ ] For each model directory in `tests/e2e/snapshots/{model}/` (e.g. `comfort600/`):
+  - [ ] Compare `appliance-state.json` reported keys against `Appliance['properties']['reported']` in `src/types.d.ts` — types must cover all keys the API reports
+  - [ ] Compare `appliance-info.json` capabilities values against `ApplianceInfo['capabilities']` in `src/types.d.ts` — types must include all API-reported enum variants (e.g., linkQualityIndicator, mode, fanSpeedSetting)
+  - [ ] Compare API enum values against normalized types in `src/types/normalized.ts` — types must include a normalized variant for every raw API value (e.g., `VERY_POOR` → `'very_poor'`)
+  - [ ] Compare mode trigger constraints (fan speed access/values, temperature ranges) against the appliance class's `validateCommand()` behavior and unit test mock data
 - [ ] Compare `tests/e2e/snapshots/appliances-list.json` structure against `ApplianceStub` type — type must cover all fields the API returns

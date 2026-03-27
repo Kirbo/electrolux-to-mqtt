@@ -14,22 +14,48 @@
  * - These tests are SKIPPED by default in CI/normal test runs
  * - They make real API calls and will affect your actual appliances
  * - Use with caution in production environments
+ *
+ * SNAPSHOTS:
+ * - appliances-list.json is saved at the snapshot root
+ * - appliance-info.json and appliance-state.json are saved under
+ *   a model-specific directory (e.g. snapshots/comfort600/) using
+ *   the lowercase model name from applianceInfo.model
  */
 
+import fs from 'node:fs'
+import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { BaseAppliance } from '../../src/appliances/base.js'
+import { ApplianceFactory } from '../../src/appliances/factory.js'
 import { ElectroluxClient } from '../../src/electrolux.js'
 import type { IMqtt } from '../../src/mqtt.js'
-import type { Appliance, ApplianceInfo, ApplianceStub } from '../../src/types.js'
+import type { ApplianceInfo, ApplianceStub } from '../../src/types.js'
 
-// Mock appliance type for testing
-interface MockAppliance {
-  applianceId: string
-  applianceName: string
-  applianceType: string
-  created: string
-  getApplianceId: () => string
-  normalizeState: (state: Appliance) => Partial<Appliance>
+const SNAPSHOT_DIR = path.resolve(process.cwd(), 'tests/e2e/snapshots')
+
+function ensureDir(dir: string) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+}
+
+function writeSnapshot(filePath: string, data: unknown) {
+  ensureDir(path.dirname(filePath))
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+}
+
+function readSnapshot<T>(filePath: string): T | null {
+  if (!fs.existsSync(filePath)) return null
+  return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T
+}
+
+/**
+ * Derive the snapshot subdirectory name from the ApplianceInfo model.
+ * Falls back to the deviceType if model is missing.
+ * Always lowercased to match src/appliances/{model}.ts convention.
+ */
+function snapshotModelDir(info: ApplianceInfo): string {
+  const model = info.applianceInfo.model || info.applianceInfo.deviceType
+  return model.toLowerCase()
 }
 
 // Skip these tests unless explicitly enabled
@@ -37,229 +63,185 @@ const isE2EEnabled = process.env.E2E_TEST === 'true'
 
 describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
   let client: ElectroluxClient
-  let testApplianceId: string | null = null
+  let appliances: ApplianceStub[] | null = null
+  const applianceInfoMap = new Map<string, ApplianceInfo>()
 
   // Mock MQTT client that doesn't actually publish
   const mockMqtt = {
     client: null,
     topicPrefix: 'test/',
     publish: () => {},
-    subscribe: () => {},
+    subscribe: () => Promise.resolve(),
     isConnected: () => true,
     connect: async () => {},
     disconnect: async () => {},
     generateAutoDiscoveryConfig: () => {},
-    resolveApplianceTopic: (applianceId: string, suffix: string) => `test/${applianceId}/${suffix}`,
+    resolveApplianceTopic: (applianceId: string) => `test/${applianceId}`,
     unsubscribe: () => {},
+    publishInfo: () => {},
+    autoDiscovery: () => {},
   } as unknown as IMqtt
 
   beforeAll(async () => {
     client = new ElectroluxClient(mockMqtt)
     await client.initialize()
 
-    // Login to get valid session
     const loginSuccess = await client.login()
     if (!loginSuccess) {
       throw new Error('Failed to login to Electrolux API. Check credentials in config.yml')
     }
 
     console.log('✓ Successfully authenticated with Electrolux API')
-  }, 30000) // 30 second timeout for authentication
+  }, 30000)
 
   describe('API Structure Validation', () => {
     it('should fetch appliances list', async () => {
-      const appliances = await client.getAppliances()
+      appliances = await client.getAppliances()
 
       expect(appliances).toBeDefined()
       expect(Array.isArray(appliances)).toBe(true)
 
       if (appliances && appliances.length > 0) {
         console.log(`Found ${appliances.length} appliance(s)`)
-        testApplianceId = appliances[0].applianceId
 
-        // Validate structure matches our type definition
-        const appliance = appliances[0] as ApplianceStub
-        expect(appliance).toHaveProperty('applianceId')
-        expect(appliance).toHaveProperty('applianceName')
-        expect(appliance).toHaveProperty('applianceType')
-        expect(appliance).toHaveProperty('created')
+        for (const appliance of appliances) {
+          expect(typeof appliance.applianceId).toBe('string')
+          expect(typeof appliance.applianceName).toBe('string')
+          expect(typeof appliance.applianceType).toBe('string')
+          expect(typeof appliance.created).toBe('string')
 
-        expect(typeof appliance.applianceId).toBe('string')
-        expect(typeof appliance.applianceName).toBe('string')
-        expect(typeof appliance.applianceType).toBe('string')
-        expect(typeof appliance.created).toBe('string')
+          console.log(`  - ${appliance.applianceName} (${appliance.applianceId})`)
+        }
 
         console.log('✓ Appliance list structure matches type definition')
-        console.log(`  Sample appliance: ${appliance.applianceName} (${appliance.applianceId})`)
       } else {
         console.warn('⚠ No appliances found in account. Some tests will be skipped.')
       }
     })
 
-    it('should fetch appliance info with correct structure', async () => {
-      if (!testApplianceId) {
-        console.warn('⚠ Skipping: No appliance ID available')
+    it('should fetch appliance info for each appliance', async () => {
+      if (!appliances || appliances.length === 0) {
+        console.warn('⚠ Skipping: No appliances available')
         return
       }
 
-      const info = await client.getApplianceInfo(testApplianceId)
+      for (const stub of appliances) {
+        const info = await client.getApplianceInfo(stub.applianceId)
+        expect(info).toBeDefined()
 
-      expect(info).toBeDefined()
+        if (info) {
+          applianceInfoMap.set(stub.applianceId, info)
 
-      if (info) {
-        console.log('\n📋 Actual appliance info response structure:')
-        console.log(JSON.stringify(info, null, 2))
+          expect(info.applianceInfo).toBeDefined()
+          expect(info.applianceInfo).toHaveProperty('serialNumber')
+          expect(info.applianceInfo).toHaveProperty('brand')
+          expect(info.applianceInfo).toHaveProperty('deviceType')
+          expect(info.applianceInfo).toHaveProperty('model')
+          expect(info.capabilities).toBeDefined()
 
-        // Check if response has applianceInfo wrapper or is the info directly
-        const hasWrapper = 'applianceInfo' in info
-        const applianceInfo = hasWrapper ? (info as ApplianceInfo).applianceInfo : info
-
-        console.log('\n🔍 Checking structure...')
-        console.log('Has wrapper:', hasWrapper)
-        console.log('Keys:', Object.keys(applianceInfo))
-
-        // Verify the essential properties exist
-        expect(applianceInfo).toBeDefined()
-        expect(applianceInfo).toHaveProperty('serialNumber')
-        expect(applianceInfo).toHaveProperty('brand')
-
-        console.log('✓ Appliance info structure validated')
-        console.log(`  Brand: ${applianceInfo.brand}, Serial: ${applianceInfo.serialNumber}`)
+          console.log(
+            `✓ ${stub.applianceName}: ${info.applianceInfo.brand} ${info.applianceInfo.model} (${info.applianceInfo.deviceType})`,
+          )
+        }
       }
     })
 
-    it('should fetch appliance state with correct structure', async () => {
-      if (!testApplianceId) {
-        console.warn('⚠ Skipping: No appliance ID available')
+    it('should fetch appliance state for each appliance', async () => {
+      if (!appliances || appliances.length === 0) {
+        console.warn('⚠ Skipping: No appliances available')
         return
       }
 
-      // Mock appliance for testing
-      const mockAppliance: MockAppliance = {
-        applianceId: testApplianceId || 'unknown',
-        applianceName: 'Test Appliance',
-        applianceType: 'AC',
-        created: new Date().toISOString(),
-        getApplianceId: () => testApplianceId || 'unknown',
-        normalizeState: (state: Appliance) => ({
-          applianceId: state.applianceId,
-          mode: state.properties.reported.mode,
-        }),
-      }
+      for (const stub of appliances) {
+        const info = applianceInfoMap.get(stub.applianceId)
+        if (!info) continue
 
-      const state = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+        const appliance = ApplianceFactory.create(stub, info)
+        const state = await client.getApplianceState(appliance)
 
-      expect(state).toBeDefined()
+        expect(state).toBeDefined()
 
-      if (state) {
-        // Validate structure matches our type definition
-        const applianceState = state as Appliance
-        expect(applianceState).toHaveProperty('applianceId')
-        expect(applianceState).toHaveProperty('connectionState')
-        expect(applianceState).toHaveProperty('status')
-        expect(applianceState).toHaveProperty('properties')
-        expect(applianceState.properties).toHaveProperty('reported')
+        if (state) {
+          expect(state).toHaveProperty('applianceId')
+          expect(state).toHaveProperty('connectionState')
+          expect(state).toHaveProperty('status')
+          expect(state).toHaveProperty('properties')
+          expect(state.properties).toHaveProperty('reported')
 
-        const reported = applianceState.properties.reported
-        expect(reported).toHaveProperty('applianceState')
-        expect(reported).toHaveProperty('mode')
-        expect(reported).toHaveProperty('targetTemperatureC')
-        expect(reported).toHaveProperty('fanSpeedSetting')
-        expect(reported).toHaveProperty('networkInterface')
-
-        console.log('✓ Appliance state structure matches type definition')
-        console.log(
-          `  State: ${reported.applianceState}, Mode: ${reported.mode}, Temp: ${reported.targetTemperatureC}°C`,
-        )
-        console.log(`  Connection: ${applianceState.connectionState}, RSSI: ${reported.networkInterface.rssi}`)
+          const reported = state.properties.reported
+          console.log(
+            `✓ ${stub.applianceName}: state=${reported.applianceState}, mode=${reported.mode}, temp=${reported.targetTemperatureC}°C`,
+          )
+        }
       }
     })
   })
 
-  describe('API Response Comparison', () => {
-    it('should save current API responses as snapshots', async () => {
-      const fs = await import('node:fs')
-      const path = await import('node:path')
+  describe('Snapshot Management', () => {
+    it('should save snapshots organized by model', async () => {
+      if (!appliances || appliances.length === 0) {
+        console.warn('⚠ Skipping: No appliances available')
+        return
+      }
 
-      const appliances = await client.getAppliances()
+      // Save appliances list at the snapshot root
+      writeSnapshot(path.join(SNAPSHOT_DIR, 'appliances-list.json'), appliances)
+      console.log('✓ Saved appliances-list.json')
 
-      if (appliances && appliances.length > 0) {
-        const snapshotDir = path.resolve(process.cwd(), 'tests/e2e/snapshots')
+      // Save per-appliance snapshots under model-specific directories
+      for (const stub of appliances) {
+        const info = applianceInfoMap.get(stub.applianceId)
+        if (!info) continue
 
-        // Create snapshots directory if it doesn't exist
-        if (!fs.existsSync(snapshotDir)) {
-          fs.mkdirSync(snapshotDir, { recursive: true })
-        }
+        const modelDir = snapshotModelDir(info)
+        const modelPath = path.join(SNAPSHOT_DIR, modelDir)
 
-        // Save appliances list
-        const appliancesSnapshot = path.join(snapshotDir, 'appliances-list.json')
-        fs.writeFileSync(appliancesSnapshot, JSON.stringify(appliances, null, 2), 'utf8')
+        writeSnapshot(path.join(modelPath, 'appliance-info.json'), info)
 
-        // Save first appliance info and state
-        const firstAppliance = appliances[0]
-        const info = await client.getApplianceInfo(firstAppliance.applianceId)
-
-        if (info) {
-          const infoSnapshot = path.join(snapshotDir, 'appliance-info.json')
-          fs.writeFileSync(infoSnapshot, JSON.stringify(info, null, 2), 'utf8')
-        }
-
-        const mockAppliance: MockAppliance = {
-          applianceId: firstAppliance.applianceId,
-          applianceName: firstAppliance.applianceName,
-          applianceType: firstAppliance.applianceType,
-          created: firstAppliance.created,
-          getApplianceId: () => firstAppliance.applianceId,
-          normalizeState: (state: Appliance) => state,
-        }
-
-        const state = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
-
+        const appliance = ApplianceFactory.create(stub, info)
+        const state = await client.getApplianceState(appliance)
         if (state) {
-          const stateSnapshot = path.join(snapshotDir, 'appliance-state.json')
-          fs.writeFileSync(stateSnapshot, JSON.stringify(state, null, 2), 'utf8')
+          writeSnapshot(path.join(modelPath, 'appliance-state.json'), state)
         }
 
-        console.log('✓ API response snapshots saved to tests/e2e/snapshots/')
-        console.log('  You can compare these with previous snapshots to detect API changes')
+        console.log(`✓ Saved ${modelDir}/appliance-info.json and appliance-state.json`)
       }
     })
 
     it('should compare with previous snapshots if they exist', async () => {
-      const fs = await import('node:fs')
-      const path = await import('node:path')
+      if (!appliances || appliances.length === 0) return
 
-      const snapshotDir = path.resolve(process.cwd(), 'tests/e2e/snapshots')
-      const appliancesSnapshot = path.join(snapshotDir, 'appliances-list.json')
+      for (const stub of appliances) {
+        const info = applianceInfoMap.get(stub.applianceId)
+        if (!info) continue
 
-      if (fs.existsSync(appliancesSnapshot)) {
-        const previousAppliances = JSON.parse(fs.readFileSync(appliancesSnapshot, 'utf8'))
-        const currentAppliances = await client.getAppliances()
+        const modelDir = snapshotModelDir(info)
+        const prevInfo = readSnapshot<ApplianceInfo>(path.join(SNAPSHOT_DIR, modelDir, 'appliance-info.json'))
 
-        if (currentAppliances) {
-          // Compare structure (not exact values, as they may change)
-          const previousKeys = Object.keys(previousAppliances[0] || {})
-          const currentKeys = Object.keys(currentAppliances[0] || {})
-
-          const missingKeys = previousKeys.filter((k) => !currentKeys.includes(k))
-          const newKeys = currentKeys.filter((k) => !previousKeys.includes(k))
-
-          if (missingKeys.length > 0) {
-            console.warn('⚠ Keys removed from API response:', missingKeys)
-          }
-          if (newKeys.length > 0) {
-            console.log('✓ New keys added to API response:', newKeys)
-          }
-          if (missingKeys.length === 0 && newKeys.length === 0) {
-            console.log('✓ API response structure unchanged')
-          }
-
-          // Don't fail the test, just log differences
-          expect(true).toBe(true)
+        if (!prevInfo) {
+          console.log(`ℹ No previous snapshot for ${modelDir}. Run again to enable comparison.`)
+          continue
         }
-      } else {
-        console.log('ℹ No previous snapshots found. Run this test again to enable comparison.')
+
+        // Compare capability keys
+        const previousKeys = Object.keys(prevInfo.capabilities)
+        const currentKeys = Object.keys(info.capabilities)
+
+        const missingKeys = previousKeys.filter((k) => !currentKeys.includes(k))
+        const newKeys = currentKeys.filter((k) => !previousKeys.includes(k))
+
+        if (missingKeys.length > 0) {
+          console.warn(`⚠ ${modelDir}: Capabilities removed:`, missingKeys)
+        }
+        if (newKeys.length > 0) {
+          console.log(`✓ ${modelDir}: New capabilities:`, newKeys)
+        }
+        if (missingKeys.length === 0 && newKeys.length === 0) {
+          console.log(`✓ ${modelDir}: Capabilities structure unchanged`)
+        }
       }
+
+      expect(true).toBe(true)
     })
   })
 
