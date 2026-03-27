@@ -1,3 +1,7 @@
+## Verification
+
+After any code change, run the full verification sequence defined in [CLAUDE.md](../../CLAUDE.md#verification) — this includes `pnpm sonar` for SonarQube analysis.
+
 ## TDD
 
 Write tests first, then implement. When a change touches `src/`, write or update the corresponding test in `tests/` before writing the production code. Skip TDD only when the change is purely structural (moves, renames, re-exports) with no new logic.
@@ -29,12 +33,7 @@ Update:
 
 ## When modifying API types (`src/types.d.ts`, `src/types/normalized.ts`)
 
-If the user has valid credentials (`config.yml` — `tokens.json` is auto-populated at runtime), run `pnpm test:e2e` and compare the snapshots in `tests/e2e/snapshots/` against the type definitions:
-- `appliance-state.json` reported keys → `Appliance['properties']['reported']` fields
-- `appliance-info.json` capabilities enum values → raw type unions in `src/types.d.ts`
-- Raw type enum values → normalized type unions in `src/types/normalized.ts`
-
-Every value the API can send must be represented in both the raw and normalized types.
+Run E2E snapshot validation — see [audit.md](audit.md) section 11 for the full checklist.
 
 ## When version-checker or telemetry changes (`src/version-checker.ts`)
 
@@ -79,14 +78,6 @@ Update:
 - `docker/docker-compose.local.example.yml` (same — local dev example)
 - `.dockerignore` (if new files should be excluded)
 - `README.md` (Docker section)
-
-## When updating dependencies
-
-- Run `pnpm deps:check` to see outdated packages and vulnerabilities.
-- Run `pnpm deps:update` to update all dependencies to latest.
-- Always re-run `pnpm check`, `pnpm typecheck`, and `pnpm test` after updating.
-- Watch for breaking changes (e.g., Zod v3 -> v4 nested defaults behavior).
-- Update `packageManager` field via `corepack use pnpm@latest` if pnpm itself is outdated.
 
 ## When telemetry backend changes (`telemetry-backend/`)
 

@@ -26,6 +26,7 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 - Always use `pnpm`. Never `npm`, `yarn`, or `npx` — use `pnpm dlx` instead of `npx`.
 - Biome for linting/formatting. No ESLint or Prettier. Single quotes, semicolons only as needed (matching `biome.jsonc` `quoteStyle: "single"`, `semicolons: "asNeeded"`).
 - Always use `Number.parseInt` / `Number.parseFloat`, never the global forms.
+- SonarQube Cloud for code quality analysis. All code must pass SonarQube checks — no bugs, no vulnerabilities, no security hotspots. Function cognitive complexity must not exceed 15. See `sonar-project.properties` for project configuration.
 
 ### Schemas
 - Numeric schema fields that must be positive must use `.positive()` (or `.min(1)`). Numeric schema fields that must be whole numbers must also use `.int()`. Port-like fields must use `.int().min(1).max(65535)`.
@@ -35,8 +36,9 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 - `.gitignore` must cover all generated/cached artifacts including CI-specific directories (e.g., `.pnpm-store/`).
 
 ### Sync
-- Example files, docs (`README.md`, `CONTRIBUTING.md`, `HOME_ASSISTANT.md`), and config examples must stay in sync with the code they describe. See [implementation.md](.claude/rules/implementation.md) for the full file checklists per change type.
+- Example files, docs (`README.md`, `CONTRIBUTING.md`, `HOME_ASSISTANT.md`), and config examples must stay in sync with the code they describe. See [implement.md](.claude/rules/implement.md) for the full file checklists per change type.
 - `.nvmrc`, `package.json` `engines` field, and Docker build args must agree on the required Node.js version.
+- When rules files (`.claude/rules/`) or skills (`.claude/skills/`) are added, modified, or removed, update the Structure and Skills sections in `AI_DEVELOPMENT.md` to match.
 
 ### Docker
 - Production Dockerfile (`docker/Dockerfile`) uses hardened `dhi.io/node` base images. Do not change to standard Node images. `Dockerfile.local` uses standard Alpine for development.
@@ -44,11 +46,14 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 ### Domain
 - Appliance classes must extend `BaseAppliance` and be registered in the factory.
 - Home Assistant auto-discovery payloads must conform to the HA MQTT discovery specification. `name: ''` in discovery payloads is intentional — HA convention where the entity inherits the device name.
-- Normalized state and HA state templates use **lowercase**; HA command templates send **uppercase**. Incoming MQTT commands must be normalized to lowercase before merging with cached state.
+- Normalized state and HA state templates use **lowercase**. HA command templates pass values as-is; `transformMqttCommandToApi()` is the single authority for denormalization (uppercasing, `medium`→`MIDDLE`, `fan_only`→`FANONLY`). Incoming MQTT commands must be normalized to lowercase before merging with cached state.
 - MQTT topic structure must be consistent and documented.
 
 ### Config schema architecture
 - `envSchema` handles pre-processing (coercion, defaults). Final validation (URL format, enum values, regex) happens through `configSchema`. Constraints do not need to be duplicated in both schemas.
+- Each constraint (default value, min/max, format) must exist in exactly one schema — the one responsible for that concern. Do not repeat defaults or validation across schemas.
+- Config is loaded from either a YAML file OR environment variables, never a mix. `buildConfigFromEnv()` maps env vars to the same structure as the YAML file, then both paths go through `configSchema` for validation.
+- When config values appear in documentation (`config.example.yml`, `README.md`, docker-compose examples), the documented defaults must match the schema defaults. The schema is the source of truth; docs reflect it.
 
 ### Telemetry backend
 - Rate limiting must run **before** input validation — malformed requests must still consume rate limit quota to prevent flooding.
@@ -60,12 +65,8 @@ After any code change:
 2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed:
    - Run `pnpm typecheck` — fix any type errors.
    - Run `pnpm test` — all tests must pass.
-3. Skip typecheck/test for documentation-only or config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
-
-## Skills
-
-- `/audit` — full codebase audit (deps, lint, typecheck, tests, manual review). See [.claude/rules/review.md](.claude/rules/review.md) for the checklist.
-- `/implement <description>` — implement any code change (feature, refactor, bugfix) following the checklists in [.claude/rules/implementation.md](.claude/rules/implementation.md).
+   - Run `pnpm sonar` — fix any SonarQube findings (bugs, vulnerabilities, code smells, cognitive complexity).
+3. Skip typecheck/test/sonar for documentation-only or config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
 
 ## Context files
 
@@ -73,8 +74,9 @@ Read the relevant file **before starting work** — the skills do this automatic
 
 | File | Read when… |
 |------|-----------|
-| [.claude/rules/implementation.md](.claude/rules/implementation.md) | You are about to write, edit, or delete any code in `src/`, `telemetry-backend/`, `docker/`, or `tests/` |
-| [.claude/rules/review.md](.claude/rules/review.md) | You are asked to review, audit, or check the codebase |
+| [.claude/rules/implement.md](.claude/rules/implement.md) | You are about to write, edit, or delete any code in `src/`, `telemetry-backend/`, `docker/`, or `tests/` |
+| [.claude/rules/audit.md](.claude/rules/audit.md) | You are asked to review, audit, or check the codebase |
+| [.claude/rules/maintain.md](.claude/rules/maintain.md) | You are asked to update dependencies or run maintenance tasks |
 
 ## Self-maintenance
 

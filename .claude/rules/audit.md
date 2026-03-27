@@ -20,10 +20,10 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 
 > **Note:** When invoked via `/audit`, these are already run in the skill's step 1. Start from section 2.
 
-- [ ] `pnpm deps:check` — outdated dependencies and vulnerabilities
 - [ ] `pnpm check` — Biome lint + format on src/ and tests/
 - [ ] `pnpm typecheck` — TypeScript strict mode
 - [ ] `pnpm test` — all unit tests pass with coverage thresholds met
+- [ ] `pnpm sonar` — no SonarQube findings (bugs, vulnerabilities, code smells, cognitive complexity)
 
 ### 2. Configuration correctness
 - [ ] `configSchema` in `src/config.ts` matches all fields in `config.example.yml`
@@ -36,6 +36,7 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] All `as` type assertions have a preceding runtime check (`Set.has`, `typeof`, `in` operator, etc.) — grep for ` as ` in `src/`
 - [ ] Classes that have a corresponding interface declare `implements` — no silent drift between interface and implementation
 - [ ] Retry/reconnect logic uses exponential backoff with a cap (no fixed-delay infinite loops)
+- [ ] No function exceeds cognitive complexity 15 (SonarQube limit) — split complex functions into smaller helpers
 
 ### 4. Appliance support
 - [ ] Every appliance class in `src/appliances/` extends `BaseAppliance` correctly
@@ -98,12 +99,7 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 - [ ] `docker-compose.yml` environment variables match what `src/index.ts` reads
 - [ ] `README.md` documents all environment variables
 
-### 11. Verify before reporting
-- [ ] Every finding must be confirmed by reading the actual file content — do not report a type, field, or function as missing based on assumptions or line-number estimates alone
-- [ ] Check findings against the rules in `CLAUDE.md` before flagging — known conventions documented there are intentional, not bugs
-- [ ] When checking for dead exports, search `tests/` as well — test imports count as external usage (a function exported solely for testing is not dead)
-
-### 12. E2E snapshot validation
+### 11. E2E snapshot validation
 
 > **Pre-check:** Run `test -f config.yml && echo "CREDENTIALS_AVAILABLE" || echo "NO_CREDENTIALS"`. If `CREDENTIALS_AVAILABLE`, run all items below. If `NO_CREDENTIALS`, skip this section.
 
