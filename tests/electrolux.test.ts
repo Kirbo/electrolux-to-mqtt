@@ -1486,11 +1486,10 @@ describe('electrolux', () => {
         )
       })
 
-      it('should skip validation and not send API call when command is invalid', async () => {
+      it('should reject invalid command without reverting state (revertStateOnRejection=false)', async () => {
         const { cache } = await import('../src/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
-        // Add validateCommand to mock appliance
         const validatingAppliance = createMockAppliance({
           ...mockAppliance,
           validateCommand: vi.fn(() => ({ valid: false, reason: 'fan speed HIGH not allowed in dry mode' })),
@@ -1504,8 +1503,42 @@ describe('electrolux', () => {
         // Should NOT have called the API
         expect(mockAxiosInstance.put).not.toHaveBeenCalled()
 
-        // Should NOT revert state by default (revertStateOnRejection defaults to false)
+        // Should NOT revert state (revertStateOnRejection defaults to false)
         expect(mockMqtt.publish).not.toHaveBeenCalled()
+      })
+
+      it('should reject invalid command and revert state (revertStateOnRejection=true)', async () => {
+        const config = (await import('../src/config.js')).default
+        const original = config.homeAssistant.revertStateOnRejection
+        config.homeAssistant.revertStateOnRejection = true
+
+        try {
+          const { cache } = await import('../src/cache.js')
+          vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+
+          const validatingAppliance = createMockAppliance({
+            ...mockAppliance,
+            validateCommand: vi.fn(() => ({ valid: false, reason: 'fan speed HIGH not allowed in dry mode' })),
+          })
+
+          await client.initialize()
+          vi.mocked(mockMqtt.publish).mockClear()
+
+          await client.sendApplianceCommand(validatingAppliance as unknown as BaseAppliance, {
+            fanSpeedSetting: 'high',
+          })
+
+          // Should NOT have called the API
+          expect(mockAxiosInstance.put).not.toHaveBeenCalled()
+
+          // Should revert state by republishing cached state
+          expect(mockMqtt.publish).toHaveBeenCalledWith(
+            expect.stringContaining('test-appliance-123/state'),
+            expect.any(String),
+          )
+        } finally {
+          config.homeAssistant.revertStateOnRejection = original
+        }
       })
     })
 
