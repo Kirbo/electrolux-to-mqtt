@@ -12,4 +12,7 @@ dist
 coverage
 .DS_Store
 tests/e2e/snapshots
+.env
+.env.*
+!.env.example
 .scannerwork
