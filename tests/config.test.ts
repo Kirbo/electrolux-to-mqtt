@@ -209,6 +209,121 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should validate token refresh threshold with Zod - value too low', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '3' // Too low (min 5)
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should validate token refresh threshold with Zod - value too high', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '720' // Too high (max 715)
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should reject renewTokenBeforeExpiry shorter than refreshInterval', async () => {
+      if (fs.existsSync(configPath)) fs.unlinkSync(configPath)
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_REFRESH_INTERVAL = '600' // 10 minutes
+      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '5' // 5 minutes — shorter than refresh interval
+
+      vi.resetModules()
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected — config validation fails at module load
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      warnSpy.mockRestore()
+    })
+
+    it('should reject renewTokenBeforeExpiry shorter than applianceDiscoveryInterval', async () => {
+      if (fs.existsSync(configPath)) fs.unlinkSync(configPath)
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_REFRESH_INTERVAL = '30' // 30 seconds — fine
+      process.env.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL = '3600' // 60 minutes
+      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '30' // 30 minutes — shorter than discovery interval
+
+      vi.resetModules()
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected — config validation fails at module load
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      warnSpy.mockRestore()
+    })
+
     it('should validate QoS value with Zod - invalid value', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'
@@ -277,7 +392,9 @@ homeAssistant:
       createConfigFromEnv()
 
       const [, content] = writeSpy.mock.calls[0]
-      expect(content).toContain('ignoredKeys: [key1, key2, key3]')
+      expect(content).toContain('- key1')
+      expect(content).toContain('- key2')
+      expect(content).toContain('- key3')
 
       writeSpy.mockRestore()
       infoSpy.mockRestore()
@@ -302,7 +419,7 @@ homeAssistant:
       createConfigFromEnv()
 
       const [, content] = writeSpy.mock.calls[0]
-      expect(content).toContain('ignoredKeys: []')
+      expect(content).toContain('ignoredKeys:')
 
       writeSpy.mockRestore()
       infoSpy.mockRestore()
@@ -901,6 +1018,71 @@ homeAssistant:
           (call) => call[0].includes('electrolux.applianceDiscoveryInterval') || call[0].includes('3600 seconds'),
         ),
       ).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
+    it('should validate config file and catch invalid token refresh threshold', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  renewTokenBeforeExpiry: 2
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(
+        errorSpy.mock.calls.some(
+          (call) => call[0].includes('electrolux.renewTokenBeforeExpiry') || call[0].includes('5 minutes'),
+        ),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
+    it('should validate config file and catch renewTokenBeforeExpiry shorter than polling intervals', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  refreshInterval: 600
+  renewTokenBeforeExpiry: 5
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('renewTokenBeforeExpiry'))).toBe(true)
 
       errorSpy.mockRestore()
     })

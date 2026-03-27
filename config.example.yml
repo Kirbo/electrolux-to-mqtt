@@ -22,6 +22,10 @@ electrolux:
   refreshInterval: 30
   # Appliance discovery interval in seconds (how often to check for added/removed appliances)
   applianceDiscoveryInterval: 300
+  # How many minutes before expiration should the token be refreshed.
+  # E.g. 60 means: refresh the token when it has 60 minutes or less until it expires.
+  # API tokens have a 12-hour (720 min) lifetime. Default: 60, Min: 5, Max: 715.
+  renewTokenBeforeExpiry: 60
 
 homeAssistant:
   # Automatically discover the device in Home Assistant
@@ -52,3 +56,9 @@ versionCheck:
   # Optional: https://ntfy.sh webhook URL for notifications when a new version is found
   # Example: https://ntfy.sh/vB66ozQaRiqhTE9j
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
+
+healthCheck:
+  # Enable file-based health check for Docker HEALTHCHECK (default: false)
+  enabled: false
+  # Path to the health file (default: /tmp/e2m-health)
+  filePath: /tmp/e2m-health

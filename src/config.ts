@@ -6,62 +6,105 @@ import init from './init.js'
 
 init()
 
+// configSchema is the single source of truth for structure, constraints, and defaults.
+// See CLAUDE.md § Config schema architecture.
 const configSchema = z.object({
   mqtt: z.object({
-    url: z.string().regex(/^mqtts?:\/\/.+/, 'mqtt.url must start with mqtt:// or mqtts://'),
-    clientId: z.string().optional(),
+    url: z.string().regex(/^mqtts?:\/\/.+/, 'must start with mqtt:// or mqtts://'),
+    clientId: z.string().default('electrolux-comfort600'),
     username: z.string(),
     password: z.string(),
-    topicPrefix: z.string().optional(),
-    retain: z.boolean().optional(),
-    qos: z.number().int().min(0).max(2).optional(),
+    topicPrefix: z.string().default('electrolux_'),
+    retain: z.boolean().default(false),
+    qos: z.number().int().min(0).max(2).default(2),
   }),
-  electrolux: z.object({
-    apiKey: z.string(),
-    username: z.string(),
-    password: z.string(),
-    countryCode: z.string(),
-    accessToken: z.string().optional(),
-    refreshToken: z.string().optional(),
-    eat: z.date().optional(),
-    iat: z.date().optional(),
-    refreshInterval: z
-      .number()
-      .int()
-      .min(10, 'electrolux.refreshInterval must be at least 10 seconds')
-      .max(3600, 'electrolux.refreshInterval should not exceed 3600 seconds')
-      .optional(),
-    applianceDiscoveryInterval: z
-      .number()
-      .int()
-      .min(60, 'electrolux.applianceDiscoveryInterval must be at least 60 seconds')
-      .max(3600, 'electrolux.applianceDiscoveryInterval should not exceed 3600 seconds')
-      .optional(),
-  }),
+  electrolux: z
+    .object({
+      apiKey: z.string(),
+      username: z.string(),
+      password: z.string(),
+      countryCode: z.string(),
+      accessToken: z.string().optional(),
+      refreshToken: z.string().optional(),
+      eat: z.date().optional(),
+      iat: z.date().optional(),
+      refreshInterval: z
+        .number()
+        .int()
+        .min(10, 'must be at least 10 seconds')
+        .max(3600, 'should not exceed 3600 seconds')
+        .default(30),
+      applianceDiscoveryInterval: z
+        .number()
+        .int()
+        .min(60, 'must be at least 60 seconds')
+        .max(3600, 'should not exceed 3600 seconds')
+        .default(300),
+      renewTokenBeforeExpiry: z
+        .number()
+        .int()
+        .min(5, 'must be at least 5 minutes')
+        .max(715, 'should not exceed 715 minutes (API tokens last 720 minutes)')
+        .default(60),
+    })
+    .check((ctx) => {
+      const renewMinutes = ctx.value.renewTokenBeforeExpiry
+      const refreshSeconds = ctx.value.refreshInterval
+      const discoverySeconds = ctx.value.applianceDiscoveryInterval
+      const longestSeconds = Math.max(refreshSeconds, discoverySeconds)
+      const longestIntervalMinutes = longestSeconds / 60
+      if (renewMinutes < longestIntervalMinutes) {
+        ctx.issues.push({
+          code: 'custom',
+          input: ctx.value,
+          message: `must be at least ${Math.ceil(longestIntervalMinutes)} minutes (the longest polling interval is ${longestSeconds} seconds). Otherwise the token may expire between polls.`,
+          path: ['renewTokenBeforeExpiry'],
+        })
+      }
+    }),
   homeAssistant: z.object({
-    autoDiscovery: z.boolean(),
+    autoDiscovery: z.boolean().default(true),
   }),
   logging: z
     .object({
-      logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
-      showChanges: z.boolean().optional(),
-      ignoredKeys: z.array(z.string()).optional(),
-      showVersionNumber: z.boolean().optional(),
-      skipCacheLogging: z.boolean().optional(),
-      showTimestamp: z.boolean().optional(),
+      logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+      showChanges: z.boolean().default(true),
+      ignoredKeys: z.array(z.string()).default([]),
+      showVersionNumber: z.boolean().default(true),
+      skipCacheLogging: z.boolean().default(true),
+      showTimestamp: z.boolean().default(true),
     })
-    .optional(),
+    .optional()
+    .transform(
+      (val) =>
+        val ?? {
+          logLevel: 'info' as const,
+          showChanges: true,
+          ignoredKeys: [] as string[],
+          showVersionNumber: true,
+          skipCacheLogging: true,
+          showTimestamp: true,
+        },
+    ),
   versionCheck: z
     .object({
       checkInterval: z
         .number()
         .int()
-        .min(60, 'versionCheck.checkInterval must be at least 60 seconds')
-        .max(86400, 'versionCheck.checkInterval should not exceed 86400 seconds')
-        .optional(),
+        .min(60, 'must be at least 60 seconds')
+        .max(86400, 'should not exceed 86400 seconds')
+        .default(3600),
       ntfyWebhookUrl: z.string().optional(),
     })
-    .optional(),
+    .optional()
+    .transform((val) => val ?? { checkInterval: 3600 }),
+  healthCheck: z
+    .object({
+      enabled: z.boolean().default(false),
+      filePath: z.string().default('/tmp/e2m-health'),
+    })
+    .optional()
+    .transform((val) => val ?? { enabled: false, filePath: '/tmp/e2m-health' }),
 })
 
 type AppConfig = z.infer<typeof configSchema>
@@ -75,6 +118,7 @@ const tokensSchema = z.object({
 
 export type Tokens = z.infer<typeof tokensSchema>
 
+// envSchema handles coercion only — constraints and defaults are in configSchema.
 const envSchema = z.object({
   MQTT_URL: z.string(),
   MQTT_USERNAME: z.string(),
@@ -83,78 +127,116 @@ const envSchema = z.object({
   ELECTROLUX_USERNAME: z.string(),
   ELECTROLUX_PASSWORD: z.string(),
   ELECTROLUX_COUNTRY_CODE: z.string(),
-  MQTT_CLIENT_ID: z.string().default('electrolux-comfort600'),
-  MQTT_TOPIC_PREFIX: z.string().default('electrolux_'),
+  MQTT_CLIENT_ID: z.string().optional(),
+  MQTT_TOPIC_PREFIX: z.string().optional(),
   MQTT_RETAIN: z
     .string()
-    .default('false')
-    .transform((val) => val.toLowerCase() === 'true'),
-  MQTT_QOS: z.coerce.number().int().min(0).max(2).default(2),
-  ELECTROLUX_REFRESH_INTERVAL: z.coerce
-    .number()
-    .int()
-    .min(10, 'ELECTROLUX_REFRESH_INTERVAL must be at least 10 seconds')
-    .max(3600, 'ELECTROLUX_REFRESH_INTERVAL should not exceed 3600 seconds')
-    .default(30),
-  ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: z.coerce
-    .number()
-    .int()
-    .min(60, 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL must be at least 60 seconds')
-    .max(3600, 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL should not exceed 3600 seconds')
-    .default(300),
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
+  MQTT_QOS: z.coerce.number().optional(),
+  ELECTROLUX_REFRESH_INTERVAL: z.coerce.number().optional(),
+  ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: z.coerce.number().optional(),
+  ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
   HOME_ASSISTANT_AUTO_DISCOVERY: z
     .string()
-    .default('true')
-    .transform((val) => val.toLowerCase() === 'true'),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
+  LOG_LEVEL: z.string().optional(),
   LOGGING_SHOW_CHANGES: z
     .string()
-    .default('true')
-    .transform((val) => val.toLowerCase() === 'true'),
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   LOGGING_IGNORED_KEYS: z
     .string()
-    .default('')
-    .transform((val) => (val ? val.split(',').map((k) => k.trim()) : [])),
+    .optional()
+    .transform((val) => (val ? val.split(',').map((k) => k.trim()) : undefined)),
   LOGGING_SHOW_VERSION_NUMBER: z
     .string()
-    .default('true')
-    .transform((val) => val.toLowerCase() === 'true'),
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   LOGGING_SKIP_CACHE_LOGGING: z
     .string()
-    .default('true')
-    .transform((val) => val.toLowerCase() === 'true'),
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   LOGGING_SHOW_TIMESTAMP: z
     .string()
-    .default('true')
-    .transform((val) => val.toLowerCase() === 'true'),
-  VERSION_CHECK_INTERVAL: z.coerce
-    .number()
-    .int()
-    .min(60, 'VERSION_CHECK_INTERVAL must be at least 60 seconds')
-    .max(86400, 'VERSION_CHECK_INTERVAL should not exceed 86400 seconds')
-    .default(3600),
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
+  VERSION_CHECK_INTERVAL: z.coerce.number().optional(),
   VERSION_CHECK_NTFY_WEBHOOK_URL: z.string().optional(),
+  HEALTH_CHECK_ENABLED: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
+  HEALTH_CHECK_FILE_PATH: z.string().optional(),
 })
 
+// Maps configSchema YAML paths to env var names for error reporting
+const configPathToEnvVar: Record<string, string> = {
+  'mqtt.url': 'MQTT_URL',
+  'mqtt.username': 'MQTT_USERNAME',
+  'mqtt.password': 'MQTT_PASSWORD',
+  'mqtt.clientId': 'MQTT_CLIENT_ID',
+  'mqtt.topicPrefix': 'MQTT_TOPIC_PREFIX',
+  'mqtt.retain': 'MQTT_RETAIN',
+  'mqtt.qos': 'MQTT_QOS',
+  'electrolux.apiKey': 'ELECTROLUX_API_KEY',
+  'electrolux.username': 'ELECTROLUX_USERNAME',
+  'electrolux.password': 'ELECTROLUX_PASSWORD',
+  'electrolux.countryCode': 'ELECTROLUX_COUNTRY_CODE',
+  'electrolux.refreshInterval': 'ELECTROLUX_REFRESH_INTERVAL',
+  'electrolux.applianceDiscoveryInterval': 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL',
+  'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
+  'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
+  'logging.logLevel': 'LOG_LEVEL',
+  'logging.showChanges': 'LOGGING_SHOW_CHANGES',
+  'logging.ignoredKeys': 'LOGGING_IGNORED_KEYS',
+  'logging.showVersionNumber': 'LOGGING_SHOW_VERSION_NUMBER',
+  'logging.skipCacheLogging': 'LOGGING_SKIP_CACHE_LOGGING',
+  'logging.showTimestamp': 'LOGGING_SHOW_TIMESTAMP',
+  'versionCheck.checkInterval': 'VERSION_CHECK_INTERVAL',
+  'versionCheck.ntfyWebhookUrl': 'VERSION_CHECK_NTFY_WEBHOOK_URL',
+  'healthCheck.enabled': 'HEALTH_CHECK_ENABLED',
+  'healthCheck.filePath': 'HEALTH_CHECK_FILE_PATH',
+}
+
+function handleValidationError(error: unknown, useEnvVarNames: boolean): never | undefined {
+  if (!(error instanceof z.ZodError)) throw error
+  const label = useEnvVarNames ? 'Environment variable validation failed:' : 'Configuration validation failed:'
+  console.error(label)
+  for (const issue of error.issues) {
+    const configPath = issue.path.join('.')
+    const fieldLabel = useEnvVarNames ? (configPathToEnvVar[configPath] ?? configPath) : configPath
+    console.error(`  - ${fieldLabel}: ${issue.message}`)
+  }
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    process.exit(1)
+  }
+  return undefined
+}
+
+// Remove undefined values so configSchema defaults apply
+function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value
+    }
+  }
+  return result
+}
+
 // Determine which config file to use based on environment
-// - CONFIG_FILE_OVERRIDE: Explicitly set config file (for testing)
-// - E2E tests: config.yml (user's personal config)
-// - Regular tests: config.test.default.yml (committed to repo)
-// - Production: config.yml
 const getConfigFilename = (): string => {
-  // Allow explicit override (used by config.test.ts)
   if (process.env.CONFIG_FILE_OVERRIDE) {
     return process.env.CONFIG_FILE_OVERRIDE
   }
-  // E2E tests explicitly request config.yml via environment variable
   if (process.env.E2E_TEST === 'true') {
     return 'config.yml'
   }
-  // Regular tests use tests/config.yml
   if (process.env.VITEST || process.env.NODE_ENV === 'test') {
     return 'tests/config.yml'
   }
-  // Production uses config.yml
   return 'config.yml'
 }
 
@@ -162,25 +244,59 @@ const configFilename = getConfigFilename()
 const configPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), `../${configFilename}`)
 
 // Determine which tokens file to use based on environment
-// - TOKENS_FILE_OVERRIDE: Explicitly set tokens file (for testing)
-// - E2E tests: tokens.json (user's personal tokens)
-// - Regular tests: tokens.test.default.json (committed to repo)
-// - Production: tokens.json
 const getTokensFilename = (): string => {
-  // Allow explicit override (used by config.test.ts)
   if (process.env.TOKENS_FILE_OVERRIDE) {
     return process.env.TOKENS_FILE_OVERRIDE
   }
-  // E2E tests explicitly request tokens.json via environment variable
   if (process.env.E2E_TEST === 'true') {
     return 'tokens.json'
   }
-  // Regular tests use tests/tokens.json
   if (process.env.VITEST || process.env.NODE_ENV === 'test') {
     return 'tests/tokens.json'
   }
-  // Production uses tokens.json
   return 'tokens.json'
+}
+
+function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
+  return {
+    mqtt: stripUndefined({
+      url: envConfig.MQTT_URL,
+      clientId: envConfig.MQTT_CLIENT_ID,
+      username: envConfig.MQTT_USERNAME,
+      password: envConfig.MQTT_PASSWORD,
+      topicPrefix: envConfig.MQTT_TOPIC_PREFIX,
+      retain: envConfig.MQTT_RETAIN,
+      qos: envConfig.MQTT_QOS,
+    }),
+    electrolux: stripUndefined({
+      apiKey: envConfig.ELECTROLUX_API_KEY,
+      username: envConfig.ELECTROLUX_USERNAME,
+      password: envConfig.ELECTROLUX_PASSWORD,
+      countryCode: envConfig.ELECTROLUX_COUNTRY_CODE,
+      refreshInterval: envConfig.ELECTROLUX_REFRESH_INTERVAL,
+      applianceDiscoveryInterval: envConfig.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL,
+      renewTokenBeforeExpiry: envConfig.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY,
+    }),
+    homeAssistant: stripUndefined({
+      autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,
+    }),
+    logging: stripUndefined({
+      logLevel: envConfig.LOG_LEVEL,
+      showChanges: envConfig.LOGGING_SHOW_CHANGES,
+      ignoredKeys: envConfig.LOGGING_IGNORED_KEYS,
+      showVersionNumber: envConfig.LOGGING_SHOW_VERSION_NUMBER,
+      skipCacheLogging: envConfig.LOGGING_SKIP_CACHE_LOGGING,
+      showTimestamp: envConfig.LOGGING_SHOW_TIMESTAMP,
+    }),
+    versionCheck: stripUndefined({
+      checkInterval: envConfig.VERSION_CHECK_INTERVAL,
+      ntfyWebhookUrl: envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL,
+    }),
+    healthCheck: stripUndefined({
+      enabled: envConfig.HEALTH_CHECK_ENABLED,
+      filePath: envConfig.HEALTH_CHECK_FILE_PATH,
+    }),
+  }
 }
 
 export function createConfigFromEnv(): string | undefined {
@@ -190,56 +306,17 @@ export function createConfigFromEnv(): string | undefined {
   try {
     envConfig = envSchema.parse(process.env)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.error('Environment variable validation failed:')
-      for (const issue of error.issues) {
-        const envVar = issue.path.join('.')
-        console.error(`  - ${envVar}: ${issue.message}`)
-      }
-      // Skip exit in test environment
-      if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
-        process.exit(1)
-      }
-      return
-    }
-    throw error
+    return handleValidationError(error, true)
   }
 
-  // Format ignored keys for YAML: ["key1", "key2"] -> "key1, key2"
-  const formattedIgnoredKeys = envConfig.LOGGING_IGNORED_KEYS.join(', ')
+  let validatedConfig: AppConfig
+  try {
+    validatedConfig = configSchema.parse(buildConfigFromEnv(envConfig))
+  } catch (error) {
+    return handleValidationError(error, true)
+  }
 
-  const configContent = `mqtt:
-  clientId: ${envConfig.MQTT_CLIENT_ID}
-  url: ${envConfig.MQTT_URL}
-  username: ${envConfig.MQTT_USERNAME}
-  password: ${envConfig.MQTT_PASSWORD}
-  topicPrefix: ${envConfig.MQTT_TOPIC_PREFIX}
-  retain: ${envConfig.MQTT_RETAIN}
-  qos: ${envConfig.MQTT_QOS}
-
-electrolux:
-  apiKey: ${envConfig.ELECTROLUX_API_KEY}
-  username: ${envConfig.ELECTROLUX_USERNAME}
-  password: ${envConfig.ELECTROLUX_PASSWORD}
-  countryCode: ${envConfig.ELECTROLUX_COUNTRY_CODE}
-  refreshInterval: ${envConfig.ELECTROLUX_REFRESH_INTERVAL}
-  applianceDiscoveryInterval: ${envConfig.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL}
-
-homeAssistant:
-  autoDiscovery: ${envConfig.HOME_ASSISTANT_AUTO_DISCOVERY}
-
-logging:
-  logLevel: ${envConfig.LOG_LEVEL}
-  showChanges: ${envConfig.LOGGING_SHOW_CHANGES}
-  ignoredKeys: [${formattedIgnoredKeys}]
-  showVersionNumber: ${envConfig.LOGGING_SHOW_VERSION_NUMBER}
-  skipCacheLogging: ${envConfig.LOGGING_SKIP_CACHE_LOGGING}
-  showTimestamp: ${envConfig.LOGGING_SHOW_TIMESTAMP}
-
-versionCheck:
-  checkInterval: ${envConfig.VERSION_CHECK_INTERVAL}
-${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL && envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL !== 'https://ntfy.sh/your_topic_here' ? `  ntfyWebhookUrl: ${envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL}` : ''}
-`
+  const configContent = yaml.stringify(validatedConfig)
 
   try {
     fs.writeFileSync(configPath, configContent, 'utf8')
@@ -271,17 +348,7 @@ let config: AppConfig
 try {
   config = configSchema.parse(rawConfig)
 } catch (error) {
-  if (error instanceof z.ZodError) {
-    console.error('Configuration validation failed:')
-    for (const issue of error.issues) {
-      const path = issue.path.join('.')
-      console.error(`  - ${path}: ${issue.message}`)
-    }
-    // Skip exit in test environment
-    if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
-      process.exit(1)
-    }
-  }
+  handleValidationError(error, false)
   throw error
 }
 
