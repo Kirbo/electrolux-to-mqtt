@@ -64,6 +64,7 @@ const configSchema = z.object({
     }),
   homeAssistant: z.object({
     autoDiscovery: z.boolean().default(true),
+    revertStateOnRejection: z.boolean().default(false),
   }),
   logging: z
     .object({
@@ -141,6 +142,10 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
+  HOME_ASSISTANT_REVERT_STATE_ON_REJECTION: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   LOG_LEVEL: z.string().optional(),
   LOGGING_SHOW_CHANGES: z
     .string()
@@ -188,6 +193,7 @@ const configPathToEnvVar: Record<string, string> = {
   'electrolux.applianceDiscoveryInterval': 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL',
   'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
   'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
+  'homeAssistant.revertStateOnRejection': 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
   'logging.logLevel': 'LOG_LEVEL',
   'logging.showChanges': 'LOGGING_SHOW_CHANGES',
   'logging.ignoredKeys': 'LOGGING_IGNORED_KEYS',
@@ -279,6 +285,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
     }),
     homeAssistant: stripUndefined({
       autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,
+      revertStateOnRejection: envConfig.HOME_ASSISTANT_REVERT_STATE_ON_REJECTION,
     }),
     logging: stripUndefined({
       logLevel: envConfig.LOG_LEVEL,

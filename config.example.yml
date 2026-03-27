@@ -30,6 +30,10 @@ electrolux:
 homeAssistant:
   # Automatically discover the device in Home Assistant
   autoDiscovery: true
+  # Immediately revert HA state when a command is rejected by validation (default: false).
+  # When false, the UI stays on the invalid value until the next poll corrects it (~30s).
+  # When true, the state snaps back immediately but may cause UI flicker.
+  revertStateOnRejection: false
 
 logging:
   # Log level (fatal, error, warn, info, debug, trace, silent)

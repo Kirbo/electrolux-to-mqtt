@@ -1504,11 +1504,8 @@ describe('electrolux', () => {
         // Should NOT have called the API
         expect(mockAxiosInstance.put).not.toHaveBeenCalled()
 
-        // Should re-publish cached state to revert HA
-        expect(mockMqtt.publish).toHaveBeenCalledWith(
-          expect.stringContaining('test-appliance-123/state'),
-          expect.any(String),
-        )
+        // Should NOT revert state by default (revertStateOnRejection defaults to false)
+        expect(mockMqtt.publish).not.toHaveBeenCalled()
       })
     })
 

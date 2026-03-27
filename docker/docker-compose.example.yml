@@ -28,6 +28,7 @@ services:
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300                       # Appliance discovery interval in seconds (how often to check for added/removed appliances)
       # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60                           # Refresh token when this many minutes remain before expiration (default: 60, min: 5, max: 715)
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                                # Enable Home Assistant auto discovery
+      # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false                    # Revert HA state immediately on rejected commands (default: false)
       # - LOGGING_SHOW_CHANGES=true                                         # Log appliance state changes
       # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime                # Comma-separated list of keys to ignore in state change logs
       # - LOGGING_SHOW_VERSION_NUMBER=true                                  # Show version number in logs

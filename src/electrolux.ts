@@ -963,7 +963,9 @@ export class ElectroluxClient {
     const validation = appliance.validateCommand(rawCommand, currentMode)
     if (!validation.valid) {
       logger.warn(`Command rejected for appliance ${applianceId}: ${validation.reason}`)
-      this.revertStateFromCache(appliance, applianceId, cacheKey)
+      if (config.homeAssistant.revertStateOnRejection) {
+        this.revertStateFromCache(appliance, applianceId, cacheKey)
+      }
       return undefined
     }
 
