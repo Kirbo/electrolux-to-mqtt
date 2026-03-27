@@ -1,3 +1,7 @@
+## TDD
+
+Write tests first, then implement. When a change touches `src/`, write or update the corresponding test in `tests/` before writing the production code. Skip TDD only when the change is purely structural (moves, renames, re-exports) with no new logic.
+
 ## When config options change (src/config.ts)
 
 Update **all of**:
@@ -20,8 +24,7 @@ Update:
 - `tests/appliances/<model>.test.ts` (unit tests for all methods)
 - `tests/appliances/base.test.ts` (if the `BaseAppliance` interface changed)
 - `tests/appliances/factory.test.ts` (factory creates the new model correctly)
-- `tests/normalizers.test.ts` (if individual normalizer functions changed)
-- `tests/appliances/normalizers.test.ts` (if higher-level normalizer logic changed)
+- `tests/appliances/normalizers.test.ts` (if normalizer functions changed)
 - `README.md` (supported appliances list)
 
 ## When modifying API types (`src/types.d.ts`, `src/types/normalized.ts`)
@@ -53,8 +56,6 @@ Update:
 - `tests/state-differences.test.ts` (if state diffing logic changed)
 - `HOME_ASSISTANT.md` (if MQTT topics, payloads, or HA automation examples are affected)
 - `README.md` (if MQTT topic structure or HA integration docs are affected)
-
-**Important:** HA command templates send values in uppercase (`'AUTO'`, `'ON'`, `'FANONLY'`), but normalized state and HA state templates expect lowercase (`'auto'`, `'on'`, `'fan_only'`). Any code that processes incoming MQTT commands must normalize values to lowercase before merging with cached state or publishing feedback to MQTT. See the command-to-state merging logic in `src/electrolux.ts` (grep for `buildCombinedCommandState` or similar).
 
 ## When adding any user-facing feature or behavioral change
 

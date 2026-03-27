@@ -35,10 +35,7 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 - `.gitignore` must cover all generated/cached artifacts including CI-specific directories (e.g., `.pnpm-store/`).
 
 ### Sync
-- All example files must stay in sync: `config.example.yml`, `docker/docker-compose.example.yml`, `docker/docker-compose.local.example.yml`. When a config option is added or changed, update every example.
-- `CONTRIBUTING.md` must stay in sync with actual coverage thresholds (`vitest.config.ts`), project structure, and development workflow.
-- `HOME_ASSISTANT.md` must stay in sync with MQTT topic payloads and HA automation examples.
-- README project structure must match the actual directory layout — no phantom paths.
+- Example files, docs (`README.md`, `CONTRIBUTING.md`, `HOME_ASSISTANT.md`), and config examples must stay in sync with the code they describe. See [implementation.md](.claude/rules/implementation.md) for the full file checklists per change type.
 - `.nvmrc`, `package.json` `engines` field, and Docker build args must agree on the required Node.js version.
 
 ### Docker
@@ -47,7 +44,7 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 ### Domain
 - Appliance classes must extend `BaseAppliance` and be registered in the factory.
 - Home Assistant auto-discovery payloads must conform to the HA MQTT discovery specification. `name: ''` in discovery payloads is intentional — HA convention where the entity inherits the device name.
-- HA state templates and normalized state use **lowercase** values (e.g., `'auto'`, `'on'`, `'fan_only'`). HA command templates send **uppercase** (e.g., `'AUTO'`, `'ON'`). Incoming MQTT commands must be normalized to lowercase before merging with cached state or publishing feedback.
+- Normalized state and HA state templates use **lowercase**; HA command templates send **uppercase**. Incoming MQTT commands must be normalized to lowercase before merging with cached state.
 - MQTT topic structure must be consistent and documented.
 
 ### Config schema architecture
