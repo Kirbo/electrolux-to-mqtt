@@ -92,6 +92,8 @@ src/
 └── version-checker.ts   # Update checker and telemetry
 
 tests/                   # Test files (mirrors src/ structure)
+
+telemetry-backend/       # Standalone anonymous telemetry collection service
 ```
 
 ## Adding a New Appliance

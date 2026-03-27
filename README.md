@@ -54,6 +54,39 @@ Unknown models that report as a portable air conditioner will use the Comfort 60
 2. Create a new API Key and copy the value
 3. Start the container by following one of the instructions [listed below](#but-how-to-start)
 
+## Environment Variables
+
+All configuration can be provided via environment variables instead of `config.yml`.
+
+| Variable                                   | Description                                            | Default                | Required |
+| ------------------------------------------ | ------------------------------------------------------ | ---------------------- | -------- |
+| `MQTT_URL`                                 | MQTT broker URL (`mqtt://` or `mqtts://`)              | —                      | Yes      |
+| `MQTT_USERNAME`                            | MQTT broker username                                   | —                      | Yes      |
+| `MQTT_PASSWORD`                            | MQTT broker password                                   | —                      | Yes      |
+| `ELECTROLUX_API_KEY`                       | Electrolux API key                                     | —                      | Yes      |
+| `ELECTROLUX_USERNAME`                      | Electrolux account email                               | —                      | Yes      |
+| `ELECTROLUX_PASSWORD`                      | Electrolux account password                            | —                      | Yes      |
+| `ELECTROLUX_COUNTRY_CODE`                  | Two-letter country code                                | —                      | Yes      |
+| `MQTT_TOPIC_PREFIX`                        | MQTT topic prefix                                      | `electrolux_`          | No       |
+| `MQTT_CLIENT_ID`                           | MQTT client identifier                                 | `electrolux-comfort600`| No       |
+| `MQTT_RETAIN`                              | Retain MQTT messages                                   | `false`                | No       |
+| `MQTT_QOS`                                 | MQTT QoS level (0, 1, or 2)                            | `2`                    | No       |
+| `ELECTROLUX_REFRESH_INTERVAL`              | State polling interval in seconds (10–3600)            | `30`                   | No       |
+| `ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL`  | Appliance discovery interval in seconds (60–3600)      | `300`                  | No       |
+| `ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY`     | Minutes before token expiry to refresh (5–715)         | `60`                   | No       |
+| `HOME_ASSISTANT_AUTO_DISCOVERY`            | Enable HA MQTT auto-discovery                          | `true`                 | No       |
+| `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION` | Immediately revert HA state on rejected commands       | `false`                | No       |
+| `LOG_LEVEL`                                | Log level (fatal/error/warn/info/debug/trace/silent)   | `info`                 | No       |
+| `LOGGING_SHOW_CHANGES`                     | Log state changes                                      | `true`                 | No       |
+| `LOGGING_IGNORED_KEYS`                     | Comma-separated keys to ignore in change logs          | —                      | No       |
+| `LOGGING_SHOW_VERSION_NUMBER`              | Show version in log prefix                             | `true`                 | No       |
+| `LOGGING_SKIP_CACHE_LOGGING`               | Suppress cache debug logs                              | `true`                 | No       |
+| `LOGGING_SHOW_TIMESTAMP`                   | Show timestamps in logs                                | `true`                 | No       |
+| `VERSION_CHECK_INTERVAL`                   | Update check interval in seconds (60–86400)            | `3600`                 | No       |
+| `VERSION_CHECK_NTFY_WEBHOOK_URL`           | ntfy.sh webhook URL for update notifications           | —                      | No       |
+| `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `false`                | No       |
+| `HEALTH_CHECK_FILE_PATH`                   | Path to health check file                              | `/tmp/e2m-health`      | No       |
+
 ## But how to start?!
 
 Choose one of the following methods and open the details.
