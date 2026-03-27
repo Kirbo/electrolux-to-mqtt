@@ -138,6 +138,14 @@ export class Comfort600Appliance extends BaseAppliance {
       return { valid: true }
     }
 
+    // If the trigger marks fan speed as read-only, reject all fan speed changes
+    if (fanAction.access === 'read') {
+      return {
+        valid: false,
+        reason: `fan speed is read-only in '${effectiveMode}' mode`,
+      }
+    }
+
     // Check if the requested fan speed is in the allowed values for this mode
     const allowedSpeeds = Object.keys(fanAction.values)
     const requestedSpeed = denormalizeFanSpeed(rawCommand.fanSpeedSetting)

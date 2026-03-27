@@ -482,6 +482,20 @@ describe('Comfort600Appliance', () => {
       expect(result.valid).toBe(false)
     })
 
+    it('should reject fan speed LOW in dry mode (read-only)', () => {
+      // DRY trigger has access: "read" — fan speed is completely read-only
+      const result = appliance.validateCommand({ fanSpeedSetting: 'low' }, 'dry')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('read-only')
+    })
+
+    it('should reject fan speed AUTO in auto mode (read-only)', () => {
+      // AUTO trigger has access: "read" — fan speed is completely read-only
+      const result = appliance.validateCommand({ fanSpeedSetting: 'auto' }, 'auto')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('read-only')
+    })
+
     it('should reject fan speed AUTO in fan_only mode', () => {
       const result = appliance.validateCommand({ fanSpeedSetting: 'auto' }, 'fan_only')
       expect(result.valid).toBe(false)
