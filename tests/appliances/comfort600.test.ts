@@ -569,6 +569,16 @@ describe('Comfort600Appliance', () => {
       expect(result.valid).toBe(true)
     })
 
+    it('should allow temperature at exact minimum boundary', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 16 }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow temperature at exact maximum boundary', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 32 }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
     it('should reject temperature below mode minimum', () => {
       const result = appliance.validateCommand({ targetTemperatureC: 10 }, 'cool')
       expect(result.valid).toBe(false)
