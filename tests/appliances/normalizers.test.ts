@@ -244,6 +244,12 @@ describe('normalizers', () => {
       expect(result.applianceState).toBe('ON')
       expect(result.mode).toBe('COOL')
     })
+
+    it('should throw on invalid state structure', () => {
+      const invalid = { someRandomField: 'value' } as unknown as Appliance
+
+      expect(() => extractReportedState(invalid)).toThrow('Invalid appliance state')
+    })
   })
 
   describe('normalizeBaseFields', () => {

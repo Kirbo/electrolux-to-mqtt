@@ -533,6 +533,50 @@ describe('Comfort600Appliance', () => {
       expect(result.valid).toBe(true)
     })
 
+    it('should allow fan speed when trigger has no fanSpeedSetting action', () => {
+      const infoNoFanAction: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          mode: {
+            ...mockInfo.capabilities.mode,
+            triggers: [
+              {
+                action: { targetTemperatureC: { access: 'readwrite', min: 16, max: 32, type: 'temperature' } },
+                condition: { operand_1: 'value', operand_2: 'COOL', operator: 'eq' },
+              },
+            ],
+          },
+        },
+      }
+      const app = new Comfort600Appliance(mockStub, infoNoFanAction)
+      const result = app.validateCommand({ fanSpeedSetting: 'high' }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow temperature when trigger has no targetTemperatureC action', () => {
+      const infoNoTempAction: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          mode: {
+            ...mockInfo.capabilities.mode,
+            triggers: [
+              {
+                action: {
+                  fanSpeedSetting: { access: 'readwrite', type: 'string', values: { AUTO: {}, LOW: {} } },
+                },
+                condition: { operand_1: 'value', operand_2: 'COOL', operator: 'eq' },
+              },
+            ],
+          },
+        },
+      }
+      const app = new Comfort600Appliance(mockStub, infoNoTempAction)
+      const result = app.validateCommand({ targetTemperatureC: 24 }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
     it('should work with appliance that has no mode triggers', () => {
       const infoNoTriggers: ApplianceInfo = {
         ...mockInfo,

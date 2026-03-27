@@ -260,6 +260,15 @@ describe('BaseAppliance', () => {
     })
   })
 
+  describe('validateCommand', () => {
+    it('should return valid by default', () => {
+      const appliance = new TestAppliance(mockStub, mockInfo)
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'cool')
+
+      expect(result).toEqual({ valid: true })
+    })
+  })
+
   describe('generateAutoDiscoveryConfig', () => {
     it('should generate valid auto-discovery config', () => {
       const appliance = new TestAppliance(mockStub, mockInfo)
