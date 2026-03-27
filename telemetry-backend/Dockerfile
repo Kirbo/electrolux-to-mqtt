@@ -53,6 +53,10 @@ COPY --from=builder /app/dist ./dist
 
 ENV NODE_ENV=production
 
+# Run as non-root user
+RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
+USER nodejs
+
 # Expose port
 EXPOSE 3001
 

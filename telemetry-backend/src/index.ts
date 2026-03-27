@@ -182,16 +182,19 @@ async function generateBadge(): Promise<void> {
 }
 
 // POST /telemetry - Store user telemetry data
+// Rate limiting runs BEFORE validation — malformed requests must still consume quota.
 app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
   try {
     const { userHash, version }: { userHash: string; version: string } = req.body
 
-    if (!userHash || !version) {
-      return res.status(400).json({ error: 'userHash and version are required' })
+    // Hash rate limit before any validation (use IP-based fallback when userHash is missing)
+    const hashKey = userHash ? `hash:${userHash}` : `hash:unknown-${req.ip}`
+    if (!enforceRateLimit(hashKey, hashRateLimitStore, RATE_LIMIT_HASH_MAX, res)) {
+      return
     }
 
-    if (!enforceRateLimit(`hash:${userHash}`, hashRateLimitStore, RATE_LIMIT_HASH_MAX, res)) {
-      return
+    if (!userHash || !version) {
+      return res.status(400).json({ error: 'userHash and version are required' })
     }
 
     // Ignore test data
