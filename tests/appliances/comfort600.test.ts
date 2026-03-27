@@ -389,7 +389,12 @@ describe('Comfort600Appliance', () => {
 
     it('should transform swing mode to API format', () => {
       const apiCommand = appliance.transformMqttCommandToApi({ verticalSwing: 'on' })
-      expect(apiCommand.verticalSwing).toBe('on')
+      expect(apiCommand.verticalSwing).toBe('ON')
+    })
+
+    it('should transform sleep mode to API format', () => {
+      const apiCommand = appliance.transformMqttCommandToApi({ sleepMode: 'on' })
+      expect(apiCommand.sleepMode).toBe('ON')
     })
   })
 
@@ -442,6 +447,94 @@ describe('Comfort600Appliance', () => {
       const config = appliance.generateAutoDiscoveryConfig('custom_prefix')
       expect(config.mode_state_topic).toContain('custom_prefix')
       expect(config.mode_command_topic).toContain('custom_prefix')
+    })
+  })
+
+  describe('validateCommand', () => {
+    it('should allow fan speed AUTO in cool mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'auto' }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow fan speed HIGH in cool mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow fan speed HIGH in heat mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'heat')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should reject fan speed HIGH in dry mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'dry')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('fan speed')
+    })
+
+    it('should reject fan speed AUTO in dry mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'auto' }, 'dry')
+      expect(result.valid).toBe(false)
+    })
+
+    it('should reject fan speed HIGH in auto mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'auto')
+      expect(result.valid).toBe(false)
+    })
+
+    it('should reject fan speed AUTO in fan_only mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'auto' }, 'fan_only')
+      expect(result.valid).toBe(false)
+    })
+
+    it('should allow fan speed HIGH in fan_only mode', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'fan_only')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow mode changes without fan speed', () => {
+      const result = appliance.validateCommand({ mode: 'dry' }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow temperature changes', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 24 }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow commands when current mode is unknown (off)', () => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'off')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should validate against the target mode when mode is included in command', () => {
+      // Switching to dry mode with high fan speed should fail (dry only allows low)
+      const result = appliance.validateCommand({ mode: 'dry', fanSpeedSetting: 'high' }, 'cool')
+      expect(result.valid).toBe(false)
+    })
+
+    it('should allow valid fan speed with mode change', () => {
+      // Switching to fan_only with high fan speed should succeed
+      const result = appliance.validateCommand({ mode: 'fan_only', fanSpeedSetting: 'high' }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should work with appliance that has no mode triggers', () => {
+      const infoNoTriggers: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          mode: {
+            access: 'readwrite',
+            type: 'string',
+            schedulable: true,
+            values: { AUTO: {}, COOL: {} },
+          },
+        },
+      }
+      const applianceNoTriggers = new Comfort600Appliance(mockStub, infoNoTriggers)
+      const result = applianceNoTriggers.validateCommand({ fanSpeedSetting: 'high' }, 'dry')
+      expect(result.valid).toBe(true)
     })
   })
 

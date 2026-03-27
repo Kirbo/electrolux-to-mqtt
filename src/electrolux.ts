@@ -40,7 +40,7 @@ function isApplianceInfo(value: unknown): value is ApplianceInfo {
 }
 
 // Configuration constants
-const TOKEN_REFRESH_THRESHOLD_HOURS = 1 // Refresh token if it's set to expire within 1 hour
+const RENEW_TOKEN_BEFORE_EXPIRY_MS = (config.electrolux.renewTokenBeforeExpiry ?? 60) * 60 * 1000
 const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (doubles each attempt)
@@ -208,6 +208,7 @@ export class ElectroluxClient {
   private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
   private loginRetryCount = 0
   private refreshRetryCount = 0
+  private loginWaiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
 
   public isLoggingIn = false
   public isLoggedIn = false
@@ -215,6 +216,34 @@ export class ElectroluxClient {
 
   constructor(mqtt: IMqtt) {
     this.mqtt = mqtt
+  }
+
+  private startLogin() {
+    this.isLoggingIn = true
+    this.isLoggedIn = false
+  }
+
+  private finishLogin(success: boolean) {
+    this.isLoggingIn = false
+    this.isLoggedIn = success
+    if (success) {
+      for (const waiter of this.loginWaiters) {
+        waiter.resolve()
+      }
+    } else {
+      for (const waiter of this.loginWaiters) {
+        waiter.reject(new Error('Login failed'))
+      }
+    }
+    this.loginWaiters = []
+  }
+
+  public async waitForLogin(): Promise<void> {
+    if (this.isLoggedIn) return
+    logger.debug('Waiting for login to complete...')
+    return new Promise((resolve, reject) => {
+      this.loginWaiters.push({ resolve, reject })
+    })
   }
 
   /**
@@ -261,10 +290,7 @@ export class ElectroluxClient {
 
     this.client.interceptors.request.use(async (request) => {
       if (request.url !== '/api/v1/token/refresh') {
-        while (this.isLoggingIn) {
-          logger.debug('Waiting for login to complete...')
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
+        await this.waitForLogin()
       }
       return request
     })
@@ -298,13 +324,12 @@ export class ElectroluxClient {
   }
 
   public async login() {
-    this.isLoggingIn = true
-    this.isLoggedIn = false
+    this.startLogin()
     logger.info('Attempting to fetch access token...')
 
     const tokenData = await this.getXcsrfToken()
     if (!tokenData) {
-      this.isLoggingIn = false
+      this.finishLogin(false)
       throw new Error('Failed to retrieve X-CSRF token data')
     }
     const { xcsrfToken, csrfSecret } = tokenData
@@ -401,19 +426,18 @@ export class ElectroluxClient {
       }
 
       const tokens = this.buildTokensObject()
-      logger.info('Logged in, Tokens', this.retainTokensForOutput(tokens))
+      logger.info('Logged in successfully')
+      logger.debug('Tokens', this.retainTokensForOutput(tokens))
       this.saveTokens(tokens)
 
       this.createApiClient()
 
-      this.isLoggedIn = true
-      this.isLoggingIn = false
+      this.finishLogin(true)
       this.loginRetryCount = 0
 
       return true
     } catch (error) {
-      this.isLoggedIn = false
-      this.isLoggingIn = false
+      this.finishLogin(false)
       const delay = Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** this.loginRetryCount, LOGIN_RETRY_MAX_DELAY_MS)
       this.loginRetryCount++
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
@@ -493,9 +517,8 @@ export class ElectroluxClient {
       const timeLeft = this.eat.getTime() - now.getTime()
       const readableTimeLeft = timeLeft / 1000
 
-      if (timeLeft <= 1000 * 60 * 60 * TOKEN_REFRESH_THRESHOLD_HOURS) {
+      if (timeLeft <= RENEW_TOKEN_BEFORE_EXPIRY_MS) {
         logger.info(`Access token is about to expire, time left "${readableTimeLeft}", refreshing tokens...`)
-        this.isLoggedIn = false
         await this.refreshTokens()
       } else {
         logger.debug(`Access token is valid, time left "${readableTimeLeft}"`)
@@ -506,7 +529,7 @@ export class ElectroluxClient {
   }
 
   public async refreshTokens() {
-    this.isLoggingIn = true
+    this.startLogin()
     try {
       if (!this.client) {
         throw new Error('API client is not initialized')
@@ -528,17 +551,15 @@ export class ElectroluxClient {
       this.eat = eat
       this.iat = iat
 
-      this.isLoggedIn = true
-
       const tokens = this.buildTokensObject()
-      logger.info('Refreshed tokens', this.retainTokensForOutput(tokens))
+      logger.info('Tokens refreshed successfully')
+      logger.debug('Tokens', this.retainTokensForOutput(tokens))
       this.saveTokens(tokens)
 
       // Recreate API client with new access token
       await this.createApiClient()
 
-      this.isLoggingIn = false
-      this.isLoggedIn = true
+      this.finishLogin(true)
       this.refreshRetryCount = 0
 
       // Small delay to ensure the new client is fully ready
@@ -553,7 +574,7 @@ export class ElectroluxClient {
         this.refreshToken = undefined
         this.eat = undefined
         this.iat = undefined
-        this.isLoggingIn = false
+        this.finishLogin(false)
         this.refreshRetryCount = 0
         await this.login()
       } else {
@@ -665,7 +686,6 @@ export class ElectroluxClient {
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 403 && this.isLoggedIn) {
         logger.warn('Received 403 error, forcing token refresh...')
-        this.isLoggedIn = false
         await this.refreshTokens()
 
         try {
@@ -913,11 +933,41 @@ export class ElectroluxClient {
     }, 'Error getting appliance state')
   }
 
+  private revertStateFromCache(appliance: BaseAppliance, applianceId: string, cacheKey: string): void {
+    const cached = cache.get(cacheKey)
+    let cachedNormalizedState: NormalizedState | null = null
+    if (isAppliance(cached)) {
+      cachedNormalizedState = appliance.normalizeState(cached)
+    } else if (isNormalizedState(cached)) {
+      cachedNormalizedState = cached
+    }
+
+    if (cachedNormalizedState) {
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(cachedNormalizedState))
+    }
+  }
+
   public async sendApplianceCommand(appliance: BaseAppliance, rawCommand: Partial<NormalizedState>) {
     const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
 
-    return this.handleApiRequest(async () => {
+    // Pre-validate command against mode-specific constraints
+    const cached = cache.get(cacheKey)
+    let currentMode: NormalizedClimateMode = 'off'
+    if (isAppliance(cached)) {
+      currentMode = appliance.normalizeState(cached).mode
+    } else if (isNormalizedState(cached)) {
+      currentMode = cached.mode
+    }
+
+    const validation = appliance.validateCommand(rawCommand, currentMode)
+    if (!validation.valid) {
+      logger.warn(`Command rejected for appliance ${applianceId}: ${validation.reason}`)
+      this.revertStateFromCache(appliance, applianceId, cacheKey)
+      return undefined
+    }
+
+    const result = await this.handleApiRequest(async () => {
       await this.ensureValidToken()
       if (!this.client) {
         throw new Error('API client is not initialized')
@@ -935,5 +985,12 @@ export class ElectroluxClient {
 
       return response.data
     }, 'Error sending command')
+
+    // If the API call failed, revert HA state to the cached state
+    if (result === undefined) {
+      this.revertStateFromCache(appliance, applianceId, cacheKey)
+    }
+
+    return result
   }
 }

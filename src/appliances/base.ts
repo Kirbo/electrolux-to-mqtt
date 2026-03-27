@@ -1,6 +1,8 @@
 import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '../types/homeassistant.js'
-import type { NormalizedState } from '../types/normalized.js'
+import type { NormalizedClimateMode, NormalizedState } from '../types/normalized.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '../types.js'
+
+export type CommandValidationResult = { valid: true } | { valid: false; reason: string }
 
 /**
  * Base class for all Electrolux appliances
@@ -68,6 +70,18 @@ export abstract class BaseAppliance {
    */
   public deriveImmediateStateFromCommand(_payload: Record<string, unknown>): Partial<NormalizedState> | null {
     return null // Default: no immediate state updates
+  }
+
+  /**
+   * Validate a command against mode-specific constraints from the appliance capabilities.
+   * Returns { valid: true } if the command is allowed, or { valid: false, reason } if not.
+   * Override in subclasses to add mode-aware validation using capabilities triggers.
+   */
+  public validateCommand(
+    _rawCommand: Partial<NormalizedState>,
+    _currentMode: NormalizedClimateMode,
+  ): CommandValidationResult {
+    return { valid: true }
   }
 
   /**

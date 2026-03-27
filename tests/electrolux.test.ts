@@ -41,6 +41,10 @@ interface MockAppliance {
   normalizeState: (state: Appliance) => NormalizedState
   transformMqttCommandToApi?: (command: Record<string, unknown>) => Record<string, unknown>
   deriveImmediateStateFromCommand?: (payload: Record<string, unknown>) => Partial<NormalizedState> | null
+  validateCommand?: (
+    command: Partial<NormalizedState>,
+    currentMode: string,
+  ) => { valid: true } | { valid: false; reason: string }
   generateAutoDiscoveryConfig: () => Record<string, unknown>
   getSupportedModes: () => string[]
   getSupportedFanModes: () => string[]
@@ -94,6 +98,7 @@ function createMockAppliance(overrides: Partial<MockAppliance> = {}): MockApplia
     ),
     transformMqttCommandToApi: vi.fn((cmd) => cmd),
     deriveImmediateStateFromCommand: vi.fn(() => null),
+    validateCommand: vi.fn(() => ({ valid: true as const })),
     generateAutoDiscoveryConfig: vi.fn(() => ({})),
     getSupportedModes: vi.fn(() => ['cool', 'heat', 'auto', 'off']),
     getSupportedFanModes: vi.fn(() => ['auto', 'low', 'medium', 'high']),
@@ -1462,6 +1467,49 @@ describe('electrolux', () => {
 
         expect(result).toBeUndefined()
       })
+
+      it('should re-publish cached state when command fails', async () => {
+        const { cache } = await import('../src/cache.js')
+        vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+
+        mockAxiosInstance.put.mockRejectedValueOnce(new Error('Command failed'))
+
+        await client.initialize()
+        vi.mocked(mockMqtt.publish).mockClear()
+
+        await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
+
+        // Should re-publish cached state so HA UI reverts
+        expect(mockMqtt.publish).toHaveBeenCalledWith(
+          expect.stringContaining('test-appliance-123/state'),
+          expect.any(String),
+        )
+      })
+
+      it('should skip validation and not send API call when command is invalid', async () => {
+        const { cache } = await import('../src/cache.js')
+        vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+
+        // Add validateCommand to mock appliance
+        const validatingAppliance = createMockAppliance({
+          ...mockAppliance,
+          validateCommand: vi.fn(() => ({ valid: false, reason: 'fan speed HIGH not allowed in dry mode' })),
+        })
+
+        await client.initialize()
+        vi.mocked(mockMqtt.publish).mockClear()
+
+        await client.sendApplianceCommand(validatingAppliance as unknown as BaseAppliance, { fanSpeedSetting: 'high' })
+
+        // Should NOT have called the API
+        expect(mockAxiosInstance.put).not.toHaveBeenCalled()
+
+        // Should re-publish cached state to revert HA
+        expect(mockMqtt.publish).toHaveBeenCalledWith(
+          expect.stringContaining('test-appliance-123/state'),
+          expect.any(String),
+        )
+      })
     })
 
     it('should create API client with headers', async () => {
@@ -1766,6 +1814,37 @@ describe('electrolux', () => {
         }
 
         vi.useRealTimers()
+      })
+
+      it('should reject waitForLogin waiters when login fails', async () => {
+        // Simulate a waiter waiting for login
+        const waitPromise = client.waitForLogin()
+
+        // Trigger finishLogin(false) by accessing the private method via login failure path
+        // finishLogin(false) should reject all pending waiters
+        client.isLoggedIn = false
+        client.isLoggingIn = true
+
+        // Access finishLogin indirectly: simulate the failure path
+        // We use Object.getPrototypeOf trick to call finishLogin
+        const proto = Object.getPrototypeOf(client) as Record<string, unknown>
+        const finishLogin = proto.finishLogin as (success: boolean) => void
+        finishLogin.call(client, false)
+
+        await expect(waitPromise).rejects.toThrow('Login failed')
+      })
+
+      it('should resolve waitForLogin waiters when login succeeds', async () => {
+        const waitPromise = client.waitForLogin()
+
+        client.isLoggedIn = false
+        client.isLoggingIn = true
+
+        const proto = Object.getPrototypeOf(client) as Record<string, unknown>
+        const finishLogin = proto.finishLogin as (success: boolean) => void
+        finishLogin.call(client, true)
+
+        await expect(waitPromise).resolves.toBeUndefined()
       })
 
       it('should handle missing cached state in publishCommandFeedback', async () => {

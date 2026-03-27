@@ -73,6 +73,8 @@ type GitLabRelease = {
  * Compare two semantic version strings
  * Returns: -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2
  */
+// Compares numeric semver parts only (X.Y.Z). Pre-release suffixes (e.g. -beta.1)
+// are silently ignored — acceptable because semantic-release only publishes stable versions.
 function compareVersions(v1: string, v2: string): number {
   // Remove 'v' prefix if present
   const clean1 = v1.replace(/^v/, '')

@@ -1,8 +1,13 @@
 import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '../types/homeassistant.js'
-import type { NormalizedState } from '../types/normalized.js'
+import type { NormalizedClimateMode, NormalizedState } from '../types/normalized.js'
 import type { Appliance } from '../types.js'
-import { BaseAppliance } from './base.js'
-import { denormalizeClimateMode, denormalizeFanSpeed, normalizeClimateAppliance } from './normalizers.js'
+import { BaseAppliance, type CommandValidationResult } from './base.js'
+import {
+  denormalizeClimateMode,
+  denormalizeFanSpeed,
+  normalizeClimateAppliance,
+  normalizeFanSpeed,
+} from './normalizers.js'
 
 /**
  * Electrolux COMFORT600 Portable Air Conditioner
@@ -48,7 +53,7 @@ export class Comfort600Appliance extends BaseAppliance {
    * Handles mode and fan speed denormalization
    */
   public transformMqttCommandToApi(rawCommand: Partial<NormalizedState>): Record<string, unknown> {
-    const { mode, fanSpeedSetting, ...otherCommands } = rawCommand
+    const { mode, fanSpeedSetting, verticalSwing, sleepMode, ...otherCommands } = rawCommand
 
     // If mode is explicitly 'off', turn off the appliance
     // Otherwise, if any command is sent (including mode changes or other settings), turn on the appliance
@@ -69,6 +74,14 @@ export class Comfort600Appliance extends BaseAppliance {
       payload.fanSpeedSetting = denormalizeFanSpeed(fanSpeedSetting)
     }
 
+    // Denormalize on/off fields to uppercase for the API
+    if (verticalSwing) {
+      payload.verticalSwing = verticalSwing.toUpperCase()
+    }
+    if (sleepMode) {
+      payload.sleepMode = sleepMode.toUpperCase()
+    }
+
     return payload
   }
 
@@ -83,6 +96,61 @@ export class Comfort600Appliance extends BaseAppliance {
       }
     }
     return null
+  }
+
+  /**
+   * Validate a command against mode-specific constraints from the capabilities triggers.
+   * The Electrolux API returns triggers that define which fan speeds, temperature ranges,
+   * and features are available per mode. This prevents sending commands the API will reject.
+   */
+  public override validateCommand(
+    rawCommand: Partial<NormalizedState>,
+    currentMode: NormalizedClimateMode,
+  ): CommandValidationResult {
+    if (!rawCommand.fanSpeedSetting) {
+      return { valid: true }
+    }
+
+    // If the command includes a mode change, validate against the target mode
+    const effectiveMode = rawCommand.mode ?? currentMode
+
+    // Skip validation for off mode — no constraints apply
+    if (effectiveMode === 'off') {
+      return { valid: true }
+    }
+
+    const triggers = this.applianceInfo.capabilities.mode?.triggers
+    if (!triggers) {
+      return { valid: true }
+    }
+
+    // Find the trigger for the effective mode
+    const denormalizedMode = denormalizeClimateMode(effectiveMode)
+    const trigger = triggers.find((t) => t.condition.operand_2 === denormalizedMode)
+    if (!trigger) {
+      return { valid: true }
+    }
+
+    const fanAction = trigger.action.fanSpeedSetting as
+      | { access?: string; values?: Record<string, unknown> }
+      | undefined
+    if (!fanAction?.values) {
+      return { valid: true }
+    }
+
+    // Check if the requested fan speed is in the allowed values for this mode
+    const allowedSpeeds = Object.keys(fanAction.values)
+    const requestedSpeed = denormalizeFanSpeed(rawCommand.fanSpeedSetting)
+
+    if (!allowedSpeeds.includes(requestedSpeed)) {
+      const normalizedAllowed = allowedSpeeds.map((s) => normalizeFanSpeed(s.toLowerCase())).join(', ')
+      return {
+        valid: false,
+        reason: `fan speed '${rawCommand.fanSpeedSetting}' is not allowed in '${effectiveMode}' mode (allowed: ${normalizedAllowed})`,
+      }
+    }
+
+    return { valid: true }
   }
 
   public generateAutoDiscoveryConfig(topicPrefix: string): HAClimateDiscoveryConfig {
@@ -113,7 +181,7 @@ export class Comfort600Appliance extends BaseAppliance {
       mode_state_template:
         "{{ 'off' if value_json.applianceState == 'off' else ('fan_only' if value_json.mode == 'fan_only' else value_json.mode | lower) }}",
       mode_command_topic: commandTopic,
-      mode_command_template: `{ "mode": "{{ 'FANONLY' if value == 'fan_only' else value | upper }}" }`,
+      mode_command_template: '{ "mode": "{{ value }}" }',
       precision: 1,
       temperature_unit: 'C',
       initial: tempRange.initial,
@@ -130,12 +198,12 @@ export class Comfort600Appliance extends BaseAppliance {
       fan_mode_state_template:
         '{{ value_json.fanSpeedSetting if value_json.fanSpeedSetting != "middle" else "medium" }}',
       fan_mode_command_topic: commandTopic,
-      fan_mode_command_template: `{ "fanSpeedSetting": "{{ 'middle' if value == 'medium' else value | upper }}" }`,
+      fan_mode_command_template: '{ "fanSpeedSetting": "{{ value }}" }',
       swing_modes: this.getSupportedSwingModes(),
       swing_mode_state_topic: stateTopic,
       swing_mode_state_template: '{{ value_json.verticalSwing }}',
       swing_mode_command_topic: commandTopic,
-      swing_mode_command_template: '{ "verticalSwing": "{{ value | upper }}" }',
+      swing_mode_command_template: '{ "verticalSwing": "{{ value }}" }',
     }
   }
 }
