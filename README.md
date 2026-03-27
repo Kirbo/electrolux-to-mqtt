@@ -40,6 +40,14 @@ Relevant links:
 - [SonarQube Cloud](https://sonarcloud.io/project/overview?id=kirbo_electrolux-to-mqtt)
 
 
+## Supported Appliances
+
+| Model | Type | Notes |
+|-------|------|-------|
+| **Electrolux Comfort 600** | Portable Air Conditioner | Full support: climate modes, fan speed, swing, sleep mode, temperature control |
+
+Unknown models that report as a portable air conditioner will use the Comfort 600 implementation as a fallback. If you have a different Electrolux appliance and would like support added, please [open an issue](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues).
+
 ## Prerequisites
 
 1. Sign up/sign in into [Electrolux for Developer](https://developer.electrolux.one/dashboard)
@@ -93,6 +101,7 @@ docker run --rm \
   # -e MQTT_QOS=2 \
   # -e ELECTROLUX_REFRESH_INTERVAL=30 \
   # -e ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300 \
+  # -e ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e LOG_LEVEL=info \
   # -e LOGGING_SHOW_CHANGES=true \
@@ -102,6 +111,8 @@ docker run --rm \
   # -e LOGGING_SHOW_TIMESTAMP=true \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
+  # -e HEALTH_CHECK_ENABLED=true \
+  # -e HEALTH_CHECK_FILE_PATH=/tmp/e2m-health \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 </details>
@@ -159,6 +170,7 @@ services:
       # - MQTT_QOS=2
       # - ELECTROLUX_REFRESH_INTERVAL=30
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300
+      # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - LOG_LEVEL=info
       # - LOGGING_SHOW_CHANGES=true
@@ -168,6 +180,8 @@ services:
       # - LOGGING_SHOW_TIMESTAMP=true
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
+      # - HEALTH_CHECK_ENABLED=true
+      # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health
 ```
 </details>
 

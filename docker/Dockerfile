@@ -126,5 +126,9 @@ WORKDIR /app
 # Add signal handling for graceful shutdown
 STOPSIGNAL SIGTERM
 
+# Health check — verifies the health file was updated within the last 120 seconds
+HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
+  CMD ["node", "-e", "const fs=require('fs');try{const t=parseInt(fs.readFileSync('/tmp/e2m-health','utf8'));process.exit(Math.floor(Date.now()/1000)-t<120?0:1)}catch{process.exit(1)}"]
+
 # Run the application
 CMD ["node", "dist/index.js"]

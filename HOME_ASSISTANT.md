@@ -1,6 +1,45 @@
 # Home Assistant
 
-## MQTT topic info
+## MQTT topics
+
+### Appliance state and commands
+
+Each appliance gets two topics under `{topic_prefix}appliances/{applianceId}/`:
+
+| Topic | Direction | Description |
+|-------|-----------|-------------|
+| `{topic_prefix}appliances/{applianceId}/state` | Bridge → HA | Current appliance state (JSON) |
+| `{topic_prefix}appliances/{applianceId}/command` | HA → Bridge | Send commands to the appliance (JSON) |
+
+With the default `topic_prefix` of `electrolux_`, the topics will be e.g.:
+- `electrolux_appliances/950011606313000871110697/state`
+- `electrolux_appliances/950011606313000871110697/command`
+
+When Home Assistant auto-discovery is enabled (default), the bridge publishes discovery configs to `homeassistant/climate/{applianceId}/config` so entities are created automatically — no manual MQTT configuration is needed.
+
+**Example state payload:**
+```json
+{
+  "applianceState": "on",
+  "connectionState": "connected",
+  "mode": "cool",
+  "fanSpeedSetting": "auto",
+  "targetTemperatureC": 24,
+  "ambientTemperatureC": 26,
+  "verticalSwing": "off",
+  "sleepMode": "off"
+}
+```
+
+**Example command payloads:**
+```json
+{ "mode": "cool" }
+{ "targetTemperatureC": 22 }
+{ "fanSpeedSetting": "medium" }
+{ "verticalSwing": "on" }
+```
+
+### Version info
 
 The application will create a new topic under `{topic_prefix}appliances/info`, which by default will be `electrolux_appliances/info`.
 The default payload will be e.g.:

@@ -10,27 +10,30 @@ services:
       - "/etc/timezone:/etc/timezone:ro"
       - ../config.yml:/app/config.yml
     environment:
-      - LOG_LEVEL=info                                            # Log level (debug, info, warn, error)
+      - LOG_LEVEL=info                                                      # Log level (debug, info, warn, error)
       # ## Mandatory variables
-      # - MQTT_URL=mqtt://192.168.1.1:1883                        # MQTT broker URL
-      # - MQTT_USERNAME=mqtt-user                                 # MQTT broker username
-      # - MQTT_PASSWORD=mqtt-password                             # MQTT broker password
-      # - ELECTROLUX_API_KEY=electrolux-api-key                   # Electrolux API key
-      # - ELECTROLUX_USERNAME=electrolux-user@example.com         # Electrolux account username
-      # - ELECTROLUX_PASSWORD=electrolux-password                 # Electrolux account password
-      # - ELECTROLUX_COUNTRY_CODE=FI                              # Electrolux country code (FI, SE, NO, DK)
+      # - MQTT_URL=mqtt://192.168.1.1:1883                                  # MQTT broker URL
+      # - MQTT_USERNAME=mqtt-user                                           # MQTT broker username
+      # - MQTT_PASSWORD=mqtt-password                                       # MQTT broker password
+      # - ELECTROLUX_API_KEY=electrolux-api-key                             # Electrolux API key
+      # - ELECTROLUX_USERNAME=electrolux-user@example.com                   # Electrolux account username
+      # - ELECTROLUX_PASSWORD=electrolux-password                           # Electrolux account password
+      # - ELECTROLUX_COUNTRY_CODE=FI                                        # Electrolux country code (FI, SE, NO, DK)
       # ## Optional variables
-      # - MQTT_TOPIC_PREFIX=electrolux_                           # MQTT topic prefix
-      # - MQTT_CLIENT_ID=electrolux-comfort600                    # MQTT client ID
-      # - MQTT_RETAIN=false                                       # MQTT retain flag
-      # - MQTT_QOS=2                                              # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
-      # - ELECTROLUX_REFRESH_INTERVAL=30                          # Electrolux refresh interval in seconds (how often to poll appliance state)
-      # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300             # Appliance discovery interval in seconds (how often to check for added/removed appliances)
-      # - HOME_ASSISTANT_AUTO_DISCOVERY=true                      # Enable Home Assistant auto discovery
-      # - LOGGING_SHOW_CHANGES=true                               # Log appliance state changes
-      # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime      # Comma-separated list of keys to ignore in state change logs
-      # - LOGGING_SHOW_VERSION_NUMBER=true                        # Show version number in logs
-      # - LOGGING_SKIP_CACHE_LOGGING=true                         # Skip cache debug logs (default: true)
-      # - LOGGING_SHOW_TIMESTAMP=true                              # Show timestamp in logs (default: true)
-      # - VERSION_CHECK_INTERVAL=3600                              # Version check interval in seconds (default: 3600)
-      # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here  # ntfy.sh webhook URL for update notifications
+      # - MQTT_TOPIC_PREFIX=electrolux_                                     # MQTT topic prefix
+      # - MQTT_CLIENT_ID=electrolux-comfort600                              # MQTT client ID
+      # - MQTT_RETAIN=false                                                 # MQTT retain flag
+      # - MQTT_QOS=2                                                        # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
+      # - ELECTROLUX_REFRESH_INTERVAL=30                                    # Electrolux refresh interval in seconds (how often to poll appliance state)
+      # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300                       # Appliance discovery interval in seconds (how often to check for added/removed appliances)
+      # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60                           # Refresh token when this many minutes remain before expiration (default: 60, min: 5, max: 715)
+      # - HOME_ASSISTANT_AUTO_DISCOVERY=true                                # Enable Home Assistant auto discovery
+      # - LOGGING_SHOW_CHANGES=true                                         # Log appliance state changes
+      # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime                # Comma-separated list of keys to ignore in state change logs
+      # - LOGGING_SHOW_VERSION_NUMBER=true                                  # Show version number in logs
+      # - LOGGING_SKIP_CACHE_LOGGING=true                                   # Skip cache debug logs (default: true)
+      # - LOGGING_SHOW_TIMESTAMP=true                                       # Show timestamp in logs (default: true)
+      # - VERSION_CHECK_INTERVAL=3600                                       # Version check interval in seconds (default: 3600)
+      # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here    # ntfy.sh webhook URL for update notifications
+      # - HEALTH_CHECK_ENABLED=true                                          # Enable file-based health check for Docker HEALTHCHECK (default: false)
+      # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health                             # Path to the health file (default: /tmp/e2m-health)

@@ -12,6 +12,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 - [Running Tests](#running-tests)
 - [Code Style](#code-style)
 - [Commit Messages](#commit-messages)
+- [AI-Assisted Development](#ai-assisted-development)
 - [Submitting Changes](#submitting-changes)
 
 ## Code of Conduct
@@ -81,10 +82,12 @@ src/
 ├── cache.ts             # LRU caching for state comparison
 ├── config.ts            # Configuration management
 ├── electrolux.ts        # Electrolux API client
+├── health.ts            # Health check file writer
 ├── index.ts             # Main application entry point
 ├── init.ts              # Startup logging
 ├── logger.ts            # Logging utilities
 ├── mqtt.ts              # MQTT client wrapper
+├── orchestrator.ts      # Application lifecycle orchestration
 ├── types.d.ts           # Electrolux API type definitions
 └── version-checker.ts   # Update checker and telemetry
 
@@ -93,178 +96,11 @@ tests/                   # Test files (mirrors src/ structure)
 
 ## Adding a New Appliance
 
-### Step 1: Create Appliance Class
-
-Create a new file in `src/appliances/` (e.g., `your-model.ts`):
-
-```typescript
-import { BaseAppliance } from './base.js'
-import { normalizeClimateAppliance } from './normalizers.js'
-import type { HAClimateDiscoveryConfig } from '../types/homeassistant.js'
-import type { NormalizedState } from '../types/normalized.js'
-import type { Appliance } from '../types.js'
-
-export class YourModelAppliance extends BaseAppliance {
-  /**
-   * Normalize raw API state to standard format
-   */
-  public normalizeState(rawState: Appliance): NormalizedState {
-    return normalizeClimateAppliance(rawState)
-  }
-
-  /**
-   * Transform MQTT command to API format
-   */
-  public transformMqttCommandToApi(command: Partial<NormalizedState>): Record<string, unknown> {
-    const apiCommand: Record<string, unknown> = {}
-
-    if (command.mode) {
-      apiCommand.mode = command.mode.toUpperCase()
-    }
-    if (command.targetTemperatureC !== undefined) {
-      apiCommand.targetTemperatureC = command.targetTemperatureC
-    }
-    // Add other command transformations...
-
-    return apiCommand
-  }
-
-  /**
-   * Derive immediate state updates from commands
-   * This updates local state without waiting for API
-   */
-  public deriveImmediateStateFromCommand(payload: Record<string, unknown>): Partial<NormalizedState> | null {
-    const updates: Partial<NormalizedState> = {}
-
-    if (payload.mode) {
-      updates.mode = String(payload.mode).toLowerCase() as any
-      updates.applianceState = payload.mode === 'OFF' ? 'off' : 'on'
-    }
-    // Add other immediate updates...
-
-    return Object.keys(updates).length > 0 ? updates : null
-  }
-
-  /**
-   * Generate Home Assistant auto-discovery config
-   */
-  public generateAutoDiscoveryConfig(topicPrefix: string): HAClimateDiscoveryConfig {
-    const info = this.applianceInfo.applianceInfo
-    const tempRange = this.getTemperatureRange()
-    const prefix = topicPrefix.endsWith('/') ? topicPrefix : `${topicPrefix}/`
-    const stateTopic = `${prefix}${this.applianceId}/state`
-    const commandTopic = `${prefix}${this.applianceId}/command`
-
-    return {
-      name: '',
-      object_id: `${info.brand}_${info.model}_${info.serialNumber}`,
-      uniq_id: `${info.brand}_${info.model}_${this.applianceId}`,
-      device: {
-        identifiers: [this.applianceId],
-        manufacturer: info.brand,
-        model: info.model,
-        name: this.applianceName,
-      },
-      // Add all required MQTT topics and templates
-      // See comfort600.ts for complete example
-      modes: this.getSupportedModes(),
-      temperature_unit: 'C',
-      min_temp: tempRange.min,
-      max_temp: tempRange.max,
-      // ... etc
-    }
-  }
-
-  /**
-   * Get supported climate modes
-   */
-  public getSupportedModes() {
-    return ['off', 'auto', 'cool', 'heat', 'dry', 'fan_only']
-  }
-
-  /**
-   * Get supported fan modes
-   */
-  public getSupportedFanModes() {
-    return ['auto', 'high', 'medium', 'low']
-  }
-
-  /**
-   * Get supported swing modes
-   */
-  public getSupportedSwingModes() {
-    return ['on', 'off']
-  }
-
-  /**
-   * Get temperature range
-   */
-  public getTemperatureRange() {
-    const capabilities = this.applianceInfo.capabilities
-    return {
-      min: capabilities.targetTemperatureC?.min ?? 16,
-      max: capabilities.targetTemperatureC?.max ?? 30,
-      initial: capabilities.targetTemperatureC?.default ?? 22,
-    }
-  }
-
-  /**
-   * Get model identifier
-   */
-  public getModelName(): string {
-    return this.applianceInfo.applianceInfo.model
-  }
-}
-```
-
-### Step 2: Register in Factory
-
-Edit `src/appliances/factory.ts`:
-
-```typescript
-import { YourModelAppliance } from './your-model.js'
-
-export class ApplianceFactory {
-  static create(stub: ApplianceStub, info: ApplianceInfo): BaseAppliance {
-    const { deviceType, model } = info.applianceInfo
-
-    // ... existing code ...
-
-    if (deviceType === 'YOUR_DEVICE_TYPE') {
-      if (model === 'YOUR_MODEL') {
-        return new YourModelAppliance(stub, info)
-      }
-      throw new Error(`Unsupported model: ${model}`)
-    }
-
-    throw new Error(`Unsupported device type: ${deviceType}`)
-  }
-}
-```
-
-### Step 3: Add Tests
-
-Create `tests/appliances/your-model.test.ts`:
-
-```typescript
-import { describe, expect, it } from 'vitest'
-import { YourModelAppliance } from '../src/appliances/your-model'
-
-describe('YourModelAppliance', () => {
-  // Add tests for all methods
-  // See tests/appliances/comfort600.test.ts for examples
-})
-```
-
-### Step 4: Test Your Changes
-
-```bash
-# Run unit tests
-pnpm test
-
-# Test in development mode
-pnpm dev
-```
+1. **Create the appliance class** in `src/appliances/` — extend `BaseAppliance` and implement all required methods. Use `src/appliances/comfort600.ts` as a reference implementation.
+2. **Register in the factory** — add your model to `src/appliances/factory.ts`.
+3. **Add tests** — create `tests/appliances/your-model.test.ts`. See `tests/appliances/comfort600.test.ts` for the expected test structure.
+4. **Update README.md** — add the new appliance to the supported appliances list.
+5. **Run verification** — `pnpm check && pnpm typecheck && pnpm test`
 
 ## Running Tests
 
@@ -472,6 +308,10 @@ docs(readme): update installation instructions
 
 Added instructions for Docker Compose setup
 ```
+
+## AI-Assisted Development
+
+This project supports AI-assisted development with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) for details on available skills (`/implement`, `/audit`, `/maintain`), rules, and how the configuration works.
 
 ## Submitting Changes
 
