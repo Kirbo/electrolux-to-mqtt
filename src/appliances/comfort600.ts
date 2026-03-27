@@ -9,10 +9,38 @@ import {
   normalizeFanSpeed,
 } from './normalizers.js'
 
+// Maps API mode values to HA climate modes (handles FANONLY → fan_only)
+const API_MODE_TO_HA: Record<string, HAClimateMode> = {
+  AUTO: 'auto',
+  COOL: 'cool',
+  DRY: 'dry',
+  HEAT: 'heat',
+  FANONLY: 'fan_only',
+  OFF: 'off',
+}
+
+// Maps API fan speed values to HA fan modes (handles MIDDLE → medium)
+const API_FAN_TO_HA: Record<string, HAFanMode> = {
+  AUTO: 'auto',
+  HIGH: 'high',
+  MIDDLE: 'medium',
+  LOW: 'low',
+}
+
+// Maps API swing values to HA swing modes
+const API_SWING_TO_HA: Record<string, HASwingMode> = {
+  ON: 'on',
+  OFF: 'off',
+}
+
 /**
  * Electrolux COMFORT600 Portable Air Conditioner
  * Model: COMFORT600, Variant: AZULTM10
  * Device Type: PORTABLE_AIR_CONDITIONER
+ *
+ * Modes, fan speeds, and swing modes are derived from the API capabilities
+ * at construction time — if the API adds or removes values, the HA discovery
+ * config and validation adjust automatically.
  */
 export class Comfort600Appliance extends BaseAppliance {
   public getModelName(): string {
@@ -20,15 +48,30 @@ export class Comfort600Appliance extends BaseAppliance {
   }
 
   public getSupportedModes(): HAClimateMode[] {
-    return ['auto', 'cool', 'dry', 'fan_only', 'heat', 'off']
+    const modeValues = this.applianceInfo.capabilities.mode?.values
+    if (!modeValues) return ['off']
+    const modes = Object.keys(modeValues)
+      .map((v) => API_MODE_TO_HA[v])
+      .filter((m): m is HAClimateMode => m !== undefined)
+    // HA expects 'off' in the modes list even if the API marks it as disabled
+    if (!modes.includes('off')) modes.push('off')
+    return modes
   }
 
   public getSupportedFanModes(): HAFanMode[] {
-    return ['auto', 'high', 'medium', 'low']
+    const fanValues = this.applianceInfo.capabilities.fanSpeedSetting?.values
+    if (!fanValues) return ['auto']
+    return Object.keys(fanValues)
+      .map((v) => API_FAN_TO_HA[v])
+      .filter((m): m is HAFanMode => m !== undefined)
   }
 
   public getSupportedSwingModes(): HASwingMode[] {
-    return ['on', 'off']
+    const swingValues = this.applianceInfo.capabilities.verticalSwing?.values
+    if (!swingValues) return ['off']
+    return Object.keys(swingValues)
+      .map((v) => API_SWING_TO_HA[v])
+      .filter((m): m is HASwingMode => m !== undefined)
   }
 
   public getTemperatureRange(): { min: number; max: number; initial: number } {
@@ -99,6 +142,17 @@ export class Comfort600Appliance extends BaseAppliance {
   }
 
   /**
+   * Find the mode trigger for the given mode. Returns null if no triggers
+   * or no matching trigger exists (in which case all commands are allowed).
+   */
+  private findModeTrigger(mode: NormalizedClimateMode) {
+    const triggers = this.applianceInfo.capabilities.mode?.triggers
+    if (!triggers) return null
+    const denormalized = denormalizeClimateMode(mode)
+    return triggers.find((t) => t.condition.operand_2 === denormalized) ?? null
+  }
+
+  /**
    * Validate a command against mode-specific constraints from the capabilities triggers.
    * The Electrolux API returns triggers that define which fan speeds, temperature ranges,
    * and features are available per mode. This prevents sending commands the API will reject.
@@ -107,10 +161,6 @@ export class Comfort600Appliance extends BaseAppliance {
     rawCommand: Partial<NormalizedState>,
     currentMode: NormalizedClimateMode,
   ): CommandValidationResult {
-    if (!rawCommand.fanSpeedSetting) {
-      return { valid: true }
-    }
-
     // If the command includes a mode change, validate against the target mode
     const effectiveMode = rawCommand.mode ?? currentMode
 
@@ -119,18 +169,37 @@ export class Comfort600Appliance extends BaseAppliance {
       return { valid: true }
     }
 
-    const triggers = this.applianceInfo.capabilities.mode?.triggers
-    if (!triggers) {
-      return { valid: true }
-    }
-
-    // Find the trigger for the effective mode
-    const denormalizedMode = denormalizeClimateMode(effectiveMode)
-    const trigger = triggers.find((t) => t.condition.operand_2 === denormalizedMode)
+    const trigger = this.findModeTrigger(effectiveMode)
     if (!trigger) {
       return { valid: true }
     }
 
+    // Validate fan speed
+    if (rawCommand.fanSpeedSetting) {
+      const result = this.validateFanSpeed(rawCommand.fanSpeedSetting, effectiveMode, trigger)
+      if (!result.valid) return result
+    }
+
+    // Validate temperature
+    if (rawCommand.targetTemperatureC !== undefined) {
+      const result = this.validateTemperature(rawCommand.targetTemperatureC, effectiveMode, trigger)
+      if (!result.valid) return result
+    }
+
+    // Validate sleep mode
+    if (rawCommand.sleepMode) {
+      const result = this.validateSleepMode(effectiveMode, trigger)
+      if (!result.valid) return result
+    }
+
+    return { valid: true }
+  }
+
+  private validateFanSpeed(
+    fanSpeed: string,
+    mode: NormalizedClimateMode,
+    trigger: { action: Record<string, unknown> },
+  ): CommandValidationResult {
     const fanAction = trigger.action.fanSpeedSetting as
       | { access?: string; values?: Record<string, unknown> }
       | undefined
@@ -138,26 +207,65 @@ export class Comfort600Appliance extends BaseAppliance {
       return { valid: true }
     }
 
-    // If the trigger marks fan speed as read-only, reject all fan speed changes
     if (fanAction.access === 'read') {
-      return {
-        valid: false,
-        reason: `fan speed is read-only in '${effectiveMode}' mode`,
-      }
+      return { valid: false, reason: `fan speed is read-only in '${mode}' mode` }
     }
 
-    // Check if the requested fan speed is in the allowed values for this mode
     const allowedSpeeds = Object.keys(fanAction.values)
-    const requestedSpeed = denormalizeFanSpeed(rawCommand.fanSpeedSetting)
+    const requestedSpeed = denormalizeFanSpeed(fanSpeed)
 
     if (!allowedSpeeds.includes(requestedSpeed)) {
       const normalizedAllowed = allowedSpeeds.map((s) => normalizeFanSpeed(s.toLowerCase())).join(', ')
       return {
         valid: false,
-        reason: `fan speed '${rawCommand.fanSpeedSetting}' is not allowed in '${effectiveMode}' mode (allowed: ${normalizedAllowed})`,
+        reason: `fan speed '${fanSpeed}' is not allowed in '${mode}' mode (allowed: ${normalizedAllowed})`,
       }
     }
 
+    return { valid: true }
+  }
+
+  private validateTemperature(
+    temperature: number,
+    mode: NormalizedClimateMode,
+    trigger: { action: Record<string, unknown> },
+  ): CommandValidationResult {
+    const tempAction = trigger.action.targetTemperatureC as
+      | { disabled?: boolean; min?: number; max?: number }
+      | undefined
+    if (!tempAction) {
+      return { valid: true }
+    }
+
+    if (tempAction.disabled) {
+      return { valid: false, reason: `temperature control is disabled in '${mode}' mode` }
+    }
+
+    if (tempAction.min !== undefined && temperature < tempAction.min) {
+      return {
+        valid: false,
+        reason: `temperature ${temperature}°C is below minimum ${tempAction.min}°C in '${mode}' mode`,
+      }
+    }
+
+    if (tempAction.max !== undefined && temperature > tempAction.max) {
+      return {
+        valid: false,
+        reason: `temperature ${temperature}°C is above maximum ${tempAction.max}°C in '${mode}' mode`,
+      }
+    }
+
+    return { valid: true }
+  }
+
+  private validateSleepMode(
+    mode: NormalizedClimateMode,
+    trigger: { action: Record<string, unknown> },
+  ): CommandValidationResult {
+    const sleepAction = trigger.action.sleepMode as { disabled?: boolean } | undefined
+    if (sleepAction?.disabled) {
+      return { valid: false, reason: `sleep mode is disabled in '${mode}' mode` }
+    }
     return { valid: true }
   }
 

@@ -550,6 +550,148 @@ describe('Comfort600Appliance', () => {
       const result = applianceNoTriggers.validateCommand({ fanSpeedSetting: 'high' }, 'dry')
       expect(result.valid).toBe(true)
     })
+
+    // Temperature validation
+    it('should reject temperature changes in fan_only mode (disabled)', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 24 }, 'fan_only')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('disabled')
+    })
+
+    it('should reject temperature changes in dry mode (disabled)', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 24 }, 'dry')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('disabled')
+    })
+
+    it('should allow temperature changes in cool mode', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 24 }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should reject temperature below mode minimum', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 10 }, 'cool')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('below minimum')
+    })
+
+    it('should reject temperature above mode maximum', () => {
+      const result = appliance.validateCommand({ targetTemperatureC: 40 }, 'cool')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('above maximum')
+    })
+
+    // Sleep mode validation
+    it('should reject sleep mode in fan_only mode (disabled)', () => {
+      const result = appliance.validateCommand({ sleepMode: 'on' }, 'fan_only')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('sleep mode is disabled')
+    })
+
+    it('should reject sleep mode in dry mode (disabled)', () => {
+      const result = appliance.validateCommand({ sleepMode: 'on' }, 'dry')
+      expect(result.valid).toBe(false)
+      expect(result.valid === false && result.reason).toContain('sleep mode is disabled')
+    })
+
+    it('should allow sleep mode in cool mode', () => {
+      const result = appliance.validateCommand({ sleepMode: 'on' }, 'cool')
+      expect(result.valid).toBe(true)
+    })
+
+    it('should allow sleep mode in heat mode', () => {
+      const result = appliance.validateCommand({ sleepMode: 'on' }, 'heat')
+      expect(result.valid).toBe(true)
+    })
+
+    // Combined validation
+    it('should reject if any field in a combined command is invalid', () => {
+      // fan_only: temperature disabled, sleep disabled, but fan speed is fine
+      const result = appliance.validateCommand(
+        { fanSpeedSetting: 'high', targetTemperatureC: 24, sleepMode: 'on' },
+        'fan_only',
+      )
+      expect(result.valid).toBe(false)
+    })
+  })
+
+  describe('dynamic capabilities', () => {
+    it('should derive supported modes from capabilities', () => {
+      const modes = appliance.getSupportedModes()
+      expect(modes).toContain('auto')
+      expect(modes).toContain('cool')
+      expect(modes).toContain('dry')
+      expect(modes).toContain('heat')
+      expect(modes).toContain('fan_only')
+      expect(modes).toContain('off')
+    })
+
+    it('should derive supported fan modes from capabilities', () => {
+      const fanModes = appliance.getSupportedFanModes()
+      expect(fanModes).toContain('auto')
+      expect(fanModes).toContain('high')
+      expect(fanModes).toContain('medium')
+      expect(fanModes).toContain('low')
+    })
+
+    it('should derive supported swing modes from capabilities', () => {
+      const swingModes = appliance.getSupportedSwingModes()
+      expect(swingModes).toContain('on')
+      expect(swingModes).toContain('off')
+    })
+
+    it('should handle missing mode capabilities gracefully', () => {
+      const infoNoModes: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          mode: undefined as unknown as (typeof mockInfo.capabilities)['mode'],
+        },
+      }
+      const app = new Comfort600Appliance(mockStub, infoNoModes)
+      expect(app.getSupportedModes()).toEqual(['off'])
+    })
+
+    it('should handle missing fan speed capabilities gracefully', () => {
+      const infoNoFan: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          fanSpeedSetting: undefined as unknown as (typeof mockInfo.capabilities)['fanSpeedSetting'],
+        },
+      }
+      const app = new Comfort600Appliance(mockStub, infoNoFan)
+      expect(app.getSupportedFanModes()).toEqual(['auto'])
+    })
+
+    it('should handle missing swing capabilities gracefully', () => {
+      const infoNoSwing: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          verticalSwing: undefined as unknown as (typeof mockInfo.capabilities)['verticalSwing'],
+        },
+      }
+      const app = new Comfort600Appliance(mockStub, infoNoSwing)
+      expect(app.getSupportedSwingModes()).toEqual(['off'])
+    })
+
+    it('should ignore unknown API mode values', () => {
+      const infoExtra: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          mode: {
+            ...mockInfo.capabilities.mode,
+            values: { ...mockInfo.capabilities.mode.values, TURBO: {} },
+          },
+        },
+      }
+      const app = new Comfort600Appliance(mockStub, infoExtra)
+      const modes = app.getSupportedModes()
+      expect(modes).not.toContain('turbo')
+      expect(modes).toContain('cool')
+    })
   })
 
   describe('normalizeState', () => {
