@@ -669,7 +669,7 @@ homeAssistant:
       createConfigFromEnv()
 
       const [, content] = writeSpy.mock.calls[0] as [string, string]
-      expect(content).toContain('enabled: false')
+      expect(content).toContain('enabled: true')
       expect(content).toContain('filePath: /tmp/e2m-health')
 
       writeSpy.mockRestore()

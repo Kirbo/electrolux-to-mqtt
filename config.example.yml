@@ -62,7 +62,7 @@ versionCheck:
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
 
 healthCheck:
-  # Enable file-based health check for Docker HEALTHCHECK (default: false)
-  enabled: false
+  # Enable file-based health check for Docker HEALTHCHECK (default: true)
+  enabled: true
   # Path to the health file (default: /tmp/e2m-health)
   filePath: /tmp/e2m-health

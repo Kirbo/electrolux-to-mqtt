@@ -84,7 +84,7 @@ All configuration can be provided via environment variables instead of `config.y
 | `LOGGING_SHOW_TIMESTAMP`                   | Show timestamps in logs                                | `true`                 | No       |
 | `VERSION_CHECK_INTERVAL`                   | Update check interval in seconds (60–86400)            | `3600`                 | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`           | ntfy.sh webhook URL for update notifications           | —                      | No       |
-| `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `false`                | No       |
+| `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `true`                 | No       |
 | `HEALTH_CHECK_FILE_PATH`                   | Path to health check file                              | `/tmp/e2m-health`      | No       |
 
 ## But how to start?!

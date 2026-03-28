@@ -101,11 +101,11 @@ const configSchema = z.object({
     .transform((val) => val ?? { checkInterval: 3600 }),
   healthCheck: z
     .object({
-      enabled: z.boolean().default(false),
+      enabled: z.boolean().default(true),
       filePath: z.string().default('/tmp/e2m-health'),
     })
     .optional()
-    .transform((val) => val ?? { enabled: false, filePath: '/tmp/e2m-health' }),
+    .transform((val) => val ?? { enabled: true, filePath: '/tmp/e2m-health' }),
 })
 
 type AppConfig = z.infer<typeof configSchema>
