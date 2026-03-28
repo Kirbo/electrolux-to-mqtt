@@ -113,41 +113,15 @@ async function getUserKeys(): Promise<string[]> {
   return keys
 }
 
-// Badge generation and telemetry cache update function
+// Update the telemetry cache in Redis and write the badge SVG file.
+// The cache update runs first so GET /telemetry works even when the
+// badge file write fails (e.g. read-only filesystem / non-root user).
 async function generateBadge(): Promise<void> {
   try {
     const keys = await getUserKeys()
     const total = keys.length
 
-    // Update badge SVG
-    const badgePath = path.join(process.cwd(), 'badge', 'users.svg')
-
-    const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
-  <linearGradient id="b" x2="0" y2="100%">
-    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-    <stop offset="1" stop-opacity=".1"/>
-  </linearGradient>
-  <mask id="a">
-    <rect width="100" height="20" rx="3" fill="#fff"/>
-  </mask>
-  <g mask="url(#a)">
-    <path fill="#555" d="M0 0h47v20H0z"/>
-    <path fill="#4c1" d="M47 0h53v20H47z"/>
-    <path fill="url(#b)" d="M0 0h100v20H0z"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-    <text x="24.5" y="15" fill="#010101" fill-opacity=".3">Users</text>
-    <text x="24.5" y="14">Users</text>
-    <text x="72.5" y="15" fill="#010101" fill-opacity=".3">${total}</text>
-    <text x="72.5" y="14">${total}</text>
-  </g>
-</svg>`.trim()
-
-    await fsp.mkdir(path.dirname(badgePath), { recursive: true })
-    await fsp.writeFile(badgePath, svg)
-
-    // Update cached telemetry
+    // Update cached telemetry in Redis (must succeed for GET /telemetry)
     if (total === 0) {
       await redis.setEx('cached:telemetry', 60 * 60, JSON.stringify({ total: 0, versions: [] }))
     } else {
@@ -175,9 +149,39 @@ async function generateBadge(): Promise<void> {
       await redis.setEx('cached:telemetry', 60 * 60, JSON.stringify({ total, versions: versionsList }))
     }
 
-    console.log(`Badge and telemetry cache updated: ${total} users`)
+    // Write badge SVG file (best-effort — may fail on read-only filesystems)
+    try {
+      const badgePath = path.join(process.cwd(), 'badge', 'users.svg')
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <mask id="a">
+    <rect width="100" height="20" rx="3" fill="#fff"/>
+  </mask>
+  <g mask="url(#a)">
+    <path fill="#555" d="M0 0h47v20H0z"/>
+    <path fill="#4c1" d="M47 0h53v20H47z"/>
+    <path fill="url(#b)" d="M0 0h100v20H0z"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="24.5" y="15" fill="#010101" fill-opacity=".3">Users</text>
+    <text x="24.5" y="14">Users</text>
+    <text x="72.5" y="15" fill="#010101" fill-opacity=".3">${total}</text>
+    <text x="72.5" y="14">${total}</text>
+  </g>
+</svg>`
+      await fsp.mkdir(path.dirname(badgePath), { recursive: true })
+      await fsp.writeFile(badgePath, svg)
+    } catch {
+      // Badge file write is non-critical — the SVG is served via a
+      // Docker volume or reverse proxy, so it may not be writable here.
+    }
+
+    console.log(`Telemetry cache updated: ${total} users`)
   } catch (error) {
-    console.error('Error generating badge:', error)
+    console.error('Error updating telemetry cache:', error)
   }
 }
 

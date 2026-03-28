@@ -54,7 +54,8 @@ COPY --from=builder /app/dist ./dist
 ENV NODE_ENV=production
 
 # Run as non-root user
-RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
+RUN addgroup -S nodejs && adduser -S nodejs -G nodejs && \
+    mkdir -p /app/badge && chown nodejs:nodejs /app/badge
 USER nodejs
 
 # Expose port
