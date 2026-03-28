@@ -414,8 +414,7 @@ describe('Orchestrator', () => {
     it('should handle errors during discovery', async () => {
       vi.mocked(client.getAppliances).mockRejectedValue(new Error('API error'))
 
-      // Should not throw
-      await orchestrator.discoverAppliances()
+      await expect(orchestrator.discoverAppliances()).resolves.not.toThrow()
     })
   })
 
