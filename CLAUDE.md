@@ -28,6 +28,10 @@ Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux applia
 - Always use `Number.parseInt` / `Number.parseFloat`, never the global forms.
 - SonarQube Cloud for code quality analysis. All code must pass SonarQube checks — no bugs, no vulnerabilities, no security hotspots. Function cognitive complexity must not exceed 15. See `sonar-project.properties` for project configuration.
 
+### Testing
+- Every test must contain at least one assertion (`expect`). Tests that only call a function without asserting behavior are incomplete — use `expect().resolves.not.toThrow()` if the test verifies that a function does not throw.
+- All tests must pass before a change is considered done.
+
 ### Schemas
 - Numeric schema fields that must be positive must use `.positive()` (or `.min(1)`). Numeric schema fields that must be whole numbers must also use `.int()`. Port-like fields must use `.int().min(1).max(65535)`.
 

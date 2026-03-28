@@ -55,6 +55,7 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 
 ### 6. Test coverage
 - [ ] Every public function in `src/` has unit tests in `tests/`
+- [ ] Every test contains at least one `expect` assertion — no assertion-free tests (SonarQube S2699)
 - [ ] Config loading tested: YAML file, environment variables, missing config, invalid values
 - [ ] Appliance classes tested: state normalization, command transformation, HA discovery
 - [ ] MQTT events tested: connect, disconnect, message, error
