@@ -90,7 +90,7 @@ export class Orchestrator {
         if (this.isShuttingDown) return
 
         await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
-        writeHealthFile()
+        writeHealthFile({ mqttConnected: this.mqtt.client.connected })
 
         const intervalId = setInterval(async () => {
           if (this.isShuttingDown) {
@@ -98,7 +98,7 @@ export class Orchestrator {
             return
           }
           await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
-          writeHealthFile()
+          writeHealthFile({ mqttConnected: this.mqtt.client.connected })
         }, this.config.refreshInterval)
 
         this.activeIntervals.add(intervalId)

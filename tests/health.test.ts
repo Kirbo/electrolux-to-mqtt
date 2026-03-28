@@ -87,13 +87,43 @@ describe('health', () => {
     })
   })
 
+  describe('writeHealthFile with MQTT status', () => {
+    it('should not write file when MQTT is disconnected', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile({ mqttConnected: false })
+
+      expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
+    })
+
+    it('should write file when MQTT is connected', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile({ mqttConnected: true })
+
+      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const timestamp = Number.parseInt(content, 10)
+      expect(timestamp).toBeGreaterThan(0)
+    })
+
+    it('should write file when no status is provided (backwards compatible)', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+
+      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const timestamp = Number.parseInt(content, 10)
+      expect(timestamp).toBeGreaterThan(0)
+    })
+  })
+
   describe('isHealthy', () => {
     it('should return true when health file is recent', async () => {
       const { writeHealthFile, isHealthy } = await import('../src/health.js')
 
       writeHealthFile()
 
-      expect(isHealthy(120)).toBe(true)
+      expect(isHealthy(60)).toBe(true)
     })
 
     it('should return false when health file is stale', async () => {
@@ -103,13 +133,13 @@ describe('health', () => {
       const staleTimestamp = Math.floor(Date.now() / 1000) - 300
       fs.writeFileSync('/tmp/e2m-health-test', String(staleTimestamp), 'utf8')
 
-      expect(isHealthy(120)).toBe(false)
+      expect(isHealthy(60)).toBe(false)
     })
 
     it('should return false when health file does not exist', async () => {
       const { isHealthy } = await import('../src/health.js')
 
-      expect(isHealthy(120)).toBe(false)
+      expect(isHealthy(60)).toBe(false)
     })
   })
 })

@@ -127,10 +127,10 @@ WORKDIR /app
 STOPSIGNAL SIGTERM
 
 # Health check — skips when HEALTH_CHECK_ENABLED is not 'true', otherwise
-# verifies the health file was updated within the last 120 seconds.
+# verifies the health file was updated within the last 60 seconds.
 # Checks every 2s during the 5s startup period, then every 30s thereafter.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=5s --start-interval=2s \
-  CMD ["node", "-e", "if(process.env.HEALTH_CHECK_ENABLED!=='true')process.exit(0);const fs=require('fs');try{const t=parseInt(fs.readFileSync(process.env.HEALTH_CHECK_FILE_PATH||'/tmp/e2m-health','utf8'));process.exit(Math.floor(Date.now()/1000)-t<120?0:1)}catch{process.exit(1)}"]
+  CMD ["node", "-e", "if(process.env.HEALTH_CHECK_ENABLED!=='true')process.exit(0);const fs=require('fs');try{const t=parseInt(fs.readFileSync(process.env.HEALTH_CHECK_FILE_PATH||'/tmp/e2m-health','utf8'));process.exit(Math.floor(Date.now()/1000)-t<60?0:1)}catch{process.exit(1)}"]
 
 # Run the application
 CMD ["node", "dist/index.js"]
