@@ -42,40 +42,44 @@ await redis.connect()
 
 app.use(express.json({ limit: '10kb' }))
 
-type RateLimitEntry = {
-  count: number
-  resetAt: number
-}
-
-const ipRateLimitStore = new Map<string, RateLimitEntry>()
-const hashRateLimitStore = new Map<string, RateLimitEntry>()
+const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)
 
 function hashIp(ip: string): string {
   return crypto.createHmac('sha256', RATE_LIMIT_SALT).update(ip).digest('hex')
 }
 
-function enforceRateLimit(key: string, store: Map<string, RateLimitEntry>, max: number, res: Response): boolean {
-  const now = Date.now()
-  const entry = store.get(key)
-
-  if (!entry || now >= entry.resetAt) {
-    store.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
-    return true
-  }
-
-  if (entry.count >= max) {
-    res.status(429).json({ error: 'Too many requests' })
-    return false
-  }
-
-  entry.count += 1
-  return true
+function getClientIp(req: Request): string {
+  const xRealIp = req.get('X-Real-IP')
+  if (xRealIp) return xRealIp
+  return req.ip || 'unknown'
 }
 
-function rateLimitByIp(req: Request, res: Response, next: () => void) {
-  const ip = req.ip || 'unknown'
+async function enforceRateLimitRedis(key: string, max: number, res: Response): Promise<boolean> {
+  try {
+    const redisKey = `ratelimit:${key}`
+    const count = await redis.incr(redisKey)
+
+    if (count === 1) {
+      await redis.expire(redisKey, RATE_LIMIT_WINDOW_SECONDS)
+    }
+
+    if (count > max) {
+      res.status(429).json({ error: 'Too many requests' })
+      return false
+    }
+
+    return true
+  } catch (error) {
+    // Fail open — if Redis is unavailable, allow the request
+    console.error('Rate limit check failed:', error)
+    return true
+  }
+}
+
+async function rateLimitByIp(req: Request, res: Response, next: () => void) {
+  const ip = getClientIp(req)
   const ipKey = `ip:${hashIp(ip)}`
-  if (!enforceRateLimit(ipKey, ipRateLimitStore, RATE_LIMIT_IP_MAX, res)) {
+  if (!(await enforceRateLimitRedis(ipKey, RATE_LIMIT_IP_MAX, res))) {
     return
   }
   return next()
@@ -123,7 +127,7 @@ async function generateBadge(): Promise<void> {
 
     // Update cached telemetry in Redis (must succeed for GET /telemetry)
     if (total === 0) {
-      await redis.setEx('cached:telemetry', 60 * 60, JSON.stringify({ total: 0, versions: [] }))
+      await redis.set('cached:telemetry', JSON.stringify({ total: 0, versions: [] }))
     } else {
       const versions = await Promise.all(keys.map((key: string) => redis.get(key)))
       const versionCounts = versions.reduce(
@@ -146,7 +150,7 @@ async function generateBadge(): Promise<void> {
           }
           return 0
         })
-      await redis.setEx('cached:telemetry', 60 * 60, JSON.stringify({ total, versions: versionsList }))
+      await redis.set('cached:telemetry', JSON.stringify({ total, versions: versionsList }))
     }
 
     // Write badge SVG file (best-effort — may fail on read-only filesystems)
@@ -192,8 +196,8 @@ app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
     const { userHash, version }: { userHash: string; version: string } = req.body
 
     // Hash rate limit before any validation (use IP-based fallback when userHash is missing)
-    const hashKey = userHash ? `hash:${userHash}` : `hash:unknown-${req.ip}`
-    if (!enforceRateLimit(hashKey, hashRateLimitStore, RATE_LIMIT_HASH_MAX, res)) {
+    const hashKey = userHash ? `hash:${userHash}` : `hash:unknown-${hashIp(getClientIp(req))}`
+    if (!(await enforceRateLimitRedis(hashKey, RATE_LIMIT_HASH_MAX, res))) {
       return
     }
 
@@ -225,14 +229,10 @@ app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
   }
 })
 
-// GET /telemetry - Get aggregated telemetry data
+// GET /telemetry - Get aggregated telemetry data (read-only)
 app.get('/telemetry', async (_req: Request, res: Response) => {
   try {
-    let cached = await redis.get('cached:telemetry')
-    if (!cached) {
-      await generateBadge()
-      cached = await redis.get('cached:telemetry')
-    }
+    const cached = await redis.get('cached:telemetry')
     res.json(cached ? JSON.parse(cached) : { total: 0, versions: [] })
   } catch (error) {
     console.error('Error fetching telemetry:', error)

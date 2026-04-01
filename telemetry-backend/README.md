@@ -88,7 +88,7 @@ Redis data is persisted using AOF (Append Only File) mode and stored in a Docker
 The user count badge (`badge/users.svg`) is persisted outside the Docker container in the `./badge` directory. This allows:
 - Nginx to serve the badge directly without hitting the application
 - Badge to remain accessible even when the Docker container is down
-- The badge is automatically regenerated on every telemetry submission
+- The badge is regenerated on startup and on every telemetry submission (POST /telemetry)
 
 Example Nginx configuration:
 ```nginx
