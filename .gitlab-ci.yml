@@ -603,7 +603,7 @@ update telemetry backend:
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
   script:
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && ./telemetry-backend/start.sh"
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && ./telemetry-backend/update.sh"
 
 update dockerhub description:
   stage: release
