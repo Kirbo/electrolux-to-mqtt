@@ -1,68 +1,72 @@
 mqtt:
-  # Unique client ID for the MQTT connection
+  # (Optional) Unique client ID for the MQTT connection. Default: electrolux-comfort600
   clientId: electrolux-comfort600
+  # (Required) MQTT broker URL (mqtt:// or mqtts://)
   url: mqtt://192.168.0.1:1883
+  # (Required) MQTT broker username
   username: mqttUser
+  # (Required) MQTT broker password
   password: mqttPassword
-  # Prefix for all topics
+  # (Optional) Prefix for all MQTT topics. Default: electrolux_
   topicPrefix: electrolux_
-  # true = Retain the message, false = Do not retain
+  # (Optional) Retain MQTT messages. Default: false
   retain: false
-  # 0 = At most once, 1 = At least once, 2 = Exactly once
+  # (Optional) MQTT QoS level: 0 = At most once, 1 = At least once, 2 = Exactly once. Default: 2
   qos: 2
 
 electrolux:
-  # Get your API key from https://developer.electrolux.one/dashboard
+  # (Required) Electrolux API key. Get yours from https://developer.electrolux.one/dashboard
   apiKey: your_api_key_here
+  # (Required) Electrolux account email
   username: your_email_here
+  # (Required) Electrolux account password
   password: your_password_here
-  # e.g. FI, SE, NO, DK...
+  # (Required) Two-letter country code (e.g. FI, SE, NO, DK)
   countryCode: your_country_code_here
-  # Refresh interval in seconds (how often to poll appliance state)
+  # (Optional) Appliance state polling interval in seconds. Default: 30, Min: 10, Max: 3600
   refreshInterval: 30
-  # Appliance discovery interval in seconds (how often to check for added/removed appliances)
+  # (Optional) Appliance discovery interval in seconds (how often to check for added/removed appliances). Default: 300, Min: 60, Max: 3600
   applianceDiscoveryInterval: 300
-  # How many minutes before expiration should the token be refreshed.
+  # (Optional) How many minutes before expiration should the token be refreshed.
   # E.g. 60 means: refresh the token when it has 60 minutes or less until it expires.
   # API tokens have a 12-hour (720 min) lifetime. Default: 60, Min: 5, Max: 715.
   renewTokenBeforeExpiry: 60
 
 homeAssistant:
-  # Automatically discover the device in Home Assistant
+  # (Optional) Automatically discover the device in Home Assistant. Default: true
   autoDiscovery: true
-  # Immediately revert HA state when a command is rejected by validation (default: false).
+  # (Optional) Immediately revert HA state when a command is rejected by validation. Default: false
   # When false, the UI stays on the invalid value until the next poll corrects it (~30s).
   # When true, the state snaps back immediately but may cause UI flicker.
   revertStateOnRejection: false
 
 logging:
-  # Log level (fatal, error, warn, info, debug, trace, silent)
+  # (Optional) Log level (fatal, error, warn, info, debug, trace, silent). Default: info
   logLevel: info
-  # Should we output the changes detected in appliance state
+  # (Optional) Log state changes detected in appliance state. Default: true
   showChanges: true
-  # Optional: keys to ignore when detecting state changes (e.g., networkInterface.rssi)
+  # (Optional) Keys to ignore when detecting state changes (e.g., networkInterface.rssi)
   ignoredKeys:
     - networkInterface
     - totalRuntime
   #   - logE
   #   - logW
-  # Show version number in logs
+  # (Optional) Show version number in log prefix. Default: true
   showVersionNumber: true
-  # Skip cache debug logs (default: true)
+  # (Optional) Suppress cache debug logs. Default: true
   skipCacheLogging: true
-  # Show timestamp in log messages (default: true)
+  # (Optional) Show timestamp in log messages. Default: true
   showTimestamp: true
 
 versionCheck:
-  # Check interval in seconds (how often to check for new version)
-  # Default: 3600 (1 hour), Min: 60, Max: 86400 (24 hours)
+  # (Optional) How often to check for new versions, in seconds. Default: 3600 (1 hour), Min: 60, Max: 86400 (24 hours)
   checkInterval: 3600
-  # Optional: https://ntfy.sh webhook URL for notifications when a new version is found
+  # (Optional) ntfy.sh webhook URL for notifications when a new version is found.
   # Example: https://ntfy.sh/vB66ozQaRiqhTE9j
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
 
 healthCheck:
-  # Enable file-based health check for Docker HEALTHCHECK (default: true)
+  # (Optional) Enable file-based health check for Docker HEALTHCHECK. Default: true
   enabled: true
-  # Path to the health file (default: /tmp/e2m-health)
+  # (Optional) Path to the health check file. Default: /tmp/e2m-health
   filePath: /tmp/e2m-health

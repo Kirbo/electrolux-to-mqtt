@@ -54,9 +54,14 @@ Unknown models that report as a portable air conditioner will use the Comfort 60
 2. Create a new API Key and copy the value
 3. Start the container by following one of the instructions [listed below](#but-how-to-start)
 
-## Environment Variables
+## Configuration options
 
-All configuration can be provided via environment variables instead of `config.yml`.
+All configuration can be provided via environment variables or via `config.yml` file. If a `config.yml` file is present, it will be used and environment variables will be ignored.
+
+Example [config.yml](./config.example.yml) file is included in the repository and can be used as a template.
+
+<details>
+  <summary>All environment variables</summary>
 
 | Variable                                   | Description                                            | Default                | Required |
 | ------------------------------------------ | ------------------------------------------------------ | ---------------------- | -------- |
@@ -86,6 +91,7 @@ All configuration can be provided via environment variables instead of `config.y
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`           | ntfy.sh webhook URL for update notifications           | —                      | No       |
 | `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `true`                 | No       |
 | `HEALTH_CHECK_FILE_PATH`                   | Path to health check file                              | `/tmp/e2m-health`      | No       |
+</details>
 
 ## But how to start?!
 
