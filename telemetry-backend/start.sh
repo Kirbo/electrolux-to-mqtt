@@ -6,15 +6,22 @@ git fetch origin main
 
 CHANGES=$(git diff HEAD origin/main -- telemetry-backend/)
 
-if [ -z "$CHANGES" ]; then
+if [[ -z "${CHANGES}" ]]; then
   echo "Already up-to-date, no changes in telemetry-backend/"
   exit 0
 fi
 
 echo "Changes detected in telemetry-backend/, redeploying..."
-
 git pull origin main
 
-docker compose -f telemetry-backend/docker-compose.yml down
+echo "Setting up Node.js version from .nvmrc"
+NODE_VERSION=$(cat .nvmrc)
+export NODE_VERSION
+echo "Using Node.js version: ${NODE_VERSION}"
 
-NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up --build -d
+echo "Going to telemetry-backend directory"
+cd telemetry-backend
+
+echo "Running Docker Compose down and up --build as detached"
+docker compose down
+docker compose up --build -d
