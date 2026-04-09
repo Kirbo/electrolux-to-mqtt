@@ -85,7 +85,8 @@ If something looks wrong or outdated but isn't on the checklist below, flag it a
 ### 9. Security
 - [ ] Credentials (API keys, passwords, tokens) are never logged
 - [ ] `config.yml` is in `.gitignore` (`tokens.json` is auto-populated from credentials in `config.yml` at runtime — no manual creation needed)
-- [ ] Docker images don't include dev dependencies or source maps
+- [ ] Docker images don't include dev dependencies — verify production stage installs with `--prod` flag
+- [ ] Source maps: verify `tsconfig.json` does not set `sourceMap: true` (not a security concern for this open-source project, but avoids unnecessary image bloat in bundled/minified builds)
 - [ ] `.dockerignore` excludes secrets (`config.yml`, `tokens.json`, `.env`) from the build context
 - [ ] Production Dockerfile uses hardened `dhi.io/node` base images (not standard Node images)
 - [ ] Environment variable fallbacks don't expose defaults for sensitive fields

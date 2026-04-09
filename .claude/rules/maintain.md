@@ -10,6 +10,7 @@ Keep the project's dependencies, tooling, and package manager up to date. Fix an
 ### 2. Update dependencies
 - [ ] `pnpm deps:update` — update all dependencies to latest
 - [ ] Watch for breaking changes (e.g., major version bumps changing API surface)
+- [ ] For major version bumps, verify peer dependency compatibility of dependent packages
 
 ### 3. Check Docker base image
 - [ ] Verify the latest Node.js LTS version and update `.nvmrc`, `package.json` `engines`, and `docker/Dockerfile` `NODE_VERSION` arg if a new LTS is available
