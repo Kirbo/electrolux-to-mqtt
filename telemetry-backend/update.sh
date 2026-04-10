@@ -2,6 +2,10 @@
 
 set -e
 
+ROOT_DIR=$(git rev-parse --show-toplevel)
+
+cd "${ROOT_DIR}"
+
 git fetch origin main
 
 CHANGES=$(git diff HEAD origin/main -- telemetry-backend/)
@@ -14,4 +18,4 @@ fi
 echo "Changes detected in telemetry-backend/, redeploying..."
 git pull origin main
 
-./start.sh
+"${ROOT_DIR}/telemetry-backend/start.sh"
