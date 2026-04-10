@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "dev:docker": "NODE_VERSION=$(cat ../.nvmrc) docker compose down ; NODE_VERSION=$(cat ../.nvmrc) docker compose up --build"
@@ -14,13 +15,18 @@
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "redis": "^4.6.13"
+    "express": "^5.2.1",
+    "redis": "^5.11.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.11.10",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
