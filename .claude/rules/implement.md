@@ -1,90 +1,42 @@
-## Verification
+---
+paths:
+  - "src/**"
+  - "tests/**"
+  - "docker/**"
+  - "telemetry-backend/**"
+---
 
-After any code change, run the full verification sequence defined in [CLAUDE.md](../../CLAUDE.md#verification) — this includes `pnpm sonar` for SonarQube analysis.
+## Rules
 
-## TDD
+- Write tests first when touching `src/`. Skip for purely structural changes. Every test must have at least one `expect`.
+- User-facing changes → update `README.md` and `CONTRIBUTING.md`.
+- Numeric schemas: `.positive()` / `.min(1)` for positive, `.int()` for whole, `.int().min(1).max(65535)` for ports.
 
-Write tests first, then implement. When a change touches `src/`, write or update the corresponding test in `tests/` before writing the production code. Skip TDD only when the change is purely structural (moves, renames, re-exports) with no new logic.
+## File checklists
 
-## When config options change (src/config.ts)
+### Config (`src/config.ts`)
+`config.example.yml`, `docker/docker-compose.example.yml` (env vars), `docker/docker-compose.local.example.yml`, `tests/config.test.ts` (valid + invalid cases)
 
-Update **all of**:
-- `src/config.ts` (`configSchema` Zod schema and/or `envSchema`)
-- `config.example.yml` (example values for new/changed options)
-- `docker/docker-compose.example.yml` (environment variables in the example service)
-- `docker/docker-compose.local.example.yml` (same — local dev example)
-- `README.md` (Configuration section, environment variables table)
-- `CONTRIBUTING.md` (if the change affects development workflow, coverage thresholds, or project structure)
-- `tests/config.test.ts` (schema validation tests — valid and invalid cases)
+### Appliance support
+`src/appliances/<model>.ts`, `factory.ts`, `normalizers.ts`*, `src/types/normalized.ts`*, `src/types/homeassistant.ts`*, `tests/appliances/<model>.test.ts`, `base.test.ts`*, `factory.test.ts`, `normalizers.test.ts`*
+(*if interface/logic changed)
 
-## When adding or modifying appliance support
+### API types (`src/types.d.ts`, `src/types/normalized.ts`)
+Run E2E snapshot validation (see `/audit` checklist § 11).
 
-Update:
-- `src/appliances/<model>.ts` (new appliance class extending `BaseAppliance`)
-- `src/appliances/factory.ts` (register new model in the factory)
-- `src/appliances/normalizers.ts` (if new normalization logic is needed)
-- `src/types/normalized.ts` (if new state fields are introduced)
-- `src/types/homeassistant.ts` (if new HA discovery config fields are needed)
-- `tests/appliances/<model>.test.ts` (unit tests for all methods)
-- `tests/appliances/base.test.ts` (if the `BaseAppliance` interface changed)
-- `tests/appliances/factory.test.ts` (factory creates the new model correctly)
-- `tests/appliances/normalizers.test.ts` (if normalizer functions changed)
-- `README.md` (supported appliances list)
+### Version-checker (`src/version-checker.ts`)
+`tests/version-checker.test.ts`, `HOME_ASSISTANT.md`*, `config.example.yml` + compose examples*
+(*if payloads/config changed)
 
-## When modifying API types (`src/types.d.ts`, `src/types/normalized.ts`)
+### MQTT / HA integration
+`src/mqtt.ts`, `src/types/homeassistant.ts`, relevant appliance `generateAutoDiscoveryConfig()`, `tests/mqtt.test.ts`, `tests/mqtt-events.test.ts`, `tests/electrolux.test.ts`*, `tests/state-differences.test.ts`*, `HOME_ASSISTANT.md`*
+(*if relevant behavior changed)
 
-Run E2E snapshot validation — see [audit.md](audit.md) section 11 for the full checklist.
+### Docker
+`docker/Dockerfile` / `Dockerfile.local`, `.dockerignore`*, compose examples*
+(*if needed)
 
-## When version-checker or telemetry changes (`src/version-checker.ts`)
-
-Update:
-- `src/version-checker.ts` (update checking, telemetry reporting, ntfy.sh notifications)
-- `tests/version-checker.test.ts` (unit tests)
-- `HOME_ASSISTANT.md` (if MQTT info topic payloads change)
-- `README.md` (if user-facing behavior changes)
-- `config.example.yml` and docker-compose examples (if `versionCheck.*` config fields change)
-
-## When MQTT or Home Assistant integration changes
-
-Update:
-- `src/mqtt.ts` (topic structure, message handling)
-- `src/types/homeassistant.ts` (HA discovery payload types)
-- Relevant appliance class `generateAutoDiscoveryConfig()` method
-- `tests/mqtt.test.ts` and `tests/mqtt-events.test.ts`
-- `tests/electrolux.test.ts` (if state publishing or command handling changed)
-- `tests/state-differences.test.ts` (if state diffing logic changed)
-- `HOME_ASSISTANT.md` (if MQTT topics, payloads, or HA automation examples are affected)
-- `README.md` (if MQTT topic structure or HA integration docs are affected)
-
-## When adding any user-facing feature or behavioral change
-
-Update `README.md` in the same pass. This includes but is not limited to:
-- New or changed config options
-- Changed defaults or behavior
-- New appliance support
-- New MQTT topics or message formats
-- New Docker configuration
-- New pnpm scripts
-
-Also update `CONTRIBUTING.md` if the change affects development workflow, project structure, testing conventions, or coverage thresholds.
-
-Do not wait to be asked. If the user can see it or use it, it belongs in README.
-
-## When Docker configuration changes
-
-Update:
-- `docker/Dockerfile` and/or `docker/Dockerfile.local`
-- `docker/docker-compose.example.yml` (if compose config changed)
-- `docker/docker-compose.local.example.yml` (same — local dev example)
-- `.dockerignore` (if new files should be excluded)
-- `README.md` (Docker section)
-
-## When telemetry backend changes (`telemetry-backend/`)
-
-Update:
-- `telemetry-backend/src/index.ts` (API endpoints, rate limiting, Redis logic)
-- `telemetry-backend/Dockerfile` (if build or runtime changes)
-- `telemetry-backend/docker-compose.yml` (if compose config changed)
-- `telemetry-backend/README.md` (environment variables, API endpoints, deployment)
-
-The telemetry backend is a standalone service with its own `package.json` and `tsconfig.json`. Changes here do not require running the main project's test suite, but do require verifying the Dockerfile builds correctly.
+### Telemetry backend (`telemetry-backend/`)
+`src/index.ts`, `Dockerfile`*, `docker-compose.yml`*, `README.md`
+Rate limiting must run **before** input validation.
+(*if build/compose changed)

@@ -2,94 +2,56 @@
 
 ## Project
 
-Electrolux-to-MQTT bridge — TypeScript service that connects Electrolux appliances to Home Assistant via MQTT auto-discovery. Uses pnpm, Biome, Vitest. Includes a standalone `telemetry-backend/` service for anonymous usage statistics.
+Electrolux-to-MQTT bridge — TypeScript service connecting Electrolux appliances to Home Assistant via MQTT auto-discovery. Uses pnpm, Biome, Vitest. Includes standalone `telemetry-backend/` for anonymous usage statistics.
 
 ## Rules
 
 ### TypeScript
-- Never use `any`. Use `unknown` + type guards. No `as` without runtime check. No `// @ts-ignore`. No non-null assertions (`!`) — use type guards or optional chaining.
+- Never use `any`. Use `unknown` + type guards. No `as` without runtime check. No `// @ts-ignore`. No non-null assertions (`!`).
 - Keep `strict: true` and `noUncheckedIndexedAccess: true`.
 - State/config files read from disk must be validated, not blindly cast.
 
 ### Code quality
-- No `console.log` in the main project (`src/`) — use `src/logger.ts` (pino). Exception: `console.*` is acceptable in `src/config.ts`, `src/init.ts`, and `src/logger.ts` for bootstrap messages that run before the pino logger is initialized. (`telemetry-backend/` is a separate service and uses `console.*` directly.)
-- No silent error swallowing (empty `catch {}`) unless the fallback behavior is documented. No try/catch fallback patterns (try A, catch and silently retry B).
-- Retry loops must use exponential backoff with a maximum delay. No unbounded fixed-delay infinite retries.
+- No `console.log` in `src/` — use `src/logger.ts` (pino). Exceptions: `console.*` in `src/config.ts`, `src/init.ts`, `src/logger.ts` (pre-pino bootstrap). `telemetry-backend/` uses `console.*` directly.
+- No silent error swallowing (empty `catch {}`) unless fallback is documented. No try/catch fallback patterns.
+- Retry loops: exponential backoff with max delay. No unbounded fixed-delay retries.
 - No hardcoded secrets outside test fixtures.
-- No dead exports — if a function/type is exported but never imported outside its own module, remove it. Test files (`tests/`) count as external importers — a function exported solely for testing is not dead.
-- No dead fields in interfaces/types. If a field is not read anywhere, remove it.
-- No dead type variants — if a union type includes a variant that no code path ever produces, remove it. Exception: raw API type unions in `src/types.d.ts` that reflect known API values (confirmed via E2E snapshots) must be kept even if no code path currently handles them — they document real API behavior.
-- Every config/schema field must be functional — never expose an option that has no implementation.
-- No empty directories. Only create directories when adding files to them. Clean up directories that become empty after file removals.
+- No dead exports, fields, or type variants. Test files (`tests/`) count as importers. Exception: raw API unions in `src/types.d.ts` reflecting known API values (E2E snapshots) must be kept.
+- Every config/schema field must be functional. No empty directories.
 
 ### Tooling
-- Always use `pnpm`. Never `npm`, `yarn`, or `npx` — use `pnpm dlx` instead of `npx`.
-- Biome for linting/formatting. No ESLint or Prettier. Single quotes, semicolons only as needed (matching `biome.jsonc` `quoteStyle: "single"`, `semicolons: "asNeeded"`).
-- Always use `Number.parseInt` / `Number.parseFloat`, never the global forms.
-- SonarQube Cloud for code quality analysis. All code must pass SonarQube checks — no bugs, no vulnerabilities, no security hotspots. Function cognitive complexity must not exceed 15. See `sonar-project.properties` for project configuration.
-
-### Testing
-- Every test must contain at least one assertion (`expect`). Tests that only call a function without asserting behavior are incomplete — use `expect().resolves.not.toThrow()` if the test verifies that a function does not throw.
-- All tests must pass before a change is considered done.
-
-### Schemas
-- Numeric schema fields that must be positive must use `.positive()` (or `.min(1)`). Numeric schema fields that must be whole numbers must also use `.int()`. Port-like fields must use `.int().min(1).max(65535)`.
-
-### Conventions
-- Conventional Commits. Semantic Versioning. Release config lives in `.semrelrc`.
-- `.gitignore` must cover all generated/cached artifacts including CI-specific directories (e.g., `.pnpm-store/`).
+- `pnpm` only (never npm/yarn; `pnpm dlx` instead of npx). Biome for lint/format (no ESLint/Prettier), single quotes, semicolons as needed per `biome.jsonc`.
+- `Number.parseInt` / `Number.parseFloat` only, never global forms.
+- SonarQube Cloud: all code must pass — no bugs, vulnerabilities, security hotspots. Cognitive complexity ≤ 15.
+- Conventional Commits. Semantic Versioning. Release config in `.semrelrc`. `chore(deps)` triggers patch release.
+- Never `git push` — always leave pushing to the human.
 
 ### Sync
-- Example files, docs (`README.md`, `CONTRIBUTING.md`, `HOME_ASSISTANT.md`), and config examples must stay in sync with the code they describe. See [implement.md](.claude/rules/implement.md) for the full file checklists per change type.
-- `.nvmrc`, `package.json` `engines` field, and Docker build args must agree on the required Node.js version.
-- When rules files (`.claude/rules/`) or skills (`.claude/skills/`) are added, modified, or removed, update the Structure and Skills sections in `AI_DEVELOPMENT.md` to match.
+- Docs, examples, and config files must stay in sync with code.
+- Follow `.claude/rules/implement.md` when making code changes.
+- `.nvmrc`, `package.json` `engines`, and Docker build args must agree on Node.js version.
+- When `.claude/rules/` or `.claude/skills/` change, update `AI_DEVELOPMENT.md`.
+- `.gitignore` must cover all generated/cached artifacts.
 
 ### Docker
-- Production Dockerfile (`docker/Dockerfile`) uses hardened `dhi.io/node` base images. Do not change to standard Node images. `Dockerfile.local` uses standard Alpine for development.
+- Production Dockerfile (`docker/Dockerfile`) uses hardened `dhi.io/node` base images — do not change. `Dockerfile.local` uses standard Alpine.
 
 ### Domain
 - Appliance classes must extend `BaseAppliance` and be registered in the factory.
-- Home Assistant auto-discovery payloads must conform to the HA MQTT discovery specification. `name: ''` in discovery payloads is intentional — HA convention where the entity inherits the device name.
-- Normalized state and HA state templates use **lowercase**. HA command templates pass values as-is; `transformMqttCommandToApi()` is the single authority for denormalization (uppercasing, `medium`→`MIDDLE`, `fan_only`→`FANONLY`). Incoming MQTT commands must be normalized to lowercase before merging with cached state.
-- MQTT topic structure must be consistent and documented.
+- HA discovery payloads must conform to MQTT discovery spec. `name: ''` is intentional (entity inherits device name).
+- Normalized state and HA templates use **lowercase**. `transformMqttCommandToApi()` is the sole denormalization authority (`medium`→`MIDDLE`, `fan_only`→`FANONLY`). Normalize incoming MQTT commands to lowercase before merging with cached state.
 
-### Config schema architecture
-- `envSchema` handles pre-processing (coercion, defaults). Final validation (URL format, enum values, regex) happens through `configSchema`. Constraints do not need to be duplicated in both schemas.
-- Each constraint (default value, min/max, format) must exist in exactly one schema — the one responsible for that concern. Do not repeat defaults or validation across schemas.
-- Config is loaded from either a YAML file OR environment variables, never a mix. `buildConfigFromEnv()` maps env vars to the same structure as the YAML file, then both paths go through `configSchema` for validation.
-- When config values appear in documentation (`config.example.yml`, `README.md`, docker-compose examples), the documented defaults must match the schema defaults. The schema is the source of truth; docs reflect it.
-
-### Telemetry backend
-- Rate limiting must run **before** input validation — malformed requests must still consume rate limit quota to prevent flooding.
+### Config schema
+- `envSchema` pre-processes (coercion, defaults). `configSchema` validates (URL format, enum values, regex). Each constraint in exactly one schema.
+- Config loads from YAML file OR env vars, never a mix. Both go through `configSchema`. Schema is source of truth for defaults.
 
 ## Verification
 
 After any code change:
-1. Run `pnpm check` — fix any findings (lint + format via Biome).
-2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed:
-   - Run `pnpm typecheck` — fix any type errors.
-   - Run `pnpm test` — all tests must pass.
-   - Run `pnpm sonar` — fix any SonarQube findings (bugs, vulnerabilities, code smells, cognitive complexity).
-3. Skip typecheck/test/sonar for documentation-only or config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
-
-## Context files
-
-Read the relevant file **before starting work** — the skills do this automatically, but follow the same practice for ad-hoc requests:
-
-| File | Read when… |
-|------|-----------|
-| [.claude/rules/implement.md](.claude/rules/implement.md) | You are about to write, edit, or delete any code in `src/`, `telemetry-backend/`, `docker/`, or `tests/` |
-| [.claude/rules/audit.md](.claude/rules/audit.md) | You are asked to review, audit, or check the codebase |
-| [.claude/rules/maintain.md](.claude/rules/maintain.md) | You are asked to update dependencies or run maintenance tasks |
+1. `pnpm check` — fix lint/format findings.
+2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed: run `pnpm typecheck`, `pnpm test`, `pnpm sonar` — fix all.
+3. Skip step 2 for doc/config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
 
 ## Self-maintenance
 
-Proactively suggest updates to `CLAUDE.md`, `.claude/rules/`, or `.claude/skills/` whenever you notice something that would help future sessions. The bar for suggesting is low — if you hesitate even briefly about whether something belongs in the instructions, suggest it. Always ask the user before writing, and present the content you'd like to add.
-
-**When to suggest updates:**
-- A rule produced a **false positive** (e.g., flagging test-only exports as dead) — tighten the rule or add a clarifying exception.
-- You encountered a **domain convention** that isn't documented (e.g., HA expects lowercase values, API sends uppercase) — add it so future sessions don't rediscover it.
-- A review or audit **missed something** because no checklist item covered it — add the checklist item.
-- A **workaround or gotcha** came up during implementation that would trip up a future session.
-- You notice an existing rule is **ambiguous, outdated, or conflicts** with another rule — propose a fix.
-- A repeatable workflow would benefit from a **skill** (saved prompt with checklist) — suggest creating one in `.claude/skills/`.
+Suggest updates to `CLAUDE.md` or `.claude/skills/` when you notice gaps. Always ask before writing.

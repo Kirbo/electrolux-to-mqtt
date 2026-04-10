@@ -6,21 +6,18 @@ This project is set up for AI-assisted development with [Claude Code](https://do
 
 ## How it works
 
-Claude Code reads `CLAUDE.md` at the start of every conversation. This file contains the project's coding rules, verification steps, and pointers to more detailed checklists in `.claude/rules/`.
+Claude Code reads `CLAUDE.md` at the start of every conversation. This file contains the project's coding rules and verification steps. Task-specific checklists live in `.claude/skills/` and load on demand when a skill is invoked.
 
 ### Structure
 
 ```
-CLAUDE.md                        # Rules, verification, context files
+CLAUDE.md                        # Rules, verification
 .claude/
   rules/
-    implement.md                 # File checklists per change type
-    audit.md                     # Code review checklist
-    maintain.md                  # Dependency update checklist
+    implement.md                 # File checklists per change type (always loaded)
   skills/
-    implement/SKILL.md           # /implement skill definition
-    audit/SKILL.md               # /audit skill definition
-    maintain/SKILL.md            # /maintain skill definition
+    audit/SKILL.md               # /audit — code review checklist
+    maintain/SKILL.md            # /maintain — dependency update checklist
 ```
 
 ### Skills (slash commands)
@@ -29,7 +26,6 @@ Skills are predefined workflows invoked as slash commands in Claude Code:
 
 | Command | What it does |
 |---------|-------------|
-| `/implement <description>` | Implement a feature, refactor, or bugfix. Reads the relevant checklists and follows them. |
 | `/audit` | Full codebase audit: lint, typecheck, tests, then manual review against the checklist. Fixes all findings. |
 | `/maintain` | Update all dependencies and pnpm, fix any breakage from updates. |
 
