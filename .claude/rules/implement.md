@@ -37,6 +37,5 @@ Run E2E snapshot validation (see `/audit` checklist § 11).
 (*if needed)
 
 ### Telemetry backend (`telemetry-backend/`)
-`src/index.ts`, `Dockerfile`*, `docker-compose.yml`*, `README.md`
 Rate limiting must run **before** input validation.
-(*if build/compose changed)
+If build/compose changed: update `Dockerfile`, `docker-compose.yml`, `README.md`.
