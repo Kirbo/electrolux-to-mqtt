@@ -27,7 +27,7 @@ A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Ho
 - **Well Tested** - Unit tests with >95% coverage
 - **Docker Ready** - Multi-platform Docker images (amd64/arm64)
 - **Update Notifications** - Periodically check for newer releases and optionally push-notify you via https://ntfy.sh/ webhook.
-- **Anonymous Telemetry** - Sends an irreversible hash of your username and the app version to `e2m.devaus.eu` during version checks, used to generate the "Active Users" badge above. No personal data is collected or stored.
+- **Anonymous Telemetry** - Sends an irreversible HMAC-SHA-256 hash of your username (salted with partial config values unique to your installation) and the app version to `e2m.devaus.eu` during version checks, used to generate the "Active Users" badge above. No personal data is collected or stored. This is a personal project maintained in my free time, and knowing the active user count helps me gauge how much effort to invest in it.
 
 Relevant links:
 - [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
