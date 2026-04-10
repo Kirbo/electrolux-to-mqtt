@@ -20,7 +20,7 @@ Electrolux-to-MQTT bridge — TypeScript service connecting Electrolux appliance
 - Every config/schema field must be functional. No empty directories.
 
 ### Tooling
-- `pnpm` only (never npm/yarn; `pnpm dlx` instead of npx). Biome for lint/format (no ESLint/Prettier), single quotes, semicolons as needed per `biome.jsonc`.
+- `pnpm` only (never npm/yarn; `pnpm dlx` instead of npx). Never `pnpm dlx` for tools already installed locally — use `pnpm` scripts instead. Biome for lint/format (no ESLint/Prettier), single quotes, semicolons as needed per `biome.jsonc`.
 - `Number.parseInt` / `Number.parseFloat` only, never global forms.
 - SonarQube Cloud: all code must pass — no bugs, vulnerabilities, security hotspots. Cognitive complexity ≤ 15.
 - Conventional Commits. Semantic Versioning. Release config in `.semrelrc`. `chore(deps)` triggers patch release.
@@ -50,7 +50,8 @@ Electrolux-to-MQTT bridge — TypeScript service connecting Electrolux appliance
 After any code change:
 1. `pnpm check` — fix lint/format findings.
 2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed: run `pnpm typecheck`, `pnpm test`, `pnpm sonar` — fix all.
-3. Skip step 2 for doc/config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
+3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck`.
+4. Skip steps 2–3 for doc/config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
 
 ## Self-maintenance
 
