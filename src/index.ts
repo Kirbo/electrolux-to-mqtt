@@ -12,8 +12,13 @@ const logger = createLogger('app')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
 
-// Generate anonymous user hash for telemetry (irreversible SHA-256)
-const userHash = crypto.createHash('sha256').update(config.electrolux.username).digest('hex')
+// Salt derived from partial config values, then hashed — unique per installation,
+// resistant to rainbow tables and not reversible to the original config fragments.
+const telemetrySalt = crypto
+  .createHash('sha256')
+  .update([config.mqtt.url.slice(-8), config.mqtt.username?.slice(0, 4) ?? '', config.electrolux.countryCode].join(':'))
+  .digest('hex')
+const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
 
 const refreshInterval = (client.refreshInterval ?? 60) * 1000
 const applianceDiscoveryInterval = (config.electrolux.applianceDiscoveryInterval ?? 300) * 1000
