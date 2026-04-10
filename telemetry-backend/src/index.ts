@@ -1,31 +1,17 @@
-import crypto from 'node:crypto'
-import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import express, { type Request, type Response } from 'express'
 import { createClient } from 'redis'
+import { getClientIp, hashIp, readMachineId, validateTelemetryPayload } from './utils.js'
 
 const app = express()
 const port = process.env.PORT || 3001
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000)
+const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)
 const RATE_LIMIT_IP_MAX = Number(process.env.RATE_LIMIT_IP_MAX || 10)
 const RATE_LIMIT_HASH_MAX = Number(process.env.RATE_LIMIT_HASH_MAX || 1)
-function readMachineId(): string | null {
-  const paths = ['/etc/machine-id', '/var/lib/dbus/machine-id']
-  for (const filePath of paths) {
-    try {
-      if (fs.existsSync(filePath)) {
-        return fs.readFileSync(filePath, 'utf8').trim()
-      }
-    } catch {
-      // ignore and try next path
-    }
-  }
-  return null
-}
-
 const RATE_LIMIT_SALT = process.env.RATE_LIMIT_SALT || readMachineId() || os.hostname()
 
 // Respect proxy headers (e.g., X-Forwarded-For) when behind a reverse proxy
@@ -41,18 +27,6 @@ redis.on('error', (err: Error) => console.error('Redis Client Error', err))
 await redis.connect()
 
 app.use(express.json({ limit: '10kb' }))
-
-const RATE_LIMIT_WINDOW_SECONDS = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)
-
-function hashIp(ip: string): string {
-  return crypto.createHmac('sha256', RATE_LIMIT_SALT).update(ip).digest('hex')
-}
-
-function getClientIp(req: Request): string {
-  const xRealIp = req.get('X-Real-IP')
-  if (xRealIp) return xRealIp
-  return req.ip || 'unknown'
-}
 
 async function enforceRateLimitRedis(key: string, max: number, res: Response): Promise<boolean> {
   try {
@@ -78,35 +52,11 @@ async function enforceRateLimitRedis(key: string, max: number, res: Response): P
 
 async function rateLimitByIp(req: Request, res: Response, next: () => void) {
   const ip = getClientIp(req)
-  const ipKey = `ip:${hashIp(ip)}`
+  const ipKey = `ip:${hashIp(ip, RATE_LIMIT_SALT)}`
   if (!(await enforceRateLimitRedis(ipKey, RATE_LIMIT_IP_MAX, res))) {
     return
   }
   return next()
-}
-
-function validateTelemetryPayload(userHash: unknown, version: unknown): string | null {
-  if (typeof userHash !== 'string' || typeof version !== 'string') {
-    return 'userHash and version must be strings'
-  }
-
-  if (userHash.length < 32 || userHash.length > 128) {
-    return 'userHash length is invalid'
-  }
-
-  if (!/^[a-f0-9]+$/i.test(userHash)) {
-    return 'userHash must be hex'
-  }
-
-  if (version.length < 1 || version.length > 32) {
-    return 'version length is invalid'
-  }
-
-  if (!/^[a-z0-9._-]+$/i.test(version)) {
-    return 'version contains invalid characters'
-  }
-
-  return null
 }
 
 async function getUserKeys(): Promise<string[]> {
@@ -196,7 +146,7 @@ app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
     const { userHash, version }: { userHash: string; version: string } = req.body
 
     // Hash rate limit before any validation (use IP-based fallback when userHash is missing)
-    const hashKey = userHash ? `hash:${userHash}` : `hash:unknown-${hashIp(getClientIp(req))}`
+    const hashKey = userHash ? `hash:${userHash}` : `hash:unknown-${hashIp(getClientIp(req), RATE_LIMIT_SALT)}`
     if (!(await enforceRateLimitRedis(hashKey, RATE_LIMIT_HASH_MAX, res))) {
       return
     }
