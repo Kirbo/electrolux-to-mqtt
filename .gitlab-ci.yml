@@ -53,7 +53,6 @@ default:
       when: never
     - if: "$CI_COMMIT_TAG == null"
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -71,7 +70,6 @@ default:
       when: on_success
     - if: "$CI_COMMIT_TAG == null"
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -89,7 +87,6 @@ default:
       when: never
     - if: "$CI_COMMIT_TAG == null"
       changes:
-        - .gitlab-ci.yml
         - biome.jsonc
         - package.json
         - pnpm-lock.yaml
@@ -108,7 +105,6 @@ default:
       when: on_success
     - if: "$CI_COMMIT_TAG == null"
       changes:
-        - .gitlab-ci.yml
         - biome.jsonc
         - package.json
         - pnpm-lock.yaml
@@ -274,7 +270,6 @@ audit:
       when: on_success
     - if: "$CI_COMMIT_TAG == null"
       changes:
-        - .gitlab-ci.yml
         - package.json
         - pnpm-lock.yaml
       when: on_success
@@ -341,7 +336,6 @@ try to build docker images:
       when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "next"'
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -409,7 +403,6 @@ build and deploy docker images:
       when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -464,7 +457,6 @@ create gitlab release:
       when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -499,7 +491,6 @@ build and deploy rc docker images:
       when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "next"'
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -554,7 +545,6 @@ create gitlab prerelease:
       when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "next"'
       changes:
-        - .gitlab-ci.yml
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -586,7 +576,6 @@ update telemetry backend:
       when: never
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
       changes:
-        - .gitlab-ci.yml
         - telemetry-backend/**/*
       when: on_success
     - when: never
