@@ -770,6 +770,102 @@ homeAssistant:
       writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
+
+    it('should include HOME_ASSISTANT_AUTO_DISCOVERY env var in generated config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.HOME_ASSISTANT_AUTO_DISCOVERY = 'false'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('autoDiscovery: false')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should include LOGGING_SHOW_CHANGES env var in generated config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.LOGGING_SHOW_CHANGES = 'false'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('showChanges: false')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should include LOGGING_SHOW_VERSION_NUMBER env var in generated config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.LOGGING_SHOW_VERSION_NUMBER = 'false'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('showVersionNumber: false')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should include LOGGING_SKIP_CACHE_LOGGING env var in generated config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.LOGGING_SKIP_CACHE_LOGGING = 'true'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('skipCacheLogging: true')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
   })
 
   describe('Zod schema validation', () => {
