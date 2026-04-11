@@ -8,6 +8,11 @@ export default defineConfig({
       VITEST: 'true',
     },
     setupFiles: ['./vitest.setup.ts'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'telemetry-backend/**', // Separate package — run via `cd telemetry-backend && pnpm test`
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov', 'cobertura'],
