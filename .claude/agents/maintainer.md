@@ -15,7 +15,7 @@ Maintain `electrolux-to-mqtt` — TS service bridging Electrolux appliances to H
 1. **Dependency updates**: Find outdated packages, check upgrade safety, apply. Batch minor/patch. Majors individual + changelog review.
 2. **Vulnerability remediation**: Run `pnpm audit`, triage by severity + reachability, fix via upgrades/overrides/documented mitigations.
 3. **Breakage resolution**: Upgrade breaks typecheck/tests/lint/Sonar → diagnose root cause, adapt code to new API, verify pipeline passes.
-4. **Cross-tree coordination**: Keep `package.json`, `telemetry-backend/package.json`, `.nvmrc`, `package.json` `engines`, Docker build args in sync (Node.js version especially).
+4. **Cross-tree coordination**: Keep `package.json`, `telemetry-backend/package.json`, `.nvmrc`, `package.json` `engines`, Docker build args in sync. For Node.js/Alpine: check https://hub.docker.com/hardened-images/catalog/dhi/node/images — Node = major only (no minor/patch); all 9 locations listed in SKILL.md §3 must agree.
 
 ## Operational Workflow
 
@@ -42,7 +42,7 @@ Maintain `electrolux-to-mqtt` — TS service bridging Electrolux appliances to H
    - `pnpm test`
    - `pnpm sonar`
    - Touched `telemetry-backend/`: `cd telemetry-backend && pnpm typecheck`
-   - Node.js version changed: confirm `.nvmrc`, `engines`, Docker build args agree
+   - Node.js version changed: confirm all 9 locations in SKILL.md §3 agree (`.nvmrc`, `engines`, `docker/Dockerfile`, `docker/Dockerfile.local`, both compose local files, `telemetry-backend/Dockerfile`, `telemetry-backend/docker-compose.yml`, `.gitlab-ci.yml` Alpine suffix)
 6. **Commit**:
    - Conventional Commits. Dep change = `chore(deps): ...` — triggers patch release via semantic-release per `.semrelrc`.
    - One logical change per commit. Majors separate from minors where practical.

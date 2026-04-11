@@ -21,9 +21,18 @@ Update all deps. Fix issues.
 - [ ] Verify peer dep compat for major bumps
 
 ### 3. Docker base image
-- [ ] Check latest Node.js LTS → update `.nvmrc`, `package.json` `engines`, `docker/Dockerfile` `NODE_VERSION`
-- [ ] Check latest Alpine for `dhi.io/node` → update Alpine suffix
-- [ ] If changed, update `docker/Dockerfile.local` to match
+- [ ] Check https://hub.docker.com/hardened-images/catalog/dhi/node/images for latest LTS Node + Alpine tag (e.g. `24-alpine3.23`)
+- [ ] **Node LTS major bumped** → update **major version only** (no minor/patch) in every location:
+  - `.nvmrc` → `<major>`
+  - `package.json` `engines.node` → `>=<major>`
+  - `docker/Dockerfile` `ARG NODE_VERSION` → `<major>-alpine<X.Y>`
+  - `docker/Dockerfile.local` `ARG NODE_VERSION` → `<major>`
+  - `docker/docker-compose.local.yml` + `docker/docker-compose.local.example.yml` `NODE_VERSION:-<major>`
+  - `telemetry-backend/Dockerfile` `ARG NODE_VERSION` → `<major>`
+  - `telemetry-backend/docker-compose.yml` `NODE_VERSION:-<major>`
+- [ ] **Alpine version bumped** → update in every location:
+  - `docker/Dockerfile` `ARG NODE_VERSION` → `<major>-alpine<X.Y>`
+  - `.gitlab-ci.yml` `echo "NODE_VERSION=$(cat .nvmrc)-alpine<X.Y>"` line
 
 ### 4. Update pnpm
 - [ ] `corepack use pnpm@latest`

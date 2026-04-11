@@ -91,6 +91,12 @@ After any code change:
 3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck && pnpm test`.
 4. Skip steps 2–3 for doc/config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
 
+## Commits
+
+Never commit unless explicitly told to. The user decides when changes are ready to commit — they may have more work in mind that belongs in the same commit. Do not commit after completing a task, do not commit "to save progress", do not commit after a fix. Wait for an explicit instruction like "commit this" or "make a commit".
+
+Before any `git commit --amend` or `git rebase`: check whether the target commit(s) have already been pushed to origin (`git log origin/HEAD..HEAD` — empty means all commits are on origin). If the commit is already on origin, stop and ask the user to confirm before proceeding. If not pushed, proceed normally.
+
 ## Self-maintenance
 
 Suggest updates to `.claude/CLAUDE.md`, `.claude/rules/`, or `.claude/skills/` when you notice gaps. Always ask before updating.
