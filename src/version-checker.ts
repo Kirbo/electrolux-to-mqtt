@@ -224,7 +224,7 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
   }
 
   // Send telemetry (skipped when user has opted out)
-  if (config.telemetryEnabled !== false) {
+  if (config.telemetryEnabled) {
     await sendTelemetry(userHash, currentVersion)
   } else {
     logger.debug('Telemetry disabled, skipping')

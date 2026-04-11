@@ -20,6 +20,7 @@ vi.mock('../src/config.js', () => ({
       checkInterval: 3600,
       ntfyWebhookUrl: undefined,
     },
+    telemetryEnabled: true,
   },
 }))
 
@@ -467,6 +468,7 @@ describe('version-checker', () => {
             checkInterval: 3600,
             ntfyWebhookUrl: 'https://ntfy.sh/vB66ozQaRiqhTE9j',
           },
+          telemetryEnabled: true,
         },
       }))
 

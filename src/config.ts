@@ -309,7 +309,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       enabled: envConfig.HEALTH_CHECK_ENABLED,
       filePath: envConfig.HEALTH_CHECK_FILE_PATH,
     }),
-    ...(envConfig.E2M_TELEMETRY_ENABLED !== undefined ? { telemetryEnabled: envConfig.E2M_TELEMETRY_ENABLED } : {}),
+    ...(envConfig.E2M_TELEMETRY_ENABLED === undefined ? {} : { telemetryEnabled: envConfig.E2M_TELEMETRY_ENABLED }),
   }
 }
 
