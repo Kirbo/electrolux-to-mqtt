@@ -3,27 +3,9 @@
 # Get the script directory
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-# Source common functions if available (in git repo)
-if [ -f "${REPO_ROOT}/.githooks/common.sh" ]; then
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/.githooks/common.sh"
-else
-  # Fallback: define minimal functions if common.sh not available
-  print_status() {
-    printf "[%s] %s\n" "$2" "$3"
-  }
-  step_exec() { printf "[ EXEC ] %s" "$1"; }
-  step_done() { printf '\r\033[K'; print_status "" " DONE " "$1"; }
-  step_ok() { print_status "" "  OK  " "$1"; }
-  step_skip() { print_status "" " SKIP " "$1"; }
-  step_fail() { printf '\r\033[K'; print_status "" " FAIL " "$1"; exit 1; }
-fi
-
-# Check if we're in a git repository
-if [ ! -d "${REPO_ROOT}/.git" ]; then
-  step_skip "Not a git repository"
-  exit 0
-fi
+# Source common functions
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/.githooks/common.sh"
 
 # Check if git hooks path is already configured
 CURRENT_HOOKS_PATH=$(git config --get core.hooksPath)
@@ -41,7 +23,7 @@ fi
 
 # Check if hooks need to be made executable
 NEEDS_CHMOD=false
-for hook in .githooks/*; do
+for hook in "${REPO_ROOT}/.githooks/"*; do
   if [ -f "$hook" ] && [ ! -x "$hook" ]; then
     NEEDS_CHMOD=true
     break
@@ -50,7 +32,7 @@ done
 
 if [ "$NEEDS_CHMOD" = true ]; then
   step_exec "Making git hooks executable..."
-  if chmod +x .githooks/*; then
+  if chmod +x "${REPO_ROOT}/.githooks/"*; then
     step_done "Made git hooks executable"
   else
     step_fail "Failed to make git hooks executable"

@@ -44,11 +44,9 @@ done < <(git diff --cached --name-only -z --diff-filter=ACM)
 
 # Prevent committing files ignored by .gitignore
 if [ "${#STAGED_FILES_ALL[@]}" -gt 0 ]; then
-  while IFS= read -r -d '' _pattern; do
-    IFS= read -r -d '' _source || break
-    IFS= read -r -d '' _path || break
+  while IFS= read -r -d '' _path; do
     IGNORED_STAGED+=("${_path}")
-  done < <(printf '%s\0' "${STAGED_FILES_ALL[@]}" | git check-ignore -v -z --stdin || true)
+  done < <(printf '%s\0' "${STAGED_FILES_ALL[@]}" | git check-ignore -z --stdin || true)
 fi
 
 if [ "${#IGNORED_STAGED[@]}" -gt 0 ]; then

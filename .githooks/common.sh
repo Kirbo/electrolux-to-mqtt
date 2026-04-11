@@ -69,7 +69,7 @@ find_node() {
   NODE_VERSION=""
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/.nvmrc" ]; then
-    NODE_VERSION=$(cat "$REPO_ROOT/.nvmrc" | tr -d '\n' | tr -d '%' | sed 's/^v//')
+    NODE_VERSION=$(tr -d '\n%' < "$REPO_ROOT/.nvmrc" | sed 's/^v//')
   fi
   
   # Try common node manager locations with version matching
