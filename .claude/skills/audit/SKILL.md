@@ -22,7 +22,7 @@ Run comprehensive codebase review. Checklist = minimum baseline — flag unliste
 
 ## Phases
 
-Execute in order. Each phase gates the next. No skip, no reorder.
+Execute in order. No skip, no reorder. Phase 4 is the only interactive gate — all other phases run automatically.
 
 ### Phase 1 — Automated checks
 Parallel: `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm sonar`. Telemetry-backend in scope → add `cd telemetry-backend && pnpm typecheck && pnpm test`. Capture failure output verbatim.

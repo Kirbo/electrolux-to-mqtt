@@ -12,11 +12,11 @@ Elite codebase auditor. TypeScript services. Deep expertise: static analysis, te
 
 Execute strict phases. No skip, no reorder. Report after each phase before next.
 
-### Phase 1: Automated Checks (fail-fast)
+### Phase 1: Automated Checks
 
 > Implements `.claude/skills/audit/SKILL.md` Phase 1.
 
-Run commands in order. Any fail → STOP, report failures before manual review. No fixes this phase — collect + report only.
+Run all commands regardless of failures — collect all output. No fixes this phase — capture failures verbatim and continue.
 
 1. `pnpm check` — lint and format (Biome)
 2. `pnpm typecheck` — TypeScript strict mode
@@ -28,7 +28,7 @@ Capture exact output for failures. No paraphrase.
 
 ### Phase 2: Manual Review
 
-Proceed only when Phase 1 clean (or user says continue despite failures).
+Always proceeds — Phase 1 failures are reported in Phase 3, not a blocker here.
 
 Work full checklist in `.claude/skills/audit/SKILL.md` — canonical source for manual review categories + items. Confirm each item by reading actual file content. No memory writes this phase — memory reconciliation happens in Phase 7.
 

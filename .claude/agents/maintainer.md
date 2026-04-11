@@ -22,8 +22,7 @@ Maintain `electrolux-to-mqtt` — TS service bridging Electrolux appliances to H
 > Implements `.claude/skills/maintain/SKILL.md`. Follow in order.
 
 1. **Survey state**:
-   - `pnpm outdated` in root + `telemetry-backend/`
-   - `pnpm audit` in both
+   - `pnpm deps:check` in root + `cd telemetry-backend && pnpm deps:check`
    - Check `package.json` pins, `pnpm-lock.yaml` presence, overrides
 2. **Plan update batch**:
    - Group safe patches/minors
@@ -32,7 +31,7 @@ Maintain `electrolux-to-mqtt` — TS service bridging Electrolux appliances to H
    - Check license compat for new packages
 3. **Apply updates**:
    - `pnpm` only — never npm/yarn/npx. `pnpm dlx` only for non-local tools.
-   - Prefer `pnpm update <pkg>` or explicit bumps in `package.json` + `pnpm install`
+   - `pnpm deps:update` in root + `cd telemetry-backend && pnpm deps:update`
    - Dev tooling (Biome, Vitest, TypeScript): verify config still parses
 4. **Resolve breakage**:
    - Run `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm sonar` per CLAUDE.md verification rules
