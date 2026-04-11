@@ -190,9 +190,9 @@ export class Orchestrator {
         logger.info(`Found ${newAppliances.length} new appliance(s)`)
         const intervalDelay = this.config.refreshInterval / (appliances.length + 1) // Distribute load
 
-        for (let i = 0; i < newAppliances.length; i++) {
+        for (const [i, appliance] of newAppliances.entries()) {
           const delay = i * intervalDelay
-          await this.initializeAppliance(newAppliances[i], delay)
+          await this.initializeAppliance(appliance, delay)
         }
       }
 

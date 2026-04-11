@@ -16,7 +16,7 @@ const client = new ElectroluxClient(mqtt)
 // resistant to rainbow tables and not reversible to the original config fragments.
 const telemetrySalt = crypto
   .createHash('sha256')
-  .update([config.mqtt.url.slice(-8), config.mqtt.username?.slice(0, 4) ?? '', config.electrolux.countryCode].join(':'))
+  .update([config.mqtt.url.slice(-8), config.mqtt.username.slice(0, 4), config.electrolux.countryCode].join(':'))
   .digest('hex')
 const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
 
@@ -84,9 +84,9 @@ const main = async () => {
   const intervalDelay = refreshInterval / totalAppliances
 
   // Initialize all appliances with staggered delays
-  for (let i = 0; i < appliances.length; i++) {
+  for (const [i, appliance] of appliances.entries()) {
     const delay = i * intervalDelay
-    await orchestrator.initializeAppliance(appliances[i], delay)
+    await orchestrator.initializeAppliance(appliance, delay)
   }
 
   // Start periodic appliance discovery
