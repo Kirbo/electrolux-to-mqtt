@@ -20,7 +20,7 @@ export type Appliance = {
         pnc: string
         sn: string
       } | null
-      applianceState: 'on' | 'off' | 'running'
+      applianceState: 'off' | 'running'
       capabilities?: Record<string, unknown>
       compressorCoolingRuntime?: number
       compressorHeatingRuntime?: number

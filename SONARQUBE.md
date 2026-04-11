@@ -116,15 +116,10 @@ Current thresholds configured in `vitest.config.ts`:
 
 | Metric      | Threshold |
 |-------------|-----------|
-| Lines       | 35%       |
-| Functions   | 50%       |
-| Branches    | 35%       |
-| Statements  | 35%       |
-
-These thresholds are balanced for mixed legacy and new code:
-- **Legacy code** (electrolux.ts, mqtt.ts): Lower coverage expected
-- **New code** (appliances/*): Comprehensive coverage (85%+)
-- **Overall**: Baseline to prevent regression
+| Lines       | 95%       |
+| Functions   | 95%       |
+| Branches    | 80%       |
+| Statements  | 95%       |
 
 ## Troubleshooting
 

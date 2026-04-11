@@ -35,7 +35,7 @@ export const mockApplianceStateResponse: Appliance = {
         pnc: 'PNC987654',
         sn: 'SN123456789',
       },
-      applianceState: 'on',
+      applianceState: 'running',
       capabilities: {
         cooling: true,
         heating: true,

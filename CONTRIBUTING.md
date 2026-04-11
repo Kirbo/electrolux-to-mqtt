@@ -174,7 +174,7 @@ The project maintains test coverage with the following requirements:
 - **Branches**: 80%
 - **Functions**: 95%
 
-Up-to-date thresholds can be found [here](./vitest.config.ts#L26)
+Up-to-date thresholds can be found [here](./vitest.config.ts#L33)
 
 **New Code Coverage:**
 - New code should maintain or improve the existing thresholds

@@ -160,15 +160,18 @@ export function createApp(deps: AppDependencies): Express {
   // Rate limiting runs BEFORE validation — malformed requests must still consume quota.
   app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
     try {
-      const { userHash, version }: { userHash: string; version: string } = req.body
+      const { userHash, version } = req.body as { userHash?: unknown; version?: unknown }
 
-      // Hash rate limit before any validation (use IP-based fallback when userHash is missing)
-      const hashKey = userHash ? `hash:${userHash}` : `hash:unknown-${hashIp(getClientIp(req), config.rateLimitSalt)}`
+      // Hash rate limit before any validation (use IP-based fallback when userHash is not a string)
+      const hashKey =
+        typeof userHash === 'string' && userHash
+          ? `hash:${userHash}`
+          : `hash:unknown-${hashIp(getClientIp(req), config.rateLimitSalt)}`
       if (!(await enforceRateLimitRedis(hashKey, config.rateLimitHashMax, res))) {
         return
       }
 
-      if (!userHash || !version) {
+      if (typeof userHash !== 'string' || !userHash || typeof version !== 'string' || !version) {
         return res.status(400).json({ error: 'userHash and version are required' })
       }
 
