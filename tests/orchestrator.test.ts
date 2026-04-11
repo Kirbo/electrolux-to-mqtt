@@ -418,6 +418,97 @@ describe('Orchestrator', () => {
     })
   })
 
+  describe('MQTT publish failure during state update', () => {
+    it('should not crash the polling loop when publish throws on the first poll', async () => {
+      // The orchestrator calls getApplianceState which internally publishes.
+      // If publish throws, the orchestrator must not crash and the loop must continue.
+      vi.mocked(client.getApplianceState).mockImplementation(async (_appliance, callback) => {
+        // Simulate publish throwing inside getApplianceState
+        vi.mocked(mqtt.publish).mockImplementationOnce(() => {
+          throw new Error('MQTT broker unreachable')
+        })
+        if (callback) callback()
+        return undefined
+      })
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // The polling interval should still be running (no crash)
+      expect(orchestrator.isShuttingDown).toBe(false)
+    })
+
+    it('should not crash the polling loop when publish throws on subsequent poll', async () => {
+      let publishCallCount = 0
+      vi.mocked(mqtt.publish).mockImplementation(() => {
+        publishCallCount++
+        if (publishCallCount > 1) {
+          throw new Error('MQTT disconnected')
+        }
+      })
+
+      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Advance another interval — the polling loop must survive
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+
+      // getApplianceState should have been called twice
+      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+      expect(orchestrator.isShuttingDown).toBe(false)
+    })
+  })
+
+  describe('polling cycle interrupted by shutdown mid-flight', () => {
+    it('should not poll again after shutdown is called between intervals', async () => {
+      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+      await vi.advanceTimersByTimeAsync(0)
+
+      const callsAfterFirstPoll = vi.mocked(client.getApplianceState).mock.calls.length
+
+      // Shut down before next interval fires
+      orchestrator.shutdown(null, null)
+
+      // Advance past the next refresh interval
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+
+      // No additional state fetches should have happened
+      expect(vi.mocked(client.getApplianceState).mock.calls.length).toBe(callsAfterFirstPoll)
+      expect(orchestrator.isShuttingDown).toBe(true)
+    })
+
+    it('should not throw when shutdown is called while a getApplianceState call is in-flight', async () => {
+      let resolveStateCall: () => void = () => {}
+
+      vi.mocked(client.getApplianceState).mockReturnValue(
+        new Promise<undefined>((resolve) => {
+          resolveStateCall = () => resolve(undefined)
+        }),
+      )
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+
+      // Advance timer to trigger the polling call (now in-flight)
+      vi.advanceTimersByTime(0)
+
+      // Shut down while the call is pending
+      orchestrator.shutdown(null, null)
+
+      // Resolve the pending call
+      resolveStateCall()
+
+      // Let microtasks drain
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(orchestrator.isShuttingDown).toBe(true)
+      // No unhandled rejection — test would fail if one was thrown
+    })
+  })
+
   describe('shutdown', () => {
     it('should clean up all resources', async () => {
       const stopVersionChecker = vi.fn()

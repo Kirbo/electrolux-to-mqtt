@@ -198,4 +198,65 @@ describe('health', () => {
       expect(writeSpy).toHaveBeenCalledTimes(3)
     })
   })
+
+  describe('writeHealthFile EACCES permission denied', () => {
+    let writeSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      mockWarn.mockClear()
+      vi.resetModules()
+      vi.doMock('../src/config.js', () => ({
+        default: {
+          healthCheck: {
+            enabled: true,
+            filePath: '/tmp/e2m-health-test',
+          },
+        },
+      }))
+      writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        const err = new Error("EACCES: permission denied, open '/tmp/e2m-health-test'")
+        ;(err as NodeJS.ErrnoException).code = 'EACCES'
+        throw err
+      })
+    })
+
+    afterEach(() => {
+      writeSpy.mockRestore()
+    })
+
+    it('should log a warning on the first EACCES failure', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+
+      expect(mockWarn).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not log a warning on subsequent EACCES failures after the first', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+      writeHealthFile()
+      writeHealthFile()
+
+      // Same warn-once behaviour as EROFS
+      expect(mockWarn).toHaveBeenCalledTimes(1)
+    })
+
+    it('should keep attempting fs.writeFileSync on every call even after the first EACCES', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+      writeHealthFile()
+      writeHealthFile()
+
+      expect(writeSpy).toHaveBeenCalledTimes(3)
+    })
+
+    it('should not crash the process on EACCES', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      expect(() => writeHealthFile()).not.toThrow()
+    })
+  })
 })

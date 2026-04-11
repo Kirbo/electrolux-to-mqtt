@@ -2713,5 +2713,67 @@ describe('electrolux', () => {
         expect(result).toEqual(requestConfig)
       })
     })
+
+    describe('Network timeout', () => {
+      it('should return undefined when the request times out (ECONNABORTED)', async () => {
+        const timeoutError = new Error('timeout of 10000ms exceeded') as AxiosError
+        timeoutError.code = 'ECONNABORTED'
+        // isAxiosError returns true for timeout errors
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+        mockAxiosInstance.get.mockRejectedValueOnce(timeoutError)
+
+        await client.initialize()
+        const result = await client.getAppliances()
+
+        // A timeout is a transient error — it should return undefined without crashing
+        expect(result).toBeUndefined()
+        // Should not trigger a token refresh (timeout is not a 403)
+        expect(mockAxiosInstance.post).not.toHaveBeenCalled()
+      })
+
+      it('should log the timeout error rather than swallowing it silently', async () => {
+        const timeoutError = new Error('timeout of 10000ms exceeded') as AxiosError
+        timeoutError.code = 'ECONNABORTED'
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+        mockAxiosInstance.get.mockRejectedValueOnce(timeoutError)
+
+        await client.initialize()
+        loggerErrorSpy.mockClear()
+        await client.getAppliances()
+
+        expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error getting appliances'))
+      })
+    })
+
+    describe('Malformed JSON response body', () => {
+      it('should return undefined when API returns an unexpected shape instead of an ApplianceStub array', async () => {
+        // Simulate a response body that is valid JSON but fails the isApplianceStubArray type guard
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: 'unexpected string payload' })
+
+        await client.initialize()
+        const result = await client.getAppliances()
+
+        expect(result).toBeUndefined()
+      })
+
+      it('should return undefined when API returns an object instead of array for appliances', async () => {
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: { items: [], total: 0 } })
+
+        await client.initialize()
+        const result = await client.getAppliances()
+
+        expect(result).toBeUndefined()
+      })
+
+      it('should return undefined when appliance info response has wrong shape', async () => {
+        // isApplianceInfo checks for applianceInfo and capabilities properties
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: [1, 2, 3] })
+
+        await client.initialize()
+        const result = await client.getApplianceInfo('test-appliance-123')
+
+        expect(result).toBeUndefined()
+      })
+    })
   })
 })

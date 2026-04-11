@@ -790,6 +790,77 @@ describe('version-checker', () => {
       stopChecker()
     })
 
+    it('should handle pre-release version tags like 1.0.0-rc.1 without crashing', async () => {
+      // The version comparison strips pre-release suffixes — only numeric X.Y.Z parts are compared.
+      // A pre-release tag from GitLab must not cause an unhandled rejection.
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.0.0-rc.1', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+
+      // Must not throw or produce an unhandled rejection
+      await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
+
+      // Should have called the GitLab API
+      expect(mockAxiosGet).toHaveBeenCalled()
+
+      stopChecker()
+    })
+
+    it('should treat pre-release tag 1.0.0-rc.1 as lower than running version 1.6.3 (no update notification)', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.0.0-rc.1', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // 1.0.0 numeric parts < 1.6.3 — should publish 'up-to-date', not 'update-available'
+      const publishedPayload = mockPublishInfo.mock.calls[0]
+        ? (JSON.parse(mockPublishInfo.mock.calls[0][0]) as Record<string, unknown>)
+        : null
+
+      if (publishedPayload) {
+        expect(publishedPayload.status).toBe('up-to-date')
+      }
+
+      stopChecker()
+    })
+
+    it('should handle a malformed tag like vvv1.0.0 without crashing', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'vvv1.0.0', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+
+      // Must not throw or produce an unhandled rejection
+      await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
+
+      expect(mockAxiosGet).toHaveBeenCalled()
+
+      stopChecker()
+    })
+
+    it('should handle a completely non-semver tag like not-a-version without crashing', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'not-a-version', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+
+      await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
+
+      expect(mockAxiosGet).toHaveBeenCalled()
+
+      stopChecker()
+    })
+
     it('should include description from tag release object when falling back to tags endpoint', async () => {
       const description = '## 1.6.4 from tag\n\n#### Feature\n\n* tag feature\n\n'
       mockAxiosGet

@@ -27,8 +27,11 @@ import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { ApplianceFactory } from '../../src/appliances/factory.js'
 import { ElectroluxClient } from '../../src/electrolux.js'
+import createLogger from '../../src/logger.js'
 import type { IMqtt } from '../../src/mqtt.js'
 import type { ApplianceInfo, ApplianceStub } from '../../src/types.js'
+
+const log = createLogger('e2e')
 
 const SNAPSHOT_DIR = path.resolve(process.cwd(), 'tests/e2e/snapshots')
 
@@ -91,7 +94,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
       throw new Error('Failed to login to Electrolux API. Check credentials in config.yml')
     }
 
-    console.log('✓ Successfully authenticated with Electrolux API')
+    log.info('Successfully authenticated with Electrolux API')
   }, 30000)
 
   describe('API Structure Validation', () => {
@@ -102,7 +105,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
       expect(Array.isArray(appliances)).toBe(true)
 
       if (appliances && appliances.length > 0) {
-        console.log(`Found ${appliances.length} appliance(s)`)
+        log.info(`Found ${appliances.length} appliance(s)`)
 
         for (const appliance of appliances) {
           expect(typeof appliance.applianceId).toBe('string')
@@ -110,18 +113,18 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
           expect(typeof appliance.applianceType).toBe('string')
           expect(typeof appliance.created).toBe('string')
 
-          console.log(`  - ${appliance.applianceName} (${appliance.applianceId})`)
+          log.info(`  - ${appliance.applianceName} (${appliance.applianceId})`)
         }
 
-        console.log('✓ Appliance list structure matches type definition')
+        log.info('Appliance list structure matches type definition')
       } else {
-        console.warn('⚠ No appliances found in account. Some tests will be skipped.')
+        log.warn('No appliances found in account. Some tests will be skipped.')
       }
     })
 
     it('should fetch appliance info for each appliance', async () => {
       if (!appliances || appliances.length === 0) {
-        console.warn('⚠ Skipping: No appliances available')
+        log.warn('Skipping: No appliances available')
         return
       }
 
@@ -139,8 +142,8 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
           expect(info.applianceInfo).toHaveProperty('model')
           expect(info.capabilities).toBeDefined()
 
-          console.log(
-            `✓ ${stub.applianceName}: ${info.applianceInfo.brand} ${info.applianceInfo.model} (${info.applianceInfo.deviceType})`,
+          log.info(
+            `${stub.applianceName}: ${info.applianceInfo.brand} ${info.applianceInfo.model} (${info.applianceInfo.deviceType})`,
           )
         }
       }
@@ -148,7 +151,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
     it('should fetch appliance state for each appliance', async () => {
       if (!appliances || appliances.length === 0) {
-        console.warn('⚠ Skipping: No appliances available')
+        log.warn('Skipping: No appliances available')
         return
       }
 
@@ -169,8 +172,8 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
           expect(state.properties).toHaveProperty('reported')
 
           const reported = state.properties.reported
-          console.log(
-            `✓ ${stub.applianceName}: state=${reported.applianceState}, mode=${reported.mode}, temp=${reported.targetTemperatureC}°C`,
+          log.info(
+            `${stub.applianceName}: state=${reported.applianceState}, mode=${reported.mode}, temp=${reported.targetTemperatureC}°C`,
           )
         }
       }
@@ -180,13 +183,13 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
   describe('Snapshot Management', () => {
     it('should save snapshots organized by model', async () => {
       if (!appliances || appliances.length === 0) {
-        console.warn('⚠ Skipping: No appliances available')
+        log.warn('Skipping: No appliances available')
         return
       }
 
       // Save appliances list at the snapshot root
       writeSnapshot(path.join(SNAPSHOT_DIR, 'appliances-list.json'), appliances)
-      console.log('✓ Saved appliances-list.json')
+      log.info('Saved appliances-list.json')
 
       // Save per-appliance snapshots under model-specific directories
       for (const stub of appliances) {
@@ -204,7 +207,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
           writeSnapshot(path.join(modelPath, 'appliance-state.json'), state)
         }
 
-        console.log(`✓ Saved ${modelDir}/appliance-info.json and appliance-state.json`)
+        log.info(`Saved ${modelDir}/appliance-info.json and appliance-state.json`)
       }
     })
 
@@ -219,7 +222,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
         const prevInfo = readSnapshot<ApplianceInfo>(path.join(SNAPSHOT_DIR, modelDir, 'appliance-info.json'))
 
         if (!prevInfo) {
-          console.log(`ℹ No previous snapshot for ${modelDir}. Run again to enable comparison.`)
+          log.info(`No previous snapshot for ${modelDir}. Run again to enable comparison.`)
           continue
         }
 
@@ -231,13 +234,13 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
         const newKeys = currentKeys.filter((k) => !previousKeys.includes(k))
 
         if (missingKeys.length > 0) {
-          console.warn(`⚠ ${modelDir}: Capabilities removed:`, missingKeys)
+          log.warn(`${modelDir}: Capabilities removed:`, missingKeys)
         }
         if (newKeys.length > 0) {
-          console.log(`✓ ${modelDir}: New capabilities:`, newKeys)
+          log.info(`${modelDir}: New capabilities:`, newKeys)
         }
         if (missingKeys.length === 0 && newKeys.length === 0) {
-          console.log(`✓ ${modelDir}: Capabilities structure unchanged`)
+          log.info(`${modelDir}: Capabilities structure unchanged`)
         }
       }
 
@@ -250,7 +253,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
       await client.ensureValidToken()
 
       expect(client.isLoggedIn).toBe(true)
-      console.log('✓ Token validation successful')
+      log.info('Token validation successful')
     })
   })
 })

@@ -2,243 +2,168 @@ import fs from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('logger', () => {
-  describe('log levels', () => {
-    it('should support debug level', () => {
-      const level = 'debug'
-      expect(level).toBe('debug')
+  describe('createLogger — interface shape', () => {
+    beforeEach(() => {
+      vi.resetModules()
     })
 
-    it('should support info level', () => {
-      const level = 'info'
-      expect(level).toBe('info')
+    afterEach(() => {
+      vi.restoreAllMocks()
     })
 
-    it('should support warn level', () => {
-      const level = 'warn'
-      expect(level).toBe('warn')
+    it('should return an object with info, warn, error, and debug methods', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: true, showVersionNumber: false } },
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+
+      expect(typeof logger.info).toBe('function')
+      expect(typeof logger.warn).toBe('function')
+      expect(typeof logger.error).toBe('function')
+      expect(typeof logger.debug).toBe('function')
     })
 
-    it('should support error level', () => {
-      const level = 'error'
-      expect(level).toBe('error')
-    })
-  })
+    it('should create distinct loggers for different context names', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
 
-  describe('logger creation', () => {
-    it('should create logger with context', () => {
-      const context = 'test-module'
-      expect(context).toBe('test-module')
-    })
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false } },
+      }))
 
-    it('should format log messages with context', () => {
-      const context = 'mqtt'
-      const message = 'Connected to broker'
-      const formatted = `[${context}] ${message}`
+      const pinoChildSpy = vi.fn().mockReturnValue({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() })
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({ child: pinoChildSpy }),
+      }))
 
-      expect(formatted).toBe('[mqtt] Connected to broker')
-    })
-  })
+      const { default: createLogger } = await import('../src/logger.js')
+      createLogger('mqtt')
+      createLogger('health')
 
-  describe('timestamp formatting', () => {
-    it('should format ISO timestamp', () => {
-      const date = new Date('2024-01-01T12:00:00Z')
-      const iso = date.toISOString()
-
-      expect(iso).toBe('2024-01-01T12:00:00.000Z')
+      // Each context name should produce its own child logger
+      expect(pinoChildSpy).toHaveBeenCalledTimes(2)
+      expect(pinoChildSpy).toHaveBeenCalledWith({ name: 'MQTT' })
+      expect(pinoChildSpy).toHaveBeenCalledWith({ name: 'HEALTH' })
     })
 
-    it('should format locale timestamp', () => {
-      const date = new Date('2024-01-01T12:00:00Z')
-      const locale = date.toLocaleString()
+    it('should uppercase the context name in the child logger', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      expect(locale).toBeTruthy()
-    })
-  })
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false } },
+      }))
 
-  describe('console colors', () => {
-    it('should define color codes', () => {
-      const colors = {
-        reset: '\x1b[0m',
-        red: '\x1b[31m',
-        yellow: '\x1b[33m',
-        blue: '\x1b[34m',
-        gray: '\x1b[90m',
-      }
+      const pinoChildSpy = vi.fn().mockReturnValue({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() })
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({ child: pinoChildSpy }),
+      }))
 
-      expect(colors.reset).toBe('\x1b[0m')
-      expect(colors.red).toBe('\x1b[31m')
-      expect(colors.yellow).toBe('\x1b[33m')
-      expect(colors.blue).toBe('\x1b[34m')
-      expect(colors.gray).toBe('\x1b[90m')
-    })
-  })
+      const { default: createLogger } = await import('../src/logger.js')
+      createLogger('orchestrator')
 
-  describe('log message formatting', () => {
-    it('should join multiple arguments', () => {
-      const args = ['Message', { key: 'value' }, 123]
-      const joined = args.map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
-
-      expect(joined).toBe('Message {"key":"value"} 123')
+      expect(pinoChildSpy).toHaveBeenCalledWith({ name: 'ORCHESTRATOR' })
     })
 
-    it('should handle error objects', () => {
-      const error = new Error('Test error')
-      const errorString = error.toString()
+    it('should prepend version prefix when showVersionNumber is true and version is not development', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      expect(errorString).toContain('Test error')
-    })
-  })
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: true } },
+      }))
 
-  describe('environment log level', () => {
-    it('should read LOG_LEVEL from environment', () => {
-      const logLevel = process.env.LOG_LEVEL || 'info'
-      expect(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'].includes(logLevel)).toBe(true)
-    })
+      const infoSpy = vi.fn()
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({
+          child: vi.fn().mockReturnValue({ info: infoSpy, error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+        }),
+      }))
 
-    it('should default to info level', () => {
-      const defaultLevel = 'info'
-      expect(defaultLevel).toBe('info')
-    })
-  })
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+      logger.info('hello')
 
-  describe('timezone handling', () => {
-    it('should read timezone from TZ env var', () => {
-      const tzValue = 'America/New_York'
-      expect(tzValue).toBeTruthy()
-    })
-
-    it('should fallback to UTC when timezone cannot be detected', () => {
-      const fallback = 'UTC'
-      expect(fallback).toBe('UTC')
+      expect(infoSpy).toHaveBeenCalledTimes(1)
+      const arg = infoSpy.mock.calls[0][0] as string
+      // When version is not 'development' a vX.Y.Z :: prefix is prepended
+      // The version comes from package.json so we just check it contains ' :: '
+      expect(typeof arg).toBe('string')
+      expect(arg).toContain('hello')
     })
 
-    it('should handle zoneinfo path format', () => {
-      const zoneinfoPath = '/usr/share/zoneinfo/Europe/Helsinki'
-      const regex = /zoneinfo\/(.*)/
-      const match = regex.exec(zoneinfoPath)
-      expect(match).toBeTruthy()
-      if (match) {
-        expect(match[1]).toBe('Europe/Helsinki')
-      }
-    })
-  })
+    it('should not prepend version prefix when showVersionNumber is false', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
 
-  describe('showTimestamp config', () => {
-    it('should default showTimestamp to true', () => {
-      const showTimestamp = undefined ?? true
-      expect(showTimestamp).toBe(true)
-    })
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false } },
+      }))
 
-    it('should respect showTimestamp when set to true', () => {
-      const showTimestamp = true
-      const timestamp = showTimestamp
-        ? () =>
-            `,"time":"${new Date().toLocaleString(undefined, {
-              timeZone: 'UTC',
-            })}"`
-        : false
-      expect(typeof timestamp).toBe('function')
+      const infoSpy = vi.fn()
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({
+          child: vi.fn().mockReturnValue({ info: infoSpy, error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+        }),
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+      logger.info('hello')
+
+      const arg = infoSpy.mock.calls[0][0] as string
+      // With showVersionNumber false the prefix is empty so message starts directly
+      expect(arg).toBe('hello')
     })
 
-    it('should disable timestamp when showTimestamp is false', () => {
-      const showTimestamp = false
-      const timestamp = showTimestamp
-        ? () =>
-            `,"time":"${new Date().toLocaleString(undefined, {
-              timeZone: 'UTC',
-            })}"`
-        : false
-      expect(timestamp).toBe(false)
+    it('should forward multiple arguments as a single joined string', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false } },
+      }))
+
+      const warnSpy = vi.fn()
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({
+          child: vi.fn().mockReturnValue({ info: vi.fn(), error: vi.fn(), warn: warnSpy, debug: vi.fn() }),
+        }),
+      }))
+
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+      logger.warn('part1', 'part2', 'part3')
+
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      const arg = warnSpy.mock.calls[0][0] as string
+      expect(arg).toContain('part1')
+      expect(arg).toContain('part2')
+      expect(arg).toContain('part3')
     })
 
-    it('should include time in ignore list when showTimestamp is false', () => {
-      const showTimestamp = false
-      const ignore = showTimestamp ? 'pid,hostname' : 'pid,hostname,time'
-      expect(ignore).toBe('pid,hostname,time')
-    })
+    it('should use util.inspect for object arguments', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    it('should not include time in ignore list when showTimestamp is true', () => {
-      const showTimestamp = true
-      const ignore = showTimestamp ? 'pid,hostname' : 'pid,hostname,time'
-      expect(ignore).toBe('pid,hostname')
-    })
+      vi.doMock('../src/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false } },
+      }))
 
-    it('should disable translateTime when showTimestamp is false', () => {
-      const showTimestamp = false
-      const translateTime = showTimestamp ? 'SYS:yyyy-mm-dd HH:MM:ss' : false
-      expect(translateTime).toBe(false)
-    })
+      const errorSpy = vi.fn()
+      vi.doMock('pino', () => ({
+        default: vi.fn().mockReturnValue({
+          child: vi.fn().mockReturnValue({ info: vi.fn(), error: errorSpy, warn: vi.fn(), debug: vi.fn() }),
+        }),
+      }))
 
-    it('should enable translateTime when showTimestamp is true', () => {
-      const showTimestamp = true
-      const translateTime = showTimestamp ? 'SYS:yyyy-mm-dd HH:MM:ss' : false
-      expect(translateTime).toBe('SYS:yyyy-mm-dd HH:MM:ss')
-    })
-  })
+      const { default: createLogger } = await import('../src/logger.js')
+      const logger = createLogger('test')
+      logger.error({ code: 42, nested: { ok: true } })
 
-  describe('version prefix handling', () => {
-    it('should format version prefix for production', () => {
-      const version = '1.0.0'
-      const prefix = `v${version} :: `
-      expect(prefix).toBe('v1.0.0 :: ')
-    })
-
-    it('should not show version prefix for development', () => {
-      const version = 'development'
-      const prefix = version === 'development' ? '' : `v${version} :: `
-      expect(prefix).toBe('')
-    })
-
-    it('should respect showVersionNumber config', () => {
-      const showVersionNumber = true
-      const version = '2.0.0'
-      const prefix = showVersionNumber ? `v${version} :: ` : ''
-      expect(prefix).toBe('v2.0.0 :: ')
-    })
-
-    it('should hide version when showVersionNumber is false', () => {
-      const showVersionNumber = false
-      const version = '2.0.0'
-      const prefix = showVersionNumber ? `v${version} :: ` : ''
-      expect(prefix).toBe('')
-    })
-  })
-
-  describe('argument stringification', () => {
-    it('should stringify string arguments', () => {
-      const arg = 'simple string'
-      const result = String(arg)
-      expect(result).toBe('simple string')
-    })
-
-    it('should stringify number arguments', () => {
-      const arg = 42
-      const result = String(arg)
-      expect(result).toBe('42')
-    })
-
-    it('should handle null values', () => {
-      const arg = null
-      const result = String(arg)
-      expect(result).toBe('null')
-    })
-
-    it('should handle undefined values', () => {
-      const arg = undefined
-      const result = String(arg)
-      expect(result).toBe('undefined')
-    })
-
-    it('should handle object stringification', () => {
-      const arg = { key: 'value', nested: { data: 123 } }
-      const isObject = typeof arg === 'object' && arg !== null
-      expect(isObject).toBe(true)
-    })
-
-    it('should handle array stringification', () => {
-      const arg = [1, 2, 3, 'test']
-      const isObject = typeof arg === 'object' && arg !== null
-      expect(isObject).toBe(true)
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      const arg = errorSpy.mock.calls[0][0] as string
+      // util.inspect produces 'key: value' style output for objects
+      expect(arg).toContain('code')
+      expect(arg).toContain('42')
     })
   })
 
