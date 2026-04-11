@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "dev:docker": "NODE_VERSION=$(cat ../.nvmrc) docker compose down ; NODE_VERSION=$(cat ../.nvmrc) docker compose up --build"
+    "dev:docker": "NODE_VERSION=$(cat ../.nvmrc) docker compose down ; NODE_VERSION=$(cat ../.nvmrc) docker compose up --build",
+    "deps:check": "pnpm outdated ; pnpm audit",
+    "deps:update": "pnpm update --latest && pnpm install"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
