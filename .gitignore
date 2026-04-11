@@ -16,3 +16,4 @@ tests/e2e/snapshots
 .env.*
 !.env.example
 .scannerwork
+**.original.md

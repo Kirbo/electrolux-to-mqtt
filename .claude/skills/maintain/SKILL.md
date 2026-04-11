@@ -2,19 +2,23 @@
 name: maintain
 description: Update dependencies, fix vulnerabilities, resolve breakage
 disable-model-invocation: true
+context: fork
+agent: maintainer
+model: sonnet
+effort: medium
 ---
 
-Update all dependencies and fix any issues.
+Update all deps. Fix issues.
 
 ## Checklist
 
 ### 1. Dependency audit
-- [ ] `pnpm deps:check` — list outdated packages and vulnerabilities
+- [ ] `pnpm deps:check` — list outdated + vulns
 
 ### 2. Update dependencies
-- [ ] `pnpm deps:update` — update all to latest
-- [ ] Watch for breaking changes (major bumps)
-- [ ] Verify peer dependency compatibility for major bumps
+- [ ] `pnpm deps:update` — bump all latest
+- [ ] Watch breaking changes (major bumps)
+- [ ] Verify peer dep compat for major bumps
 
 ### 3. Docker base image
 - [ ] Check latest Node.js LTS → update `.nvmrc`, `package.json` `engines`, `docker/Dockerfile` `NODE_VERSION`
@@ -25,4 +29,4 @@ Update all dependencies and fix any issues.
 - [ ] `corepack use pnpm@latest`
 
 ### 5. Verify and fix
-- [ ] Run CLAUDE.md § Verification. Fix breakage and re-run until clean.
+- [ ] Run CLAUDE.md § Verification. Fix breakage, re-run til clean.

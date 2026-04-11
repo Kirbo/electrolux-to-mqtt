@@ -313,7 +313,7 @@ Added instructions for Docker Compose setup
 
 ## AI-Assisted Development
 
-This project supports AI-assisted development with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) for details on available skills (`/implement`, `/audit`, `/maintain`), rules, and how the configuration works.
+This project supports AI-assisted development with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) for details on available skills (`/audit`, `/maintain`), the always-loaded `implement.md` rules file, and how the configuration works.
 
 ## Submitting Changes
 
