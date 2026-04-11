@@ -300,17 +300,18 @@ audit:
 sonarcloud-check:
   stage: test
   <<: *rules_node_changes
+  timeout: 5 minutes
+  retry: 2
+  interruptible: true
+  allow_failure: false
   image:
     name: sonarsource/sonar-scanner-cli:latest
     entrypoint: [""]
   cache:
-    key:
-      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
-      files:
-        - pnpm-lock.yaml
+    key: sonar-${CI_DEFAULT_BRANCH}
     paths:
       - .sonar/cache
-    policy: pull
+    policy: pull-push
   needs:
     - job: bump version
       artifacts: true
@@ -609,7 +610,5 @@ update dockerhub description:
     - job: build and deploy docker images
       artifacts: false
       optional: true
-  before_script:
-    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
   script:
     - "--pipeline"
