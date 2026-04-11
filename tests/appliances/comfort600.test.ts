@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Comfort600Appliance } from '../../src/appliances/comfort600.js'
+import { Comfort600Appliance, isFanSpeedAction, isSleepAction, isTempAction } from '../../src/appliances/comfort600.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '../../src/types.js'
 
 // Mock data
@@ -745,6 +745,118 @@ describe('Comfort600Appliance', () => {
       const modes = app.getSupportedModes()
       expect(modes).not.toContain('turbo')
       expect(modes).toContain('cool')
+    })
+  })
+
+  describe('action type guards', () => {
+    describe('isFanSpeedAction', () => {
+      it('accepts a valid fan speed action with values', () => {
+        expect(isFanSpeedAction({ access: 'readwrite', values: { HIGH: {}, LOW: {} } })).toBe(true)
+      })
+
+      it('accepts a fan speed action with only access (no values)', () => {
+        expect(isFanSpeedAction({ access: 'read' })).toBe(true)
+      })
+
+      it('accepts an empty object (all fields optional)', () => {
+        expect(isFanSpeedAction({})).toBe(true)
+      })
+
+      it('rejects null', () => {
+        expect(isFanSpeedAction(null)).toBe(false)
+      })
+
+      it('rejects a string', () => {
+        expect(isFanSpeedAction('HIGH')).toBe(false)
+      })
+
+      it('rejects a number', () => {
+        expect(isFanSpeedAction(42)).toBe(false)
+      })
+
+      it('rejects an array', () => {
+        expect(isFanSpeedAction(['HIGH', 'LOW'])).toBe(false)
+      })
+
+      it('rejects when access is not a string', () => {
+        expect(isFanSpeedAction({ access: 123 })).toBe(false)
+      })
+
+      it('rejects when values is not a plain object', () => {
+        expect(isFanSpeedAction({ values: ['HIGH', 'LOW'] })).toBe(false)
+      })
+
+      it('rejects when values is a string', () => {
+        expect(isFanSpeedAction({ values: 'HIGH' })).toBe(false)
+      })
+    })
+
+    describe('isTempAction', () => {
+      it('accepts a valid temp action with all fields', () => {
+        expect(isTempAction({ disabled: true, min: 16, max: 32 })).toBe(true)
+      })
+
+      it('accepts a temp action with no optional fields', () => {
+        expect(isTempAction({})).toBe(true)
+      })
+
+      it('accepts a temp action with only min/max', () => {
+        expect(isTempAction({ min: 16, max: 32 })).toBe(true)
+      })
+
+      it('accepts a temp action with disabled: false', () => {
+        expect(isTempAction({ disabled: false })).toBe(true)
+      })
+
+      it('rejects null', () => {
+        expect(isTempAction(null)).toBe(false)
+      })
+
+      it('rejects a string', () => {
+        expect(isTempAction('disabled')).toBe(false)
+      })
+
+      it('rejects when disabled is not a boolean', () => {
+        expect(isTempAction({ disabled: 'yes' })).toBe(false)
+      })
+
+      it('rejects when min is not a number', () => {
+        expect(isTempAction({ min: '16' })).toBe(false)
+      })
+
+      it('rejects when max is not a number', () => {
+        expect(isTempAction({ max: '32' })).toBe(false)
+      })
+    })
+
+    describe('isSleepAction', () => {
+      it('accepts a sleep action with disabled: true', () => {
+        expect(isSleepAction({ disabled: true })).toBe(true)
+      })
+
+      it('accepts a sleep action with disabled: false', () => {
+        expect(isSleepAction({ disabled: false })).toBe(true)
+      })
+
+      it('accepts an empty object (disabled is optional)', () => {
+        expect(isSleepAction({})).toBe(true)
+      })
+
+      it('rejects null', () => {
+        expect(isSleepAction(null)).toBe(false)
+      })
+
+      it('rejects a string', () => {
+        expect(isSleepAction('disabled')).toBe(false)
+      })
+
+      it('rejects when disabled is not a boolean', () => {
+        expect(isSleepAction({ disabled: 1 })).toBe(false)
+      })
+
+      it('rejects when disabled is a string', () => {
+        expect(isSleepAction({ disabled: 'true' })).toBe(false)
+      })
     })
   })
 

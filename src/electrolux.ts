@@ -39,6 +39,21 @@ function isApplianceInfo(value: unknown): value is ApplianceInfo {
   return typeof value === 'object' && value !== null && 'applianceInfo' in value && 'capabilities' in value
 }
 
+function isApplianceStub(value: unknown): value is ApplianceStub {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'applianceId' in value &&
+    'applianceName' in value &&
+    'applianceType' in value &&
+    'created' in value
+  )
+}
+
+function isApplianceStubArray(value: unknown): value is ApplianceStub[] {
+  return Array.isArray(value) && value.every(isApplianceStub)
+}
+
 // Configuration constants
 const RENEW_TOKEN_BEFORE_EXPIRY_MS = (config.electrolux.renewTokenBeforeExpiry ?? 60) * 60 * 1000
 const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
@@ -793,9 +808,12 @@ export class ElectroluxClient {
         throw new Error('API client is not initialized')
       }
       const response = await this.client.get('/api/v1/appliances')
-      const appliances = response.data satisfies ApplianceStub[]
-      this.logApplianceChanges(appliances)
-      return appliances
+      const data: unknown = response.data
+      if (!isApplianceStubArray(data)) {
+        throw new Error('Invalid appliances response')
+      }
+      this.logApplianceChanges(data)
+      return data
     }, 'Error getting appliances')
   }
 

@@ -19,6 +19,7 @@ export default defineConfig({
         '**/types/',
         'tests/',
         'src/index.ts', // Main entry point (integration tested separately)
+        'telemetry-backend/**', // Separate package with its own test suite
         'package.json',
       ],
       // Coverage thresholds set slightly below current values to allow flexibility

@@ -9,6 +9,44 @@ import {
   normalizeFanSpeed,
 } from './normalizers.js'
 
+/**
+ * Runtime type guard for the fanSpeedSetting action shape returned by
+ * Electrolux API trigger actions. All fields are optional.
+ */
+export function isFanSpeedAction(value: unknown): value is { access?: string; values?: Record<string, unknown> } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const v = value as Record<string, unknown>
+  if ('access' in v && typeof v.access !== 'string') return false
+  if ('values' in v) {
+    if (typeof v.values !== 'object' || v.values === null || Array.isArray(v.values)) return false
+  }
+  return true
+}
+
+/**
+ * Runtime type guard for the targetTemperatureC action shape returned by
+ * Electrolux API trigger actions. All fields are optional.
+ */
+export function isTempAction(value: unknown): value is { disabled?: boolean; min?: number; max?: number } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const v = value as Record<string, unknown>
+  if ('disabled' in v && typeof v.disabled !== 'boolean') return false
+  if ('min' in v && typeof v.min !== 'number') return false
+  if ('max' in v && typeof v.max !== 'number') return false
+  return true
+}
+
+/**
+ * Runtime type guard for the sleepMode action shape returned by
+ * Electrolux API trigger actions. The disabled field is optional.
+ */
+export function isSleepAction(value: unknown): value is { disabled?: boolean } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const v = value as Record<string, unknown>
+  if ('disabled' in v && typeof v.disabled !== 'boolean') return false
+  return true
+}
+
 // Maps API mode values to HA climate modes (handles FANONLY → fan_only)
 const API_MODE_TO_HA: Record<string, HAClimateMode> = {
   AUTO: 'auto',
@@ -200,10 +238,12 @@ export class Comfort600Appliance extends BaseAppliance {
     mode: NormalizedClimateMode,
     trigger: { action: Record<string, unknown> },
   ): CommandValidationResult {
-    const fanAction = trigger.action.fanSpeedSetting as
-      | { access?: string; values?: Record<string, unknown> }
-      | undefined
-    if (!fanAction?.values) {
+    const raw = trigger.action.fanSpeedSetting
+    if (!isFanSpeedAction(raw)) {
+      return { valid: true }
+    }
+    const fanAction = raw
+    if (!fanAction.values) {
       return { valid: true }
     }
 
@@ -230,12 +270,11 @@ export class Comfort600Appliance extends BaseAppliance {
     mode: NormalizedClimateMode,
     trigger: { action: Record<string, unknown> },
   ): CommandValidationResult {
-    const tempAction = trigger.action.targetTemperatureC as
-      | { disabled?: boolean; min?: number; max?: number }
-      | undefined
-    if (!tempAction) {
+    const rawTemp = trigger.action.targetTemperatureC
+    if (rawTemp === undefined || !isTempAction(rawTemp)) {
       return { valid: true }
     }
+    const tempAction = rawTemp
 
     if (tempAction.disabled) {
       return { valid: false, reason: `temperature control is disabled in '${mode}' mode` }
@@ -262,8 +301,12 @@ export class Comfort600Appliance extends BaseAppliance {
     mode: NormalizedClimateMode,
     trigger: { action: Record<string, unknown> },
   ): CommandValidationResult {
-    const sleepAction = trigger.action.sleepMode as { disabled?: boolean } | undefined
-    if (sleepAction?.disabled) {
+    const rawSleep = trigger.action.sleepMode
+    if (!isSleepAction(rawSleep)) {
+      return { valid: true }
+    }
+    const sleepAction = rawSleep
+    if (sleepAction.disabled) {
       return { valid: false, reason: `sleep mode is disabled in '${mode}' mode` }
     }
     return { valid: true }

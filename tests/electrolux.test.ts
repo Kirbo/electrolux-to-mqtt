@@ -1338,6 +1338,15 @@ describe('electrolux', () => {
 
         expect(appliances).toBeUndefined()
       })
+
+      it('should return undefined when API response is not a valid ApplianceStub array', async () => {
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: { unexpected: 'shape' } })
+
+        await client.initialize()
+        const appliances = await client.getAppliances()
+
+        expect(appliances).toBeUndefined()
+      })
     })
 
     describe('getApplianceInfo', () => {
