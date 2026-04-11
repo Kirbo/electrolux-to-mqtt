@@ -22,7 +22,7 @@ Update all deps. Fix issues.
 
 ### 3. Docker base image
 - [ ] Check https://hub.docker.com/hardened-images/catalog/dhi/node/images for latest LTS Node + Alpine tag (e.g. `24-alpine3.23`)
-- [ ] **Node LTS major bumped** → update **major version only** (no minor/patch) in every location:
+- [ ] **Node LTS major bumped** → update **major only** (no minor/patch) everywhere:
   - `.nvmrc` → `<major>`
   - `package.json` `engines.node` → `>=<major>`
   - `docker/Dockerfile` `ARG NODE_VERSION` → `<major>-alpine<X.Y>`
@@ -30,7 +30,7 @@ Update all deps. Fix issues.
   - `docker/docker-compose.local.yml` + `docker/docker-compose.local.example.yml` `NODE_VERSION:-<major>`
   - `telemetry-backend/Dockerfile` `ARG NODE_VERSION` → `<major>`
   - `telemetry-backend/docker-compose.yml` `NODE_VERSION:-<major>`
-- [ ] **Alpine version bumped** → update in every location:
+- [ ] **Alpine bumped** → update everywhere:
   - `docker/Dockerfile` `ARG NODE_VERSION` → `<major>-alpine<X.Y>`
   - `.gitlab-ci.yml` `echo "NODE_VERSION=$(cat .nvmrc)-alpine<X.Y>"` line
 

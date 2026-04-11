@@ -6,7 +6,7 @@ type: project
 
 ## Watch list for future audits
 
-- Whenever `.claude/agents/`, `.claude/rules/`, or `.claude/skills/` change, check `AI_DEVELOPMENT.md` and `CONTRIBUTING.md` for sync
-- Check README env var table against `envSchema` field list after any config changes
-- Check `config.example.yml` against `configSchema` fields after any config changes
-- Whenever the instructions file location changes, re-check `AI_DEVELOPMENT.md` and `CONTRIBUTING.md` for stale path references
+- `.claude/agents/`, `.claude/rules/`, `.claude/skills/` change → check `AI_DEVELOPMENT.md` + `CONTRIBUTING.md` sync
+- README env var table vs `envSchema` field list → check after config changes
+- `config.example.yml` vs `configSchema` fields → check after config changes
+- Instructions file location changes → re-check `AI_DEVELOPMENT.md` + `CONTRIBUTING.md` for stale paths

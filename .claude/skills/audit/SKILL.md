@@ -8,21 +8,21 @@ model: opus[1m]
 effort: max
 ---
 
-Run comprehensive codebase review. Checklist = minimum baseline — flag unlisted issues, suggest new checklist items.
+Run full codebase audit. Checklist = minimum baseline — flag unlisted issues, suggest new items.
 
-**Skill audits → plans → delegates → re-verifies → reconciles memory.** Audit phases never patch files directly. Findings drafted into delegation plan (BLOCKER + MAJOR + MINOR pre-marked, NIT listed), presented to user for explicit approval, delegated to `engineer` only on user go-ahead. One delegation cycle per invocation — engineer fails to fix → stop, do not re-delegate.
+**Skill audits → plans → delegates → re-verifies → reconciles memory.** Audit phases never patch files directly. Findings drafted into delegation plan (BLOCKER + MAJOR + MINOR pre-marked, NIT listed), presented for explicit approval, delegated to `engineer` only on user go-ahead. One delegation cycle per invocation — engineer fails → stop, no re-delegation.
 
 ## Ground rules
 
-- Every finding confirmed by reading actual file content — no assumptions.
+- Every finding confirmed by reading actual file — no assumptions.
 - Check findings vs CLAUDE.md rules before flagging — documented conventions intentional.
 - Test imports count as external usage (exports used only by tests not dead).
-- Audit phases never patch files directly. Fixes happen only via Phase 5 engineer delegation, after Phase 4 user approval.
-- One delegation cycle maximum per invocation. Engineer fails → stop + report, do not re-delegate.
+- Audit phases never patch files. Fixes only via Phase 5 engineer delegation, after Phase 4 approval.
+- One delegation cycle max per invocation. Engineer fails → stop + report, no re-delegation.
 
 ## Phases
 
-Execute in order. No skip, no reorder. Phase 4 is the only interactive gate — all other phases run automatically.
+Execute in order. No skip, no reorder. Phase 4 only interactive gate — all others run automatically.
 
 ### Phase 1 — Automated checks
 Parallel: `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm sonar`. Telemetry-backend in scope → add `cd telemetry-backend && pnpm typecheck && pnpm test`. Capture failure output verbatim.
@@ -41,24 +41,24 @@ Zero findings → skip to Phase 7. Else draft delegation plan:
 Present plan to user. Wait for explicit approval — user decides which items delegate, which drop, which add (e.g. NIT they want fixed). **No delegation without user approval.** User says "none" / "skip" → jump to Phase 7.
 
 ### Phase 5 — Delegate (conditional)
-User approved items → spawn `engineer` via Agent tool. Single prompt bundling all approved findings: file:line, rule violated, severity, recommended fix, which verification commands must pass. Engineer runs TDD pipeline end-to-end per its own contract. Capture from engineer return: files changed, findings reported fixed, verification pipeline status.
+Approved items → spawn `engineer` via Agent tool. Single prompt bundling all approved findings: file:line, rule violated, severity, recommended fix, verification commands required. Engineer runs TDD pipeline end-to-end per its own contract. Capture from engineer return: files changed, findings fixed, verification pipeline status.
 
 ### Phase 6 — Re-verify (conditional, one cycle only)
 Phase 5 ran →
-1. Read each file engineer reported as changed.
-2. Confirm each delegated finding is actually addressed (e.g. `as` cast replaced with guard, not just moved).
-3. Re-run only the specific automated checks tied to delegated fixes — NOT full Phase 1.
-4. Any finding still present or engineer's verification pipeline failed → **STOP**. Report gap verbatim. Do NOT re-delegate. User re-invokes `/audit` or intervenes manually.
+1. Read each file engineer reported changed.
+2. Confirm each delegated finding actually addressed (e.g. `as` cast replaced with guard, not just moved).
+3. Re-run only specific automated checks tied to delegated fixes — NOT full Phase 1.
+4. Finding still present or engineer's verification pipeline failed → **STOP**. Report gap verbatim. No re-delegation. User re-invokes `/audit` or intervenes manually.
 
 One delegation cycle per `/audit` invocation. No loops.
 
 ### Phase 7 — Memory reconciliation
 Final phase. Runs every invocation — even zero-findings runs (still verify existing memory current).
 
-Update `.claude/agent-memory/auditor/` to reflect END state of the full cycle, not interim findings:
+Update `.claude/agent-memory/auditor/` to reflect END state of full cycle, not interim findings:
 
-- Recurring violation pattern (same rule broken across multiple audits) → save/update heuristic memory. Record the pattern + detection hint (grep pattern, file glob), NOT the specific fix.
-- Engineer closed an issue matching an existing memory entry → UPDATE or REMOVE that entry. No stale "open gap" memories.
+- Recurring violation pattern (same rule broken across multiple audits) → save/update heuristic memory. Record pattern + detection hint (grep pattern, file glob), NOT specific fix.
+- Engineer closed issue matching existing memory entry → UPDATE or REMOVE that entry. No stale "open gap" memories.
 - Zero findings this run + existing entry → verify still valid by reading referenced files. Stale → remove.
 - One-off finding unlikely to recur → do not save.
 
