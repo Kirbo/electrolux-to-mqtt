@@ -61,8 +61,10 @@ async function rateLimitByIp(req: Request, res: Response, next: () => void) {
 
 async function getUserKeys(): Promise<string[]> {
   const keys: string[] = []
-  for await (const key of redis.scanIterator({ MATCH: 'user:*', COUNT: 1000 })) {
-    keys.push(String(key))
+  // node-redis v5 yields an array of keys per SCAN batch (breaking change from v4,
+  // which yielded individual keys). Spread each batch into the accumulator.
+  for await (const batch of redis.scanIterator({ MATCH: 'user:*', COUNT: 1000 })) {
+    keys.push(...batch)
   }
   return keys
 }
