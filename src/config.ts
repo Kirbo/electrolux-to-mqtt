@@ -106,6 +106,7 @@ const configSchema = z.object({
     })
     .optional()
     .transform((val) => val ?? { enabled: true, filePath: '/tmp/e2m-health' }),
+  telemetryEnabled: z.boolean().default(true),
 })
 
 type AppConfig = z.infer<typeof configSchema>
@@ -174,6 +175,10 @@ const envSchema = z.object({
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   HEALTH_CHECK_FILE_PATH: z.string().optional(),
+  E2M_TELEMETRY_ENABLED: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
 })
 
 // Maps configSchema YAML paths to env var names for error reporting
@@ -204,6 +209,7 @@ const configPathToEnvVar: Record<string, string> = {
   'versionCheck.ntfyWebhookUrl': 'VERSION_CHECK_NTFY_WEBHOOK_URL',
   'healthCheck.enabled': 'HEALTH_CHECK_ENABLED',
   'healthCheck.filePath': 'HEALTH_CHECK_FILE_PATH',
+  telemetryEnabled: 'E2M_TELEMETRY_ENABLED',
 }
 
 function handleValidationError(error: unknown, useEnvVarNames: boolean): never | undefined {
@@ -303,6 +309,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       enabled: envConfig.HEALTH_CHECK_ENABLED,
       filePath: envConfig.HEALTH_CHECK_FILE_PATH,
     }),
+    ...(envConfig.E2M_TELEMETRY_ENABLED !== undefined ? { telemetryEnabled: envConfig.E2M_TELEMETRY_ENABLED } : {}),
   }
 }
 

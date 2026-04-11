@@ -223,8 +223,12 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     return
   }
 
-  // Send telemetry
-  await sendTelemetry(userHash, currentVersion)
+  // Send telemetry (skipped when user has opted out)
+  if (config.telemetryEnabled !== false) {
+    await sendTelemetry(userHash, currentVersion)
+  } else {
+    logger.debug('Telemetry disabled, skipping')
+  }
 
   const latest = await fetchLatestVersion()
 

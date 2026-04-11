@@ -344,6 +344,70 @@ describe('version-checker', () => {
     })
   })
 
+  describe('telemetry opt-out', () => {
+    let moduleWithOptOut: typeof import('../src/version-checker.js')
+
+    beforeEach(async () => {
+      vi.resetModules()
+
+      vi.doMock('../src/config.js', () => ({
+        default: {
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined },
+          telemetryEnabled: false,
+        },
+      }))
+
+      moduleWithOptOut = await import('../src/version-checker.js')
+    })
+
+    it('should skip telemetry POST when telemetryEnabled is false', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+
+      const stopChecker = moduleWithOptOut.startVersionChecker('v1.6.3', 'test-hash-123')
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Version check should still run
+      expect(mockAxiosGet).toHaveBeenCalled()
+      // But telemetry POST should NOT have been called
+      expect(mockAxiosPost).not.toHaveBeenCalledWith(
+        'https://e2m.devaus.eu/telemetry',
+        expect.anything(),
+        expect.anything(),
+      )
+
+      stopChecker()
+    })
+
+    it('should send telemetry when telemetryEnabled is explicitly true', async () => {
+      vi.resetModules()
+      vi.doMock('../src/config.js', () => ({
+        default: {
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined },
+          telemetryEnabled: true,
+        },
+      }))
+      const mod = await import('../src/version-checker.js')
+
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = mod.startVersionChecker('v1.6.3', 'test-hash-123')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        'https://e2m.devaus.eu/telemetry',
+        { userHash: 'test-hash-123', version: 'v1.6.3' },
+        expect.any(Object),
+      )
+
+      stopChecker()
+    })
+  })
+
   describe('telemetry', () => {
     it('should send telemetry with user hash and version', async () => {
       mockAxiosGet.mockResolvedValueOnce({

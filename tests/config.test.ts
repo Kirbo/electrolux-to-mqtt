@@ -866,6 +866,55 @@ homeAssistant:
       writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
+
+    it('should default telemetryEnabled to true in generated config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('telemetryEnabled: true')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should set telemetryEnabled to false when E2M_TELEMETRY_ENABLED=false', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.E2M_TELEMETRY_ENABLED = 'false'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('telemetryEnabled: false')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+
+      delete process.env.E2M_TELEMETRY_ENABLED
+    })
   })
 
   describe('Zod schema validation', () => {
@@ -1433,6 +1482,26 @@ logging:
       expect(config.default.electrolux).toBeDefined()
 
       errorSpy.mockRestore()
+    })
+
+    it('should default telemetryEnabled to true when not specified in config file', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.telemetryEnabled).toBe(true)
+    })
+
+    it('should read telemetryEnabled: false from config file', async () => {
+      const configWithOptOut = `${defaultValidConfig}
+telemetryEnabled: false`
+      fs.writeFileSync(configPath, configWithOptOut, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.telemetryEnabled).toBe(false)
     })
   })
 

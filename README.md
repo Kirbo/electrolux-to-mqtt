@@ -91,6 +91,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`           | ntfy.sh webhook URL for update notifications           | —                      | No       |
 | `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `true`                 | No       |
 | `HEALTH_CHECK_FILE_PATH`                   | Path to health check file                              | `/tmp/e2m-health`      | No       |
+| `E2M_TELEMETRY_ENABLED`                    | Send anonymous usage statistics (opt out with `false`) | `true`                 | No       |
 </details>
 
 ## But how to start?!
@@ -153,6 +154,7 @@ docker run --rm \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
   # -e HEALTH_CHECK_ENABLED=true \
   # -e HEALTH_CHECK_FILE_PATH=/tmp/e2m-health \
+  # -e E2M_TELEMETRY_ENABLED=true \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
 </details>
@@ -223,6 +225,7 @@ services:
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
       # - HEALTH_CHECK_ENABLED=true
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health
+      # - E2M_TELEMETRY_ENABLED=true
 ```
 </details>
 
