@@ -38,4 +38,5 @@ Run E2E snapshot validation (see `/audit` checklist § 11).
 
 ### Telemetry backend (`telemetry-backend/`)
 Rate limiting must run **before** input validation.
+Behavior changes require tests in `telemetry-backend/tests/` (uses Vitest + the in-memory `FakeRedis` helper).
 If build/compose changed: update `Dockerfile`, `docker-compose.yml`, `README.md`.

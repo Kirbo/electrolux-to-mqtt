@@ -50,7 +50,7 @@ Electrolux-to-MQTT bridge — TypeScript service connecting Electrolux appliance
 After any code change:
 1. `pnpm check` — fix lint/format findings.
 2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed: run `pnpm typecheck`, `pnpm test`, `pnpm sonar` — fix all.
-3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck`.
+3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck && pnpm test`.
 4. Skip steps 2–3 for doc/config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
 
 ## Self-maintenance
