@@ -6,6 +6,7 @@ export default defineConfig({
     environment: 'node',
     env: {
       VITEST: 'true',
+      LOG_LEVEL: 'silent',
     },
     setupFiles: ['./vitest.setup.ts'],
     exclude: [

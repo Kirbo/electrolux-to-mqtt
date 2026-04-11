@@ -92,7 +92,7 @@ describe('logger', () => {
   describe('environment log level', () => {
     it('should read LOG_LEVEL from environment', () => {
       const logLevel = process.env.LOG_LEVEL || 'info'
-      expect(['debug', 'info', 'warn', 'error'].includes(logLevel)).toBe(true)
+      expect(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'].includes(logLevel)).toBe(true)
     })
 
     it('should default to info level', () => {
