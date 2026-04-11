@@ -6,6 +6,7 @@ const logger = createLogger('health')
 
 const healthFilePath = config.healthCheck?.filePath ?? '/tmp/e2m-health'
 const healthEnabled = config.healthCheck?.enabled ?? false
+let hasWarnedAboutWriteFailure = false
 
 interface HealthStatus {
   mqttConnected: boolean
@@ -23,7 +24,10 @@ export function writeHealthFile(status?: HealthStatus): void {
   try {
     fs.writeFileSync(healthFilePath, String(Math.floor(Date.now() / 1000)), 'utf8')
   } catch (error) {
-    logger.warn('Failed to write health file:', error)
+    if (!hasWarnedAboutWriteFailure) {
+      logger.warn('Failed to write health file (will not warn again):', error)
+      hasWarnedAboutWriteFailure = true
+    }
   }
 }
 

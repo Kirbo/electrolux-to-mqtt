@@ -10,11 +10,13 @@ vi.mock('../src/config.js', () => ({
   },
 }))
 
+const mockWarn = vi.fn()
+
 vi.mock('../src/logger.js', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: vi.fn(),
-    warn: vi.fn(),
+    warn: mockWarn,
     debug: vi.fn(),
   })),
 }))
@@ -140,6 +142,60 @@ describe('health', () => {
       const { isHealthy } = await import('../src/health.js')
 
       expect(isHealthy(60)).toBe(false)
+    })
+  })
+
+  describe('writeHealthFile write-failure warn-once', () => {
+    let writeSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      mockWarn.mockClear()
+      vi.resetModules()
+      // Re-register the enabled config mock so vi.doMock from the disabled-check
+      // test above does not bleed into these tests after module reset.
+      vi.doMock('../src/config.js', () => ({
+        default: {
+          healthCheck: {
+            enabled: true,
+            filePath: '/tmp/e2m-health-test',
+          },
+        },
+      }))
+      writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        throw new Error('EROFS: read-only file system')
+      })
+    })
+
+    afterEach(() => {
+      writeSpy.mockRestore()
+    })
+
+    it('should log a warning on the first write failure', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+
+      expect(mockWarn).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not log a warning on subsequent write failures after the first', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+      writeHealthFile()
+      writeHealthFile()
+
+      expect(mockWarn).toHaveBeenCalledTimes(1)
+    })
+
+    it('should still attempt fs.writeFileSync on every call even after the first failure', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile()
+      writeHealthFile()
+      writeHealthFile()
+
+      expect(writeSpy).toHaveBeenCalledTimes(3)
     })
   })
 })
