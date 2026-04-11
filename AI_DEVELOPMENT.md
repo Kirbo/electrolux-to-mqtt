@@ -13,13 +13,11 @@ Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This f
 ```
 .claude/
   CLAUDE.md                      # Rules, verification
-  rules/
-    implement.md                 # File checklists per change type (always loaded)
   skills/
     audit/SKILL.md               # /audit — code review checklist
     maintain/SKILL.md            # /maintain — dependency update checklist
   agents/
-    engineer.md                  # TDD implementation work (src/, tests/, docker/, telemetry-backend/)
+    engineer.md                  # TDD implementation work + file checklists (src/, tests/, docker/, telemetry-backend/)
     auditor.md                   # /audit work
     maintainer.md                # /maintain work
 ```

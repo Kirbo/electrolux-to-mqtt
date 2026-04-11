@@ -36,10 +36,10 @@ Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `O
 
 `telemetry-backend/` = standalone pnpm package (own `package.json`, `Dockerfile`, Vitest suite). HTTP surface lives in `src/app.ts` behind `RedisLike` interface (testable via `tests/fake-redis.ts`); `src/index.ts` = thin bootstrap adapting real node-redis v5 client. Rate limiting always runs before payload validation.
 
-API type unions in `src/types.d.ts` and `src/types/normalized.ts` kept in sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. `.claude/rules/implement.md` = per-change-type file checklist; `.claude/skills/{audit,maintain}/` define `/audit` and `/maintain` slash-command workflows.
+API type unions in `src/types.d.ts` and `src/types/normalized.ts` kept in sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. `.claude/agents/engineer.md` = per-change-type file checklists; `.claude/skills/{audit,maintain}/` define `/audit` and `/maintain` slash-command workflows.
 
 ## Subagents
-Implementation work covered by `.claude/rules/implement.md` (changes under `src/`, `tests/`, `docker/`, `telemetry-backend/`) — delegate to `engineer` subagent so TDD workflow followed end-to-end.
+Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backend/`) — delegate to `engineer` subagent so TDD workflow followed end-to-end.
 Use `auditor` for `/audit`, `maintainer` for `/maintain`.
 
 ## Rules
@@ -66,9 +66,9 @@ Use `auditor` for `/audit`, `maintainer` for `/maintain`.
 
 ### Sync
 - Docs (`*.md` files), examples, config files must stay in sync with code.
-- Follow `.claude/rules/implement.md` for code changes.
+- Follow file checklists in `.claude/agents/engineer.md` for code changes.
 - `.nvmrc`, `package.json` `engines`, Docker build args must agree on Node.js version.
-- When `.claude/rules/` or `.claude/skills/` change, update `AI_DEVELOPMENT.md`.
+- When `.claude/agents/` or `.claude/skills/` change, update `AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.
 
 ### Docker
@@ -99,4 +99,4 @@ Before any `git commit --amend` or `git rebase`: check whether the target commit
 
 ## Self-maintenance
 
-Suggest updates to `.claude/CLAUDE.md`, `.claude/rules/`, or `.claude/skills/` when you notice gaps. Always ask before updating.
+Suggest updates to `.claude/CLAUDE.md`, `.claude/agents/`, or `.claude/skills/` when you notice gaps. Always ask before updating.

@@ -70,7 +70,7 @@ Before writing code, inspect conventions (CLAUDE.md, biome/eslint, package.json,
 
 Project conventions beat defaults.
 
-Before any change check `.claude/rules/implement.md` for applicable file checklist (config, appliance, MQTT, Docker, telemetry, etc.) + TDD requirement.
+Before any change consult the file checklist below for the applicable change type + TDD requirement.
 
 ## Workflow For Each Task
 
@@ -91,6 +91,40 @@ Before any change check `.claude/rules/implement.md` for applicable file checkli
 - [ ] Logs use project logger with context to debug prod.
 - [ ] Docs, examples, config in sync with code.
 - [ ] No dead code, unused exports, speculative abstractions.
+
+## File Checklists
+
+### Rules
+- TDD: write tests first for `src/` changes. Skip if purely structural. Every test needs ≥1 `expect`.
+- User-facing change → update `AI_DEVELOPMENT.md`, `README.md`, `CONTRIBUTING.md`.
+- Numeric schemas: `.positive()` / `.min(1)` for positive, `.int()` for whole, `.int().min(1).max(65535)` for ports.
+
+### Config (`src/config.ts`)
+`config.example.yml`, `docker/docker-compose.example.yml` (env vars), `docker/docker-compose.local.example.yml`, `tests/config.test.ts` (valid + invalid)
+
+### Appliance support
+`src/appliances/<model>.ts`, `factory.ts`, `normalizers.ts`*, `src/types/normalized.ts`*, `src/types/homeassistant.ts`*, `tests/appliances/<model>.test.ts`, `base.test.ts`*, `factory.test.ts`, `normalizers.test.ts`*
+(*if interface/logic changed)
+
+### API types (`src/types.d.ts`, `src/types/normalized.ts`)
+Run E2E snapshot validation (see `/audit` checklist § 10).
+
+### Version-checker (`src/version-checker.ts`)
+`tests/version-checker.test.ts`, `HOME_ASSISTANT.md`*, `config.example.yml` + compose examples*
+(*if payloads/config changed)
+
+### MQTT / HA integration
+`src/mqtt.ts`, `src/types/homeassistant.ts`, relevant appliance `generateAutoDiscoveryConfig()`, `tests/mqtt.test.ts`, `tests/mqtt-events.test.ts`, `tests/electrolux.test.ts`*, `tests/state-differences.test.ts`*, `HOME_ASSISTANT.md`*
+(*if behavior changed)
+
+### Docker
+`docker/Dockerfile` / `Dockerfile.local`, `.dockerignore`*, compose examples*
+(*if needed)
+
+### Telemetry backend (`telemetry-backend/`)
+Rate limit runs **before** input validation.
+Behavior change → tests in `telemetry-backend/tests/` (Vitest + in-memory `FakeRedis` helper).
+Build/compose change → update `Dockerfile`, `docker-compose.yml`, `README.md`.
 
 ## Escalation & Honesty
 
