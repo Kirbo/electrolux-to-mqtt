@@ -10,15 +10,10 @@ stages:
 
 workflow:
   rules:
-    # Run pipeline for merge requests
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     # Run pipeline for pushes to default branch
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
     # Run pipeline for pushes to next (pre-release) branch
     - if: '$CI_COMMIT_BRANCH == "next"'
-    # Run pipeline for pushes to branches without open merge requests
-    - if: "$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS"
-      when: never
     # Run pipeline for all other branch pushes
     - if: "$CI_COMMIT_BRANCH"
     # Run pipeline for web/api triggers
