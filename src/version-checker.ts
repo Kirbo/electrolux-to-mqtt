@@ -104,65 +104,54 @@ type LatestVersionInfo = {
   description?: string
 }
 
+const isPreRelease = (tagName: string): boolean => tagName.includes('-')
+
+function pickLatestFromReleases(releases: GitLabRelease[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
+  const eligible = channel === 'stable' ? releases.filter((r) => !isPreRelease(r.tag_name)) : releases
+  const sorted = [...eligible].sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime())
+  const r = sorted[0]
+  return r ? { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined } : null
+}
+
+function pickLatestFromTags(tags: GitLabTag[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
+  const eligible = channel === 'stable' ? tags.filter((t) => !isPreRelease(t.name)) : tags
+  const sorted = [...eligible].sort(
+    (a, b) => new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime(),
+  )
+  const t = sorted[0]
+  return t
+    ? { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
+    : null
+}
+
 /**
  * Fetch the latest version from GitLab releases or tags.
  * @param channel 'stable' skips any release/tag whose tag_name contains '-' (pre-release marker).
  *                'beta' returns the most recently created release/tag regardless.
  */
 async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVersionInfo | null> {
-  const isPreRelease = (tagName: string): boolean => tagName.includes('-')
-
   try {
     // Try releases first
     const releasesUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/releases`
     const releasesResponse = await axios.get<GitLabRelease[]>(releasesUrl, {
       timeout: 10000,
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: { Accept: 'application/json' },
     })
 
-    if (releasesResponse.data && releasesResponse.data.length > 0) {
-      const eligible =
-        channel === 'stable'
-          ? releasesResponse.data.filter((rel) => !isPreRelease(rel.tag_name))
-          : releasesResponse.data
-
-      if (eligible.length > 0) {
-        // Sort by released_at date (descending) to get the latest
-        const sortedReleases = [...eligible].sort((a, b) => {
-          return new Date(b.released_at).getTime() - new Date(a.released_at).getTime()
-        })
-        const r = sortedReleases[0]
-        if (r) {
-          return { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined }
-        }
-      }
+    if (releasesResponse.data.length > 0) {
+      const result = pickLatestFromReleases(releasesResponse.data, channel)
+      if (result) return result
     }
 
     // Fallback to tags if no eligible releases found
     const tagsUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/repository/tags`
     const tagsResponse = await axios.get<GitLabTag[]>(tagsUrl, {
       timeout: 10000,
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: { Accept: 'application/json' },
     })
 
-    if (tagsResponse.data && tagsResponse.data.length > 0) {
-      const eligibleTags =
-        channel === 'stable' ? tagsResponse.data.filter((tag) => !isPreRelease(tag.name)) : tagsResponse.data
-
-      if (eligibleTags.length > 0) {
-        // Sort by commit created_at date (descending) to get the latest
-        const sortedTags = [...eligibleTags].sort((a, b) => {
-          return new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime()
-        })
-        const t = sortedTags[0]
-        if (t) {
-          return { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
-        }
-      }
+    if (tagsResponse.data.length > 0) {
+      return pickLatestFromTags(tagsResponse.data, channel)
     }
 
     return null
