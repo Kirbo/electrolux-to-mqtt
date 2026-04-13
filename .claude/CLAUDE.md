@@ -93,9 +93,11 @@ After code change:
 
 ## Commits
 
-Never commit unless told explicitly. User decides when ready — may have more work for same commit. Don't commit after task, don't commit "to save progress", don't commit after fix. Wait for explicit instruction like "commit this" or "make a commit".
+Two triggers allow committing — both require user initiation:
+1. User explicitly asks ("commit", "commit this", "make a commit") → generate message + commit immediately.
+2. You suggest committing and user agrees → generate message + commit immediately.
 
-You may suggest committing ("ready to commit when you are"), but never run `git commit` until the user agrees. The `/caveman-commit` skill only generates a commit message — do not follow it with `git commit` automatically. Wait for the user to confirm.
+Never commit on your own initiative — not after a task, not to "save progress", not after a fix, not after running verification steps. If no trigger above applies, stop. The user may have more changes in mind for the same commit.
 
 Split into logical chunks — each commit = one coherent change (feature, fix, refactor, docs). Don't bundle unrelated changes. Don't split single logical change across commits. If staged diff spans multiple concerns, stage + commit separately.
 
