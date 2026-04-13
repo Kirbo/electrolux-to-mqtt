@@ -89,6 +89,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `LOGGING_SHOW_TIMESTAMP`                   | Show timestamps in logs                                | `true`                 | No       |
 | `VERSION_CHECK_INTERVAL`                   | Update check interval in seconds (60–86400)            | `3600`                 | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`           | ntfy.sh webhook URL for update notifications           | —                      | No       |
+| `VERSION_CHECK_UPDATE_CHANNEL`             | `stable` skips rc releases; `beta` includes them       | `stable`               | No       |
 | `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `true`                 | No       |
 | `HEALTH_CHECK_FILE_PATH`                   | Path to health check file                              | `/tmp/e2m-health`      | No       |
 | `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`   | Minutes of API failure before container self-restarts  | `45`                   | No       |
@@ -153,6 +154,7 @@ docker run --rm \
   # -e LOGGING_SHOW_TIMESTAMP=true \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
+  # -e VERSION_CHECK_UPDATE_CHANNEL=stable \
   # -e HEALTH_CHECK_ENABLED=true \
   # -e HEALTH_CHECK_FILE_PATH=/tmp/e2m-health \
   # -e HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45 \
@@ -225,6 +227,7 @@ services:
       # - LOGGING_SHOW_TIMESTAMP=true
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
+      # - VERSION_CHECK_UPDATE_CHANNEL=stable
       # - HEALTH_CHECK_ENABLED=true
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health
       # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45

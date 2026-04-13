@@ -64,6 +64,9 @@ versionCheck:
   # (Optional) ntfy.sh webhook URL for notifications when a new version is found.
   # Example: https://ntfy.sh/vB66ozQaRiqhTE9j
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
+  # (Optional) Which releases to track. 'stable' (default) skips pre-release (rc) versions.
+  # Set to 'beta' to also receive notifications for release candidates.
+  updateChannel: stable
 
 healthCheck:
   # (Optional) Enable file-based health check for Docker HEALTHCHECK. Default: true

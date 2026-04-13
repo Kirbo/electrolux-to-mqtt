@@ -903,4 +903,159 @@ describe('version-checker', () => {
       stopChecker()
     })
   })
+
+  describe('updateChannel filtering', () => {
+    describe("stable channel (default) — skips releases whose tag_name contains '-'", () => {
+      let moduleWithStable: typeof import('../src/version-checker.js')
+
+      beforeEach(async () => {
+        vi.resetModules()
+        vi.doMock('../src/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
+            telemetryEnabled: false,
+          },
+        }))
+        moduleWithStable = await import('../src/version-checker.js')
+      })
+
+      it('should skip an rc release and return null when that is the only release', async () => {
+        mockAxiosGet
+          .mockResolvedValueOnce({
+            data: [{ tag_name: 'v1.15.1-rc.1', released_at: '2026-04-01T12:00:00Z' }],
+          })
+          .mockResolvedValueOnce({ data: [] }) // tags fallback also empty
+
+        const mockPublishInfoStable = vi.fn()
+        const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
+
+        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', 'hash', mockMqttStable)
+        await vi.advanceTimersByTimeAsync(0)
+
+        // No stable release found — should not publish update-available
+        const calls = mockPublishInfoStable.mock.calls
+        for (const call of calls) {
+          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
+          expect(payload.status).not.toBe('update-available')
+        }
+
+        stopChecker()
+      })
+
+      it('should return stable release when both stable and rc releases are present', async () => {
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [
+            { tag_name: 'v1.15.1-rc.1', released_at: '2026-04-10T12:00:00Z' },
+            { tag_name: 'v1.15.0', released_at: '2026-04-01T12:00:00Z' },
+          ],
+        })
+        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+        const mockPublishInfoStable = vi.fn()
+        const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
+
+        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', 'hash', mockMqttStable)
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Should have identified v1.15.0 as latest stable and notified about it
+        expect(mockPublishInfoStable).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v1.15.0"'))
+
+        stopChecker()
+      })
+
+      it('should skip rc tags in tags fallback', async () => {
+        mockAxiosGet
+          .mockResolvedValueOnce({ data: [] }) // no releases
+          .mockResolvedValueOnce({
+            data: [
+              {
+                name: 'v1.15.1-rc.1',
+                commit: { created_at: '2026-04-10T12:00:00Z' },
+              },
+              {
+                name: 'v1.15.0',
+                commit: { created_at: '2026-04-01T12:00:00Z' },
+              },
+            ],
+          })
+        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+        const mockPublishInfoStable = vi.fn()
+        const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
+
+        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', 'hash', mockMqttStable)
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Should have detected v1.15.0 from tags, skipping the rc tag
+        expect(mockPublishInfoStable).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v1.15.0"'))
+
+        stopChecker()
+      })
+    })
+
+    describe('beta channel — includes rc releases', () => {
+      let moduleWithBeta: typeof import('../src/version-checker.js')
+
+      beforeEach(async () => {
+        vi.resetModules()
+        vi.doMock('../src/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+            telemetryEnabled: false,
+          },
+        }))
+        moduleWithBeta = await import('../src/version-checker.js')
+      })
+
+      it('should return rc release when it is the most recently created', async () => {
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [
+            { tag_name: 'v1.15.1-rc.1', released_at: '2026-04-10T12:00:00Z' },
+            { tag_name: 'v1.15.0', released_at: '2026-04-01T12:00:00Z' },
+          ],
+        })
+        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+        const mockPublishInfoBeta = vi.fn()
+        const mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
+
+        const stopChecker = moduleWithBeta.startVersionChecker('v1.14.0', 'hash', mockMqttBeta)
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Beta channel includes rc — should see v1.15.1-rc.1 as the latest
+        expect(mockPublishInfoBeta).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v1.15.1-rc.1"'))
+
+        stopChecker()
+      })
+
+      it('should include rc tags in tags fallback', async () => {
+        mockAxiosGet
+          .mockResolvedValueOnce({ data: [] }) // no releases
+          .mockResolvedValueOnce({
+            data: [
+              {
+                name: 'v1.15.1-rc.1',
+                commit: { created_at: '2026-04-10T12:00:00Z' },
+              },
+              {
+                name: 'v1.15.0',
+                commit: { created_at: '2026-04-01T12:00:00Z' },
+              },
+            ],
+          })
+        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+        const mockPublishInfoBeta = vi.fn()
+        const mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
+
+        const stopChecker = moduleWithBeta.startVersionChecker('v1.14.0', 'hash', mockMqttBeta)
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Beta channel: rc tag should surface
+        expect(mockPublishInfoBeta).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v1.15.1-rc.1"'))
+
+        stopChecker()
+      })
+    })
+  })
 })

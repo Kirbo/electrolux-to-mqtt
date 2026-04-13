@@ -96,9 +96,10 @@ const configSchema = z.object({
         .max(86400, 'should not exceed 86400 seconds')
         .default(3600),
       ntfyWebhookUrl: z.string().optional(),
+      updateChannel: z.enum(['stable', 'beta']).default('stable'),
     })
     .optional()
-    .transform((val) => val ?? { checkInterval: 3600 }),
+    .transform((val) => val ?? { checkInterval: 3600, updateChannel: 'stable' as const }),
   healthCheck: z
     .object({
       enabled: z.boolean().default(true),
@@ -171,6 +172,7 @@ const envSchema = z.object({
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   VERSION_CHECK_INTERVAL: z.coerce.number().optional(),
   VERSION_CHECK_NTFY_WEBHOOK_URL: z.string().optional(),
+  VERSION_CHECK_UPDATE_CHANNEL: z.string().optional(),
   HEALTH_CHECK_ENABLED: z
     .string()
     .optional()
@@ -209,6 +211,7 @@ const configPathToEnvVar: Record<string, string> = {
   'logging.showTimestamp': 'LOGGING_SHOW_TIMESTAMP',
   'versionCheck.checkInterval': 'VERSION_CHECK_INTERVAL',
   'versionCheck.ntfyWebhookUrl': 'VERSION_CHECK_NTFY_WEBHOOK_URL',
+  'versionCheck.updateChannel': 'VERSION_CHECK_UPDATE_CHANNEL',
   'healthCheck.enabled': 'HEALTH_CHECK_ENABLED',
   'healthCheck.filePath': 'HEALTH_CHECK_FILE_PATH',
   'healthCheck.unHealthyRestartMinutes': 'HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES',
@@ -307,6 +310,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
     versionCheck: stripUndefined({
       checkInterval: envConfig.VERSION_CHECK_INTERVAL,
       ntfyWebhookUrl: envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL,
+      updateChannel: envConfig.VERSION_CHECK_UPDATE_CHANNEL,
     }),
     healthCheck: stripUndefined({
       enabled: envConfig.HEALTH_CHECK_ENABLED,

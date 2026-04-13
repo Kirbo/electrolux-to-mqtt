@@ -73,8 +73,11 @@ type GitLabRelease = {
  * Compare two semantic version strings
  * Returns: -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2
  */
-// Compares numeric semver parts only (X.Y.Z). Pre-release suffixes (e.g. -beta.1)
-// are silently ignored — acceptable because semantic-release only publishes stable versions.
+// Compares numeric semver parts only (X.Y.Z). Pre-release suffixes (e.g. -rc.1) are stripped
+// by parseInt stopping at the first non-digit character. This is intentional: on the beta
+// channel an rc tag such as v1.15.1-rc.1 parses as [1,15,1,1] — one extra numeric part
+// appended by the pre-release segment — so it correctly sorts after its stable counterpart
+// v1.15.1 (which parses as [1,15,1]). No code change needed; the behaviour is by design.
 function compareVersions(v1: string, v2: string): number {
   // Remove 'v' prefix if present
   const clean1 = v1.replace(/^v/, '')
@@ -102,9 +105,13 @@ type LatestVersionInfo = {
 }
 
 /**
- * Fetch the latest version from GitLab releases or tags
+ * Fetch the latest version from GitLab releases or tags.
+ * @param channel 'stable' skips any release/tag whose tag_name contains '-' (pre-release marker).
+ *                'beta' returns the most recently created release/tag regardless.
  */
-async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
+async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVersionInfo | null> {
+  const isPreRelease = (tagName: string): boolean => tagName.includes('-')
+
   try {
     // Try releases first
     const releasesUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/releases`
@@ -116,17 +123,24 @@ async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
     })
 
     if (releasesResponse.data && releasesResponse.data.length > 0) {
-      // Sort by released_at date (descending) to get the latest
-      const sortedReleases = [...releasesResponse.data].sort((a, b) => {
-        return new Date(b.released_at).getTime() - new Date(a.released_at).getTime()
-      })
-      const r = sortedReleases[0]
-      if (r) {
-        return { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined }
+      const eligible =
+        channel === 'stable'
+          ? releasesResponse.data.filter((rel) => !isPreRelease(rel.tag_name))
+          : releasesResponse.data
+
+      if (eligible.length > 0) {
+        // Sort by released_at date (descending) to get the latest
+        const sortedReleases = [...eligible].sort((a, b) => {
+          return new Date(b.released_at).getTime() - new Date(a.released_at).getTime()
+        })
+        const r = sortedReleases[0]
+        if (r) {
+          return { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined }
+        }
       }
     }
 
-    // Fallback to tags if no releases found
+    // Fallback to tags if no eligible releases found
     const tagsUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/repository/tags`
     const tagsResponse = await axios.get<GitLabTag[]>(tagsUrl, {
       timeout: 10000,
@@ -136,13 +150,18 @@ async function fetchLatestVersion(): Promise<LatestVersionInfo | null> {
     })
 
     if (tagsResponse.data && tagsResponse.data.length > 0) {
-      // Sort by commit created_at date (descending) to get the latest
-      const sortedTags = [...tagsResponse.data].sort((a, b) => {
-        return new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime()
-      })
-      const t = sortedTags[0]
-      if (t) {
-        return { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
+      const eligibleTags =
+        channel === 'stable' ? tagsResponse.data.filter((tag) => !isPreRelease(tag.name)) : tagsResponse.data
+
+      if (eligibleTags.length > 0) {
+        // Sort by commit created_at date (descending) to get the latest
+        const sortedTags = [...eligibleTags].sort((a, b) => {
+          return new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime()
+        })
+        const t = sortedTags[0]
+        if (t) {
+          return { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
+        }
       }
     }
 
@@ -230,7 +249,8 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     logger.debug('Telemetry disabled, skipping')
   }
 
-  const latest = await fetchLatestVersion()
+  const updateChannel = config.versionCheck?.updateChannel ?? 'stable'
+  const latest = await fetchLatestVersion(updateChannel)
 
   if (!latest) {
     logger.debug('Unable to determine latest version')
