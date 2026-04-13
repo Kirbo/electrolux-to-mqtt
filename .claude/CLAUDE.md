@@ -86,7 +86,7 @@ Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backe
 
 ## Verification
 
-After code change:
+Run after every code change, and **verification must pass before committing** — never commit with failing checks:
 1. `pnpm check` — fix lint/format findings.
 2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed: run `pnpm typecheck`, `pnpm test`, `pnpm sonar` — fix all.
 3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck && pnpm test`.
@@ -95,8 +95,8 @@ After code change:
 ## Commits
 
 Two triggers allow committing — both require user initiation:
-1. User explicitly asks ("commit", "commit this", "make a commit") → generate message + commit immediately.
-2. You suggest committing and user agrees → generate message + commit immediately.
+1. User explicitly asks ("commit", "commit this", "make a commit") → run verification (§ Verification) if any code changed, then generate message + commit.
+2. You suggest committing and user agrees → run verification (§ Verification) if any code changed, then generate message + commit.
 
 Never commit on your own initiative — not after a task, not to "save progress", not after a fix, not after running verification steps. If no trigger above applies, stop. The user may have more changes in mind for the same commit.
 
