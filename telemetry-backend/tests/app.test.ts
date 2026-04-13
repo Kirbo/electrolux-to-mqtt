@@ -106,6 +106,24 @@ describe('generateBadge', () => {
     })
   })
 
+  it('sorts pre-release versions below their stable counterpart and by rc number descending', async () => {
+    const redis = new FakeRedis()
+    const hashes = Array.from({ length: 5 }, (_, i) => `${i}`.repeat(64).slice(0, 64))
+    const versions = ['1.2.3', '1.3.0-rc.1', '1.3.0', '1.2.3-rc.1', '1.3.0-rc.2']
+    for (let i = 0; i < versions.length; i++) {
+      await redis.set(`user:${hashes[i]}`, versions[i] as string)
+    }
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as {
+      total: number
+      versions: Array<{ version: string; count: number }>
+    }
+    expect(cached.versions.map((v) => v.version)).toEqual(['1.3.0', '1.3.0-rc.2', '1.3.0-rc.1', '1.2.3', '1.2.3-rc.1'])
+  })
+
   it('treats "v"-prefixed versions equivalently for sort ordering', async () => {
     const redis = new FakeRedis()
     await redis.set(`user:${HASH_A}`, 'v1.0.0')

@@ -40,13 +40,49 @@ export async function getUserKeys(redis: RedisLike): Promise<string[]> {
   return keys
 }
 
-function compareVersionsDescending(a: string, b: string): number {
-  const partsA = a.replace(/^v/, '').split('.').map(Number)
-  const partsB = b.replace(/^v/, '').split('.').map(Number)
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const diff = (partsB[i] || 0) - (partsA[i] || 0)
-    if (diff !== 0) return diff
+interface ParsedVersion {
+  major: number
+  minor: number
+  patch: number
+  preRelease: string | null
+}
+
+function parseVersion(raw: string): ParsedVersion {
+  const withoutV = raw.replace(/^v/, '')
+  const dashIndex = withoutV.indexOf('-')
+  const numeric = dashIndex === -1 ? withoutV : withoutV.slice(0, dashIndex)
+  const preRelease = dashIndex === -1 ? null : withoutV.slice(dashIndex + 1)
+  const [maj, min, pat] = numeric.split('.').map(Number)
+  return {
+    major: maj ?? 0,
+    minor: min ?? 0,
+    patch: pat ?? 0,
+    preRelease,
   }
+}
+
+function compareVersionsDescending(a: string, b: string): number {
+  const pa = parseVersion(a)
+  const pb = parseVersion(b)
+
+  const majorDiff = pb.major - pa.major
+  if (majorDiff !== 0) return majorDiff
+
+  const minorDiff = pb.minor - pa.minor
+  if (minorDiff !== 0) return minorDiff
+
+  const patchDiff = pb.patch - pa.patch
+  if (patchDiff !== 0) return patchDiff
+
+  // Numeric parts equal — stable beats pre-release
+  if (pa.preRelease === null && pb.preRelease !== null) return -1
+  if (pa.preRelease !== null && pb.preRelease === null) return 1
+
+  // Both pre-release — compare lexicographically (rc.2 > rc.1 works naturally)
+  if (pa.preRelease !== null && pb.preRelease !== null) {
+    return pb.preRelease > pa.preRelease ? 1 : pb.preRelease < pa.preRelease ? -1 : 0
+  }
+
   return 0
 }
 
