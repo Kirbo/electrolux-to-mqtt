@@ -13,6 +13,8 @@ export interface OrchestratorConfig {
   refreshInterval: number
   applianceDiscoveryInterval: number
   autoDiscovery: boolean
+  apiFailureRestartThresholdMs: number
+  healthCheckEnabled: boolean
 }
 
 export class Orchestrator {
@@ -22,6 +24,7 @@ export class Orchestrator {
   private readonly activeIntervals = new Set<NodeJS.Timeout>()
   private readonly applianceInstances = new Map<string, BaseAppliance>()
   private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
+  private lastSuccessfulApiCall = Date.now()
   public isShuttingDown = false
 
   constructor(client: ElectroluxClient, mqtt: IMqtt, config: OrchestratorConfig) {
@@ -32,6 +35,24 @@ export class Orchestrator {
 
   public getApplianceInstances(): ReadonlyMap<string, BaseAppliance> {
     return this.applianceInstances
+  }
+
+  private trackApiResult(state: unknown, now: number): void {
+    if (state !== undefined) {
+      this.lastSuccessfulApiCall = now
+    } else if (this.config.healthCheckEnabled && !this.isShuttingDown) {
+      const elapsedMs = now - this.lastSuccessfulApiCall
+      if (elapsedMs >= this.config.apiFailureRestartThresholdMs) {
+        logger.warn(`API unreachable for ${Math.round(elapsedMs / 60000)} min — restarting for recovery`)
+        process.exit(1)
+      }
+    }
+  }
+
+  private writeHealthStatus(): void {
+    const now = Date.now()
+    const apiConnected = now - this.lastSuccessfulApiCall < 3 * this.config.refreshInterval
+    writeHealthFile({ mqttConnected: this.mqtt.client.connected, apiConnected })
   }
 
   /**
@@ -89,16 +110,18 @@ export class Orchestrator {
       setTimeout(async () => {
         if (this.isShuttingDown) return
 
-        await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
-        writeHealthFile({ mqttConnected: this.mqtt.client.connected })
+        const state = await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
+        this.trackApiResult(state, Date.now())
+        this.writeHealthStatus()
 
         const intervalId = setInterval(async () => {
           if (this.isShuttingDown) {
             clearInterval(intervalId)
             return
           }
-          await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
-          writeHealthFile({ mqttConnected: this.mqtt.client.connected })
+          const intervalState = await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
+          this.trackApiResult(intervalState, Date.now())
+          this.writeHealthStatus()
         }, this.config.refreshInterval)
 
         this.activeIntervals.add(intervalId)
@@ -112,7 +135,9 @@ export class Orchestrator {
           logger.info('Received command on topic:', topic, 'Message:', command)
           const applianceInstance = this.applianceInstances.get(applianceId)
           if (applianceInstance) {
-            this.client.sendApplianceCommand(applianceInstance, command)
+            this.client.sendApplianceCommand(applianceInstance, command).catch((err: unknown) => {
+              logger.error(`Failed to send command to appliance ${applianceId}:`, err)
+            })
           } else {
             logger.error(`No appliance instance found for applianceId: ${applianceId}`)
           }

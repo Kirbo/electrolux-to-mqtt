@@ -724,6 +724,30 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should include HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES env var in generated config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'user@test.com'
+      process.env.ELECTROLUX_PASSWORD = 'pass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES = '30'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      const [, content] = writeSpy.mock.calls[0] as [string, string]
+      expect(content).toContain('unHealthyRestartMinutes: 30')
+
+      writeSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
     it('should default revertStateOnRejection to false in generated config', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'

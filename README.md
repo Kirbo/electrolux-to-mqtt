@@ -91,6 +91,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`           | ntfy.sh webhook URL for update notifications           | —                      | No       |
 | `HEALTH_CHECK_ENABLED`                     | Enable file-based health check for Docker HEALTHCHECK  | `true`                 | No       |
 | `HEALTH_CHECK_FILE_PATH`                   | Path to health check file                              | `/tmp/e2m-health`      | No       |
+| `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`   | Minutes of API failure before container self-restarts  | `45`                   | No       |
 | `E2M_TELEMETRY_ENABLED`                    | Send anonymous usage statistics (opt out with `false`) | `true`                 | No       |
 </details>
 
@@ -154,6 +155,7 @@ docker run --rm \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
   # -e HEALTH_CHECK_ENABLED=true \
   # -e HEALTH_CHECK_FILE_PATH=/tmp/e2m-health \
+  # -e HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45 \
   # -e E2M_TELEMETRY_ENABLED=true \
   --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
 ```
@@ -225,6 +227,7 @@ services:
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
       # - HEALTH_CHECK_ENABLED=true
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health
+      # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45
       # - E2M_TELEMETRY_ENABLED=true
 ```
 </details>

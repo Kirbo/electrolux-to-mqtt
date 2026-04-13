@@ -38,4 +38,5 @@ services:
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here    # ntfy.sh webhook URL for update notifications
       # - HEALTH_CHECK_ENABLED=true                                          # Enable file-based health check for Docker HEALTHCHECK (default: true)
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health                             # Path to the health file (default: /tmp/e2m-health)
+      # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45                          # Minutes of sustained API failure before process.exit(1) triggers Docker restart (default: 45, min: 10, max: 1440)
       # - E2M_TELEMETRY_ENABLED=true                                         # Send anonymous usage statistics (default: true). Set to false to opt out.

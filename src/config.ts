@@ -103,9 +103,10 @@ const configSchema = z.object({
     .object({
       enabled: z.boolean().default(true),
       filePath: z.string().default('/tmp/e2m-health'),
+      unHealthyRestartMinutes: z.number().int().min(10).max(1440).default(45),
     })
     .optional()
-    .transform((val) => val ?? { enabled: true, filePath: '/tmp/e2m-health' }),
+    .transform((val) => val ?? { enabled: true, filePath: '/tmp/e2m-health', unHealthyRestartMinutes: 45 }),
   telemetryEnabled: z.boolean().default(true),
 })
 
@@ -175,6 +176,7 @@ const envSchema = z.object({
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   HEALTH_CHECK_FILE_PATH: z.string().optional(),
+  HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES: z.coerce.number().int().min(10).max(1440).optional(),
   E2M_TELEMETRY_ENABLED: z
     .string()
     .optional()
@@ -209,6 +211,7 @@ const configPathToEnvVar: Record<string, string> = {
   'versionCheck.ntfyWebhookUrl': 'VERSION_CHECK_NTFY_WEBHOOK_URL',
   'healthCheck.enabled': 'HEALTH_CHECK_ENABLED',
   'healthCheck.filePath': 'HEALTH_CHECK_FILE_PATH',
+  'healthCheck.unHealthyRestartMinutes': 'HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES',
   telemetryEnabled: 'E2M_TELEMETRY_ENABLED',
 }
 
@@ -308,6 +311,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
     healthCheck: stripUndefined({
       enabled: envConfig.HEALTH_CHECK_ENABLED,
       filePath: envConfig.HEALTH_CHECK_FILE_PATH,
+      unHealthyRestartMinutes: envConfig.HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES,
     }),
     ...(envConfig.E2M_TELEMETRY_ENABLED === undefined ? {} : { telemetryEnabled: envConfig.E2M_TELEMETRY_ENABLED }),
   }

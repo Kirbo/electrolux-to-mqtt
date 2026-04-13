@@ -90,6 +90,8 @@ const defaultConfig: OrchestratorConfig = {
   refreshInterval: 30000,
   applianceDiscoveryInterval: 300000,
   autoDiscovery: true,
+  apiFailureRestartThresholdMs: 2700000, // 45 minutes
+  healthCheckEnabled: true,
 }
 
 const mockStub: ApplianceStub = {
@@ -506,6 +508,141 @@ describe('Orchestrator', () => {
 
       expect(orchestrator.isShuttingDown).toBe(true)
       // No unhandled rejection — test would fail if one was thrown
+    })
+  })
+
+  describe('API failure tracking and restart', () => {
+    let exitSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number | string | null | undefined) => {
+        // Intentionally does not throw — the spy records the call.
+        // Throwing here would escape the async interval boundary and become
+        // an unhandled rejection, causing false failures in other tests.
+        return undefined as never
+      })
+    })
+
+    afterEach(() => {
+      exitSpy.mockRestore()
+    })
+
+    it('should call process.exit(1) after sustained API failure exceeding threshold', async () => {
+      const thresholdMs = 500
+      const shortThresholdOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        refreshInterval: 100,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: true,
+      })
+
+      // getApplianceState returns undefined = API failure
+      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+
+      await shortThresholdOrchestrator.initializeAppliance(mockStub, 0)
+
+      // Advance past initial delay — first poll fires (no exit yet, just started)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Advance time so the failure duration exceeds threshold, triggering exit on next poll
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    })
+
+    it('should not call process.exit on transient failure under threshold', async () => {
+      const thresholdMs = 5000
+      const orchestratorWithThreshold = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        refreshInterval: 100,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: true,
+      })
+
+      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+
+      await orchestratorWithThreshold.initializeAppliance(mockStub, 0)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Advance time but stay under threshold
+      vi.setSystemTime(Date.now() + thresholdMs - 1000)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(exitSpy).not.toHaveBeenCalled()
+    })
+
+    it('should reset failure tracking after a successful API call', async () => {
+      const thresholdMs = 500
+      const orchestratorWithThreshold = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        refreshInterval: 100,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: true,
+      })
+
+      // First: return undefined (failure), then a defined value (success)
+      vi.mocked(client.getApplianceState)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValue({} as Awaited<ReturnType<typeof client.getApplianceState>>)
+
+      await orchestratorWithThreshold.initializeAppliance(mockStub, 0)
+
+      // First poll — failure, but timer resets on next success
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Advance system time past threshold
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
+
+      // Second poll — success, resets lastSuccessfulApiCall
+      await vi.advanceTimersByTimeAsync(100)
+
+      // Third poll — should NOT exit because timer was reset
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(exitSpy).not.toHaveBeenCalled()
+    })
+
+    it('should not call process.exit when isShuttingDown is true', async () => {
+      const thresholdMs = 100
+      const orchestratorWithThreshold = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        refreshInterval: 50,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: true,
+      })
+
+      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+
+      await orchestratorWithThreshold.initializeAppliance(mockStub, 0)
+
+      // Mark as shutting down before first poll fires
+      orchestratorWithThreshold.isShuttingDown = true
+
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
+      await vi.advanceTimersByTimeAsync(thresholdMs + 100)
+
+      expect(exitSpy).not.toHaveBeenCalled()
+    })
+
+    it('should not call process.exit when healthCheckEnabled is false', async () => {
+      const thresholdMs = 100
+      const orchestratorNoHealth = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        refreshInterval: 50,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: false,
+      })
+
+      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+
+      await orchestratorNoHealth.initializeAppliance(mockStub, 0)
+      await vi.advanceTimersByTimeAsync(0)
+
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(exitSpy).not.toHaveBeenCalled()
     })
   })
 

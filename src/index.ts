@@ -27,6 +27,8 @@ const orchestrator = new Orchestrator(client, mqtt, {
   refreshInterval,
   applianceDiscoveryInterval,
   autoDiscovery: config.homeAssistant.autoDiscovery,
+  apiFailureRestartThresholdMs: (config.healthCheck.unHealthyRestartMinutes ?? 45) * 60_000,
+  healthCheckEnabled: config.healthCheck.enabled,
 })
 
 let discoveryInterval: NodeJS.Timeout | null = null
@@ -104,4 +106,6 @@ const main = async () => {
   stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt)
 }
 
-main()
+main().catch((err: unknown) => {
+  logger.error('Fatal error in main:', err)
+})

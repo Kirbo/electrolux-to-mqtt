@@ -10,17 +10,19 @@ let hasWarnedAboutWriteFailure = false
 
 interface HealthStatus {
   mqttConnected: boolean
+  apiConnected: boolean
 }
 
 /**
  * Write the current Unix timestamp to the health file.
  * Called after each successful state poll cycle.
- * Skips writing if MQTT is disconnected, so the health file goes stale
- * and Docker HEALTHCHECK will eventually mark the container as unhealthy.
+ * Skips writing if MQTT is disconnected or API is unreachable, so the health
+ * file goes stale and Docker HEALTHCHECK will eventually mark the container as unhealthy.
  */
 export function writeHealthFile(status?: HealthStatus): void {
   if (!healthEnabled) return
   if (status && !status.mqttConnected) return
+  if (status && !status.apiConnected) return
   try {
     fs.writeFileSync(healthFilePath, String(Math.floor(Date.now() / 1000)), 'utf8')
   } catch (error) {

@@ -93,7 +93,7 @@ describe('health', () => {
     it('should not write file when MQTT is disconnected', async () => {
       const { writeHealthFile } = await import('../src/health.js')
 
-      writeHealthFile({ mqttConnected: false })
+      writeHealthFile({ mqttConnected: false, apiConnected: true })
 
       expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
     })
@@ -101,7 +101,7 @@ describe('health', () => {
     it('should write file when MQTT is connected', async () => {
       const { writeHealthFile } = await import('../src/health.js')
 
-      writeHealthFile({ mqttConnected: true })
+      writeHealthFile({ mqttConnected: true, apiConnected: true })
 
       const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
       const timestamp = Number.parseInt(content, 10)
@@ -112,6 +112,34 @@ describe('health', () => {
       const { writeHealthFile } = await import('../src/health.js')
 
       writeHealthFile()
+
+      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const timestamp = Number.parseInt(content, 10)
+      expect(timestamp).toBeGreaterThan(0)
+    })
+  })
+
+  describe('writeHealthFile with API status', () => {
+    it('should not write file when API is disconnected', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile({ mqttConnected: true, apiConnected: false })
+
+      expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
+    })
+
+    it('should not write file when both MQTT and API are disconnected', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile({ mqttConnected: false, apiConnected: false })
+
+      expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
+    })
+
+    it('should write file when both MQTT and API are connected', async () => {
+      const { writeHealthFile } = await import('../src/health.js')
+
+      writeHealthFile({ mqttConnected: true, apiConnected: true })
 
       const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
       const timestamp = Number.parseInt(content, 10)
