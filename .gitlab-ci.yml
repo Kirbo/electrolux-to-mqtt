@@ -155,7 +155,13 @@ bump version:
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --prerelease rc --dry
+        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --prerelease --dry
+        BASE_VERSION=$(cat .version-unreleased)
+        LAST_N=$(git tag --list "v${BASE_VERSION}-rc.*" | sed 's/.*-rc\.//' | sort -n | tail -1)
+        N=$(( ${LAST_N:-0} + 1 ))
+        RC_VERSION="${BASE_VERSION}-rc.${N}"
+        echo "${RC_VERSION}" > .version-unreleased
+        sed -i "s/## ${BASE_VERSION}/## ${RC_VERSION}/" UNRELEASED-CHANGELOG.md
       else
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       fi
@@ -589,9 +595,7 @@ build and deploy rc docker images:
 
 create gitlab prerelease:
   stage: release
-  image:
-    name: registry.gitlab.com/go-semantic-release/semantic-release:latest
-    entrypoint: [""]
+  image: alpine:latest
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -614,12 +618,31 @@ create gitlab prerelease:
     - job: build and deploy rc docker images
       artifacts: false
   before_script:
+    - apk add --no-cache curl jq git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
     - git fetch --tags --force || true
-    - git fetch origin "$CI_DEFAULT_BRANCH" || true
   script:
-    - semantic-release --allow-no-changes --prerelease rc
+    - source build.env
+    - TAG="v${VERSION}"
+    - |
+      if git rev-parse "${TAG}" >/dev/null 2>&1; then
+        echo "Tag ${TAG} already exists, skipping"
+      else
+        git tag "${TAG}"
+        git push origin "${TAG}"
+      fi
+    - |
+      curl --fail-with-body \
+        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "$(jq -n \
+          --arg name "${TAG}" \
+          --arg tag_name "${TAG}" \
+          --arg ref "${CI_COMMIT_SHA}" \
+          --rawfile description UNRELEASED-CHANGELOG.md \
+          '{name: $name, tag_name: $tag_name, ref: $ref, description: $description}')" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases"
 
 update telemetry backend:
   stage: release
