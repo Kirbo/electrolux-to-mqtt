@@ -19,7 +19,7 @@
     "test": "vitest run --coverage",
     "test:e2e": "E2E_TEST=true vitest run tests/e2e/*.test.ts",
     "test:watch": "vitest",
-    "sonar": "[ -f .env ] && export $(grep -v '^#' .env | xargs) ; sonar-scanner",
+    "sonar": "sh scripts/sonar.sh",
     "deps:check": "pnpm outdated ; pnpm audit",
     "deps:update": "pnpm update --latest && pnpm install"
   },
