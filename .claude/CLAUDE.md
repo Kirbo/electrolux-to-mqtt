@@ -95,6 +95,8 @@ After code change:
 
 Never commit unless told explicitly. User decides when ready — may have more work for same commit. Don't commit after task, don't commit "to save progress", don't commit after fix. Wait for explicit instruction like "commit this" or "make a commit".
 
+You may suggest committing ("ready to commit when you are"), but never run `git commit` until the user agrees. The `/caveman-commit` skill only generates a commit message — do not follow it with `git commit` automatically. Wait for the user to confirm.
+
 Split into logical chunks — each commit = one coherent change (feature, fix, refactor, docs). Don't bundle unrelated changes. Don't split single logical change across commits. If staged diff spans multiple concerns, stage + commit separately.
 
 Before `git commit --amend` or `git rebase`: check if target commits pushed to origin (`git log origin/HEAD..HEAD` — empty = all on origin). If pushed, stop + ask user. If not pushed, proceed.
