@@ -157,9 +157,13 @@ bump version:
         LAST_N=$(git tag --list "v${BASE_VERSION}-rc.*" | sed 's/.*-rc\.//' | sort -n | tail -1)
         N=$(( ${LAST_N:-0} + 1 ))
         RC_VERSION="${BASE_VERSION}-rc.${N}"
-        if [ -n "${LAST_N}" ]; then
-          # Regenerate changelog incrementally from last rc tag so rc.N only shows what changed since rc.(N-1)
-          semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --prerelease --dry --match "v${BASE_VERSION}-rc.*"
+        # Always diff from the nearest ancestor tag (stable or rc) so each rc only shows
+        # what changed since the previous release, regardless of base version jump.
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -n "${LAST_TAG}" ]; then
+          printf "## %s\n\n" "${BASE_VERSION}" > UNRELEASED-CHANGELOG.md
+          git log "${LAST_TAG}..HEAD" --no-merges --pretty=format:"- %s" >> UNRELEASED-CHANGELOG.md
+          printf "\n" >> UNRELEASED-CHANGELOG.md
         fi
         echo "${RC_VERSION}" > .version-unreleased
         sed -i "s/## ${BASE_VERSION}/## ${RC_VERSION}/" UNRELEASED-CHANGELOG.md
