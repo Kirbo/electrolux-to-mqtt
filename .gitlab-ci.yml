@@ -65,10 +65,12 @@ default:
       when: on_success
     - if: "$CI_COMMIT_TAG == null"
       changes:
+        - biome.jsonc
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
         - src/**/*
+        - telemetry-backend/**/*
         - tests/**/*
         - tsconfig.json
         - vitest.config.ts
@@ -334,7 +336,7 @@ sonarcloud-check:
       when: never
     - if: "$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == \"main\""
       changes:
-        - biome.jsonc
+        - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
         - src/**/*
@@ -342,7 +344,6 @@ sonarcloud-check:
         - tsconfig.json
         - vitest.config.ts
         - vitest.setup.ts
-        - docker/Dockerfile
       when: on_success
     - when: never
   retry: 2
@@ -582,21 +583,6 @@ build and deploy rc docker images:
       optional: true
     - job: generate changelog
       artifacts: true
-    - job: audit
-      artifacts: false
-      optional: true
-    - job: lint
-      artifacts: false
-      optional: true
-    - job: test
-      artifacts: false
-      optional: true
-    - job: typecheck
-      artifacts: false
-      optional: true
-    - job: telemetry-backend test
-      artifacts: false
-      optional: true
   before_script:
     - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
     - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
