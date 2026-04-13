@@ -106,6 +106,8 @@ const main = async () => {
   stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt)
 }
 
-main().catch((err: unknown) => {
+try {
+  await main()
+} catch (err: unknown) {
   logger.error('Fatal error in main:', err)
-})
+}
