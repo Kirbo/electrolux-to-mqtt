@@ -342,15 +342,13 @@ export class ElectroluxClient {
     this.startLogin()
     logger.info('Attempting to fetch access token...')
 
-    const tokenData = await this.getXcsrfToken()
-    if (!tokenData) {
-      this.finishLogin(false)
-      throw new Error('Failed to retrieve X-CSRF token data')
-    }
-    const { xcsrfToken, csrfSecret } = tokenData
-    logger.debug('CSRF token retrieved successfully')
-
     try {
+      const tokenData = await this.getXcsrfToken()
+      if (!tokenData) {
+        throw new Error('Failed to retrieve X-CSRF token data')
+      }
+      const { xcsrfToken, csrfSecret } = tokenData
+      logger.debug('CSRF token retrieved successfully')
       // Try first payload structure (with state parameter)
       let body: Record<string, string | Record<string, string>> = {
         email: config.electrolux.username,
@@ -457,9 +455,11 @@ export class ElectroluxClient {
       this.loginRetryCount++
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
       logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${this.loginRetryCount})...`)
-      const retryTimeout = setTimeout(async () => {
+      const retryTimeout = setTimeout(() => {
         activeTimeouts.delete(retryTimeout)
-        await this.login()
+        this.login().catch((err: unknown) => {
+          logger.error(`Unhandled error in login retry: ${formatAxiosError(err)}`)
+        })
       }, delay)
       activeTimeouts.add(retryTimeout)
       return false
@@ -591,15 +591,21 @@ export class ElectroluxClient {
         this.iat = undefined
         this.finishLogin(false)
         this.refreshRetryCount = 0
-        await this.login()
+        try {
+          await this.login()
+        } catch (loginError) {
+          logger.error(`Re-authentication failed after 401: ${formatAxiosError(loginError)}`)
+        }
       } else {
         // Transient error (network issue, 5xx) — retry the refresh with exponential backoff
         const delay = Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** this.refreshRetryCount, TOKEN_REFRESH_MAX_DELAY_MS)
         this.refreshRetryCount++
         logger.warn(`Retrying token refresh in ${Math.round(delay / 1000)}s (attempt ${this.refreshRetryCount})...`)
-        const retryTimeout = setTimeout(async () => {
+        const retryTimeout = setTimeout(() => {
           activeTimeouts.delete(retryTimeout)
-          await this.refreshTokens()
+          this.refreshTokens().catch((err: unknown) => {
+            logger.error(`Unhandled error in token refresh retry: ${formatAxiosError(err)}`)
+          })
         }, delay)
         activeTimeouts.add(retryTimeout)
       }

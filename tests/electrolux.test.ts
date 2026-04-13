@@ -1137,6 +1137,21 @@ describe('electrolux', () => {
         expect(client.isLoggedIn).toBe(false)
       })
 
+      it('should NOT throw when getXcsrfToken returns undefined (DNS down)', async () => {
+        // getXcsrfToken catches network errors and returns undefined
+        // login() must treat this as a retriable error, not a fatal throw
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND account.electrolux.one'))
+        vi.useFakeTimers()
+
+        // Must not throw — should return false and schedule a retry
+        const loginPromise = client.login()
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        await expect(loginPromise).resolves.toBe(false)
+        expect(client.isLoggedIn).toBe(false)
+      })
+
       it('should handle malformed access token in cookie', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post)
@@ -2435,6 +2450,31 @@ describe('electrolux', () => {
 
         // Tokens should have been cleared before re-login
         expect(client.isLoggedIn).toBe(true) // Re-login succeeded
+      })
+
+      it('should NOT propagate when login() throws during 401 refresh fallback (DNS down)', async () => {
+        // Scenario: refresh token rejected (401), code falls back to login(), but DNS is down
+        // so getXcsrfToken() returns undefined, login() schedules retry — refreshTokens() must not throw
+        const error401 = new Error('Unauthorized') as AxiosError
+        error401.response = { status: 401 } as AxiosResponse
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
+
+        mockAxiosInstance.post.mockRejectedValueOnce(error401)
+
+        // DNS is down: getXcsrfToken catches ENOTFOUND and returns undefined
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND account.electrolux.one'))
+        vi.useFakeTimers()
+
+        await client.initialize()
+        client.accessToken = 'old-token'
+        client.refreshToken = 'old-refresh-token'
+
+        // Must not throw — login() schedules its own retry, refreshTokens() just returns
+        const refreshPromise = client.refreshTokens()
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        await expect(refreshPromise).resolves.toBeUndefined()
       })
 
       it('should schedule retry on transient token refresh error', async () => {
