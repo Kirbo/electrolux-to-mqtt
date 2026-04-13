@@ -646,22 +646,13 @@ create gitlab prerelease:
     - job: build and deploy rc docker images
       artifacts: false
   before_script:
-    - apk add --no-cache curl jq git
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
-    - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
-    - git fetch --tags --force || true
+    - apk add --no-cache curl jq
   script:
     - source build.env
     - TAG="v${VERSION}"
     - |
-      if git rev-parse "${TAG}" >/dev/null 2>&1; then
-        echo "Tag ${TAG} already exists, skipping"
-      else
-        git tag "${TAG}"
-        git push origin "${TAG}"
-      fi
-    - |
-      curl --fail-with-body \
+      HTTP_STATUS=$(curl --silent --output /tmp/release_response.json --write-out "%{http_code}" \
+        --request POST \
         --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
         --header "Content-Type: application/json" \
         --data "$(jq -n \
@@ -670,7 +661,16 @@ create gitlab prerelease:
           --arg ref "${CI_COMMIT_SHA}" \
           --rawfile description UNRELEASED-CHANGELOG.md \
           '{name: $name, tag_name: $tag_name, ref: $ref, description: $description}')" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases"
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases")
+      if [ "${HTTP_STATUS}" = "201" ]; then
+        echo "Release ${TAG} created"
+      elif [ "${HTTP_STATUS}" = "409" ]; then
+        echo "Release ${TAG} already exists, skipping"
+      else
+        echo "Failed to create release (HTTP ${HTTP_STATUS}):"
+        cat /tmp/release_response.json
+        exit 1
+      fi
 
 update telemetry backend:
   stage: release
