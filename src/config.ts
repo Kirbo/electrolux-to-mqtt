@@ -178,7 +178,7 @@ const envSchema = z.object({
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   HEALTH_CHECK_FILE_PATH: z.string().optional(),
-  HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES: z.coerce.number().int().min(10).max(1440).optional(),
+  HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES: z.coerce.number().optional(),
   E2M_TELEMETRY_ENABLED: z
     .string()
     .optional()

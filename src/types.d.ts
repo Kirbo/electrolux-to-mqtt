@@ -28,7 +28,7 @@ export type Appliance = {
       dataModelVersion: string
       deviceId: string
       evapDefrostState?: 'on' | 'off' | null
-      fanSpeedSetting?: 'low' | 'medium' | 'middle' | 'high' | 'auto'
+      fanSpeedSetting?: 'low' | 'middle' | 'high' | 'auto'
       filterRuntime?: number
       filterState?: 'clean' | 'dirty' | 'good'
       fourWayValveState?: 'on' | 'off' | null
