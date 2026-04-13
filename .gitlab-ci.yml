@@ -333,8 +333,23 @@ audit:
 
 sonarcloud-check:
   stage: test
-  <<: *rules_node_changes
   timeout: 5 minutes
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: "$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == \"main\""
+      changes:
+        - biome.jsonc
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tests/**/*
+        - tsconfig.json
+        - vitest.config.ts
+        - vitest.setup.ts
+        - docker/Dockerfile
+      when: on_success
+    - when: never
   retry: 2
   interruptible: true
   allow_failure: false
