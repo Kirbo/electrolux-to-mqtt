@@ -235,6 +235,37 @@ services:
 ```
 </details>
 
+## Beta / pre-release channel
+
+Pre-release (rc) builds are published to the `:next` Docker tag on every push to the `next` branch.
+Release candidates follow the `vX.Y.Z-rc.N` versioning scheme. Each rc changelog covers only the
+changes since the previous release (stable or rc).
+
+<details>
+  <summary>I want to try the beta channel!</summary>
+
+> **Note:** Pre-release builds may contain unfinished features or bugs. Use `:latest` for production.
+
+To use the beta channel, replace `:latest` with `:next` in your setup:
+
+**docker:**
+```bash
+docker pull kirbownz/electrolux-to-mqtt:next
+docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:next
+```
+
+**docker-compose / Portainer:** change the `image:` line:
+```yaml
+image: kirbownz/electrolux-to-mqtt:next
+```
+
+To receive update notifications for rc releases, set `VERSION_CHECK_UPDATE_CHANNEL=beta`
+(env var) or `updateChannel: beta` in `config.yml` under `versionCheck:`.
+
+Release notes for each rc are available on the
+[GitLab releases page](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases).
+</details>
+
 ## Developing locally
 
 <details>

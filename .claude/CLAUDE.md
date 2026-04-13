@@ -66,6 +66,7 @@ Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backe
 
 ### Sync
 - Docs (`*.md`), examples, config files must sync with code.
+- **Config options**: any add, modify, or delete must be reflected in `config.example.yml`, both compose examples, and all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). See full checklist in `.claude/agents/engineer.md § Config`.
 - Follow file checklists in `.claude/agents/engineer.md` for code changes.
 - `.nvmrc`, `package.json` `engines`, Docker build args must match Node.js version.
 - When `.claude/agents/` or `.claude/skills/` change, update `AI_DEVELOPMENT.md`.

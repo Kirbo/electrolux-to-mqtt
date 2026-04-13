@@ -50,12 +50,12 @@ Before any change consult file checklist below for applicable change type + TDD 
 - User-facing change → update user-facing `*.md` docs.
 - Numeric schemas: `.positive()` / `.min(1)` for positive, `.int()` for whole, `.int().min(1).max(65535)` for ports.
 
-### Config (`src/config.ts`)
+### Config (`src/config.ts`) — any add, modify, or delete of a config option
 - `config.example.yml`
 - `docker/docker-compose.example.yml`
 - `docker/docker-compose.local.example.yml`
-- `README.md` — env var table, `docker run` snippet, compose snippet
-- `tests/config.test.ts` — valid + invalid cases for the new field
+- `README.md` — **four** locations: env var table, `docker run` snippet, docker-compose snippet, Portainer inline YAML
+- `tests/config.test.ts` — valid + invalid cases for the new/changed field
 
 ### Appliance support
 `src/appliances/<model>.ts`, `factory.ts`, `normalizers.ts`*, `src/types/normalized.ts`*, `src/types/homeassistant.ts`*, `tests/appliances/<model>.test.ts`, `base.test.ts`*, `factory.test.ts`, `normalizers.test.ts`*

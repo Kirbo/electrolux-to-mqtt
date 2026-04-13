@@ -36,6 +36,7 @@ services:
       # - LOGGING_SHOW_TIMESTAMP=true                                       # Show timestamp in logs (default: true)
       # - VERSION_CHECK_INTERVAL=3600                                       # Version check interval in seconds (default: 3600)
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here    # ntfy.sh webhook URL for update notifications
+      # - VERSION_CHECK_UPDATE_CHANNEL=stable                               # Release channel: 'stable' (default) or 'beta' (includes rc releases, uses :next Docker tag)
       # - HEALTH_CHECK_ENABLED=true                                          # Enable file-based health check for Docker HEALTHCHECK (default: true)
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health                             # Path to the health file (default: /tmp/e2m-health)
       # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45                          # Minutes of sustained API failure before process.exit(1) triggers Docker restart (default: 45, min: 10, max: 1440)
