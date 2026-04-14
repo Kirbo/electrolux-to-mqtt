@@ -1,0 +1,1 @@
+- [follow-redirects vuln GHSA-r4q5-vmmm-2653](vuln_follow_redirects.md) — axios ^1.15.11 covers fix 1.16.0; lockfile update resolves without overrides
