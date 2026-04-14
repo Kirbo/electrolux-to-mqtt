@@ -15,6 +15,7 @@ Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This f
   CLAUDE.md                      # Rules, verification
   skills/
     audit/SKILL.md               # /audit trigger stub → agents/auditor.md
+    audit-fix/SKILL.md           # /audit-fix full pipeline: audit → fix → verify → commit
     maintain/SKILL.md            # /maintain trigger stub → agents/maintainer.md
   agents/
     engineer.md                  # TDD implementation work + file checklists (src/, tests/, docker/, telemetry-backend/)
@@ -29,6 +30,7 @@ Skills are predefined workflows invoked as slash commands in Claude Code:
 | Command | What it does |
 |---------|-------------|
 | `/audit` | Full codebase audit: lint, typecheck, tests, then manual review against the checklist. Reports findings only; fixes delegated to `engineer`. |
+| `/audit-fix` | Full pipeline: audit → save report to `audit-report.md` → user approves findings → engineer fixes → verify → user approves commit batches → commit. |
 | `/maintain` | Update all dependencies and pnpm, fix any breakage from updates. |
 
 ### Ad-hoc prompting
