@@ -8,4 +8,4 @@ model: sonnet
 effort: medium
 ---
 
-Invoke maintainer agent. All workflow, checklist, and rules in `.claude/agents/maintainer.md`.
+Run maintainer. Workflow/checklist/rules: `.claude/agents/maintainer.md`.

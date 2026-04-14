@@ -2,7 +2,7 @@
 
 ## Project
 
-Electrolux-to-MQTT bridge. TypeScript service linking Electrolux appliances to Home Assistant via MQTT auto-discovery. Uses pnpm, Biome, Vitest. Includes standalone `telemetry-backend/` for anon usage stats.
+Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest. Standalone `telemetry-backend/` for anon usage stats.
 
 ## Commands
 
@@ -17,7 +17,7 @@ Electrolux-to-MQTT bridge. TypeScript service linking Electrolux appliances to H
 | `pnpm sonar` | SonarQube scanner (reads `.env`) |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` / `pnpm update --latest` |
 
-Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter by name: `pnpm vitest run -t "pattern"`.
+Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter: `pnpm vitest run -t "pattern"`.
 
 Telemetry backend separate pnpm package — `cd telemetry-backend && pnpm test` / `pnpm typecheck` / `pnpm build`.
 
@@ -36,11 +36,11 @@ Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `O
 
 `telemetry-backend/` standalone pnpm package. HTTP surface behind `RedisLike` interface (testable via `FakeRedis`). Rate limiting before payload validation.
 
-API type unions in `src/types.d.ts` and `src/types/normalized.ts` kept in sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. `.claude/agents/engineer.md` per-change-type file checklists. `/audit` + `/maintain` slash-command skills are trigger stubs — workflow, checklists, and rules live in `.claude/agents/auditor.md` and `.claude/agents/maintainer.md`.
+API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. `.claude/agents/engineer.md` per-change-type checklists. `/audit` + `/maintain` are trigger stubs — workflow + rules in `.claude/agents/auditor.md` + `.claude/agents/maintainer.md`.
 
 ## Subagents
 
-Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backend/`) — delegate to `engineer` subagent for TDD workflow. Use `auditor` for `/audit`, `maintainer` for `/maintain`.
+`src/`, `tests/`, `docker/`, `telemetry-backend/` changes → delegate to `engineer` subagent (TDD workflow). `auditor` for `/audit`, `maintainer` for `/maintain`.
 
 ## Rules
 
@@ -54,19 +54,25 @@ Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backe
 - No silent error swallowing (empty `catch {}`) unless fallback documented. No try/catch fallback patterns.
 - Retry loops: exponential backoff with max delay. No unbounded fixed-delay retries.
 - No hardcoded secrets outside test fixtures.
-- No dead exports, fields, type variants. Test files (`tests/`) count as importers. Exception: raw API unions in `src/types.d.ts` reflecting known API values (E2E snapshots) must stay.
+- No dead exports, fields, type variants. `tests/` count as importers. Exception: raw API unions in `src/types.d.ts` (E2E snapshots) must stay.
 - Every config/schema field functional. No empty directories.
 
 ### Tooling
-- `pnpm` only (never npm/yarn; `pnpm dlx` instead of npx). Never `pnpm dlx` for locally installed tools — use `pnpm` scripts. Biome for lint/format (no ESLint/Prettier), single quotes, semicolons per `biome.jsonc`.
+- `pnpm` only (never npm/yarn; `pnpm dlx` not npx). Never `pnpm dlx` for locally installed tools — use `pnpm` scripts. Biome lint/format (no ESLint/Prettier), single quotes, semicolons per `biome.jsonc`.
 - `Number.parseInt` / `Number.parseFloat` only, never global forms.
 - SonarQube Cloud: all code must pass — no bugs, vulnerabilities, security hotspots. Cognitive complexity ≤ 15.
-- Conventional Commits. Semantic Versioning. Release config in `.semrelrc`. `chore(deps)` triggers patch release.
+- Conventional Commits. Semantic Versioning. Release config in `.semrelrc`.
+- **Version-bumping types** — only when change touches `src/`, `package.json`, or `pnpm-lock.yaml`:
+  - `feat:` → minor bump
+  - `fix:` → patch bump
+  - `chore(deps):` → patch bump (dep updates only)
+  - `<type>!:` → major bump. **Mandatory** for breaking changes — `!` in type is required. `BREAKING CHANGE:` footer is nice-to-have; add when possible but not required. If introducing breaking change, prefer both.
+- **Non-bumping types** — CI, docs, config, sonar, `telemetry-backend/`, `.claude/`, scripts: `ci:`, `docs:`, `refactor:`, `test:`, `style:`, `perf:`, `chore:` (without `(deps)`), `build:`.
 - Never `git push` — leave to human.
 
 ### Sync
 - Docs (`*.md`), examples, config files must sync with code.
-- **Config options**: any add, modify, or delete must be reflected in `config.example.yml`, both compose examples, and all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). See full checklist in `.claude/agents/engineer.md § Config`.
+- **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in `.claude/agents/engineer.md § Config`.
 - Follow file checklists in `.claude/agents/engineer.md` for code changes.
 - `.nvmrc`, `package.json` `engines`, Docker build args must match Node.js version.
 - When `.claude/agents/` or `.claude/skills/` change, update `AI_DEVELOPMENT.md`.
@@ -78,7 +84,7 @@ Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backe
 ### Domain
 - Appliance classes extend `BaseAppliance` + register in factory.
 - HA discovery payloads conform to MQTT discovery spec. `name: ''` intentional (entity inherits device name).
-- Normalized state + HA templates use **lowercase**. `transformMqttCommandToApi()` sole denormalization authority (`medium`→`MIDDLE`, `fan_only`→`FANONLY`). Normalize incoming MQTT commands to lowercase before merging with cached state.
+- Normalized state + HA templates use **lowercase**. `transformMqttCommandToApi()` sole denormalization authority (`medium`→`MIDDLE`, `fan_only`→`FANONLY`). Normalize incoming MQTT commands lowercase before merging with cached state.
 
 ### Config schema
 - `envSchema` pre-processes (coercion, defaults). `configSchema` validates (URL format, enum values, regex). Each constraint in exactly one schema.
@@ -86,7 +92,7 @@ Implementation work (changes under `src/`, `tests/`, `docker/`, `telemetry-backe
 
 ## Verification
 
-Run after every code change, and **verification must pass before committing** — never commit with failing checks:
+Run after every change. **Verification must pass before commit** — never commit with failing checks:
 1. `pnpm check` — fix lint/format findings.
 2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed: run `pnpm typecheck`, `pnpm test`, `pnpm sonar` — fix all.
 3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck && pnpm test`.
@@ -94,16 +100,16 @@ Run after every code change, and **verification must pass before committing** �
 
 ## Commits
 
-Two triggers allow committing — both require user initiation:
+Two triggers, both need user initiation:
 1. User explicitly asks ("commit", "commit this", "make a commit") → run verification (§ Verification) if any code changed, then generate message + commit.
 2. You suggest committing and user agrees → run verification (§ Verification) if any code changed, then generate message + commit.
 
-Never commit on your own initiative — not after a task, not to "save progress", not after a fix, not after running verification steps. If no trigger above applies, stop. The user may have more changes in mind for the same commit.
+Never commit without trigger — not after task, not to save progress, not after fix. If no trigger, stop. User may have more changes in mind.
 
-Split into logical chunks — each commit = one coherent change (feature, fix, refactor, docs). Don't bundle unrelated changes. Don't split single logical change across commits. If staged diff spans multiple concerns, stage + commit separately.
+Split into logical chunks — each commit = one coherent change (feature, fix, refactor, docs). No unrelated bundles. No split single logical change. If diff spans multiple concerns, stage + commit separately.
 
-Before `git commit --amend` or `git rebase`: check if target commits pushed to origin (`git log origin/HEAD..HEAD` — empty = all on origin). If pushed, stop + ask user. If not pushed, proceed.
+Before `git commit --amend` or `git rebase`: check if commits pushed (`git log origin/HEAD..HEAD` — empty = all pushed). If pushed, stop + ask. If not, proceed.
 
 ## Self-maintenance
 
-Suggest updates to `.claude/CLAUDE.md`, `.claude/agents/`, or `.claude/skills/` when gaps noticed. Always ask before updating.
+Suggest updates to `.claude/CLAUDE.md`, `.claude/agents/`, `.claude/skills/` when gaps noticed. Ask before updating.

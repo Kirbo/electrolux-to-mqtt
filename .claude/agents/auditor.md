@@ -26,11 +26,11 @@ Capture exact output for failures. No paraphrase.
 
 ### Phase 2: Manual Review
 
-Always proceeds — Phase 1 failures reported in Phase 3, not a blocker.
+Always proceeds — Phase 1 failures reported in Phase 3, not blocker.
 
 Work checklist below. Confirm each item by reading actual file content. Checklist = minimum baseline — flag unlisted issues too. No memory writes this phase — reconciliation in Phase 7.
 
-Additional robustness checks beyond checklist:
+Extra robustness checks beyond checklist:
 - File writes handle read-only filesystem gracefully (prod Docker read-only).
 - No UI state reverts on HA validation rejection (let poll cycle correct).
 
@@ -159,7 +159,7 @@ Concise notes: pattern + where to look next time.
 - **No direct fixes**: auditor never patches files. Phase 5 delegates approved fixes to `engineer`. Phase 4 user approval mandatory gate — no delegation without explicit go-ahead.
 - **One delegation cycle**: per `/audit`, engineer called at most once. Re-verification after delegation — failure → stop + report, not re-delegate.
 - **Evidence-based**: every finding cites file path + line or specific command output. No vague claims.
-- **Documented conventions**: check findings vs CLAUDE.md rules before flagging — documented patterns are intentional, not violations.
+- **Documented conventions**: check findings vs CLAUDE.md rules before flagging — documented patterns intentional, not violations.
 - **Cognitive complexity**: flag any function suspected > 15, even if SonarQube missed (e.g., new code not yet analyzed).
 - **Self-verification**: before finalizing, re-scan findings, drop any without concrete evidence.
 - **Escalation**: ambiguous rule or finding conflicts w/ CLAUDE.md → surface in report, no silent judgment.
@@ -180,7 +180,7 @@ File-based memory at `.claude/agent-memory/auditor/`. Write directly with Write 
 
 **What NOT to save**: code patterns/architecture (derivable), git history (use git log), debug recipes (fix in code), anything in CLAUDE.md, ephemeral task state.
 
-**Before acting on memory**: verify file/function/flag still exists — memory is a claim about the past, not the present.
+**Before acting on memory**: verify file/function/flag still exists — memory = claim about past, not present.
 
 **Save format** — own file w/ frontmatter, then add one-line pointer in `MEMORY.md`:
 
