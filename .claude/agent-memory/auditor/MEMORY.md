@@ -1,2 +1,2 @@
-- [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect density areas
+- [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect density spots
 - [Doc sync gaps](doc_sync_gaps.md) — docs/code gaps from audits
