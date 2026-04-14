@@ -402,13 +402,32 @@ telemetry-backend test:
     - cd telemetry-backend && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test
   allow_failure: false
 
-################################################################## BUILD STAGE JOBS ###################################################################
+################################################################# DOCKER SHARED TEMPLATE ##################################################################
 
-try to build docker images:
-  stage: build
+# Shared base for all docker buildx jobs. Extending jobs override: rules, stage, needs, script.
+# try-to-build overrides DOCKER_REGISTRY_PASSWORD to ${DOCKERHUB_PASSWORD_READ} (no push needed).
+.docker_build_base:
   image: docker:latest
   retry: 1
   interruptible: true
+  allow_failure: false
+  cache: []
+  variables:
+    DOCKER_HOST: "unix:///var/run/docker.sock"
+    DOCKER_REGISTRY_PASSWORD: ${DOCKERHUB_PASSWORD}
+  before_script:
+    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
+    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
+    - echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
+    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
+  after_script:
+    - docker buildx rm "${BUILDER_NAME}" || true
+
+################################################################## BUILD STAGE JOBS ###################################################################
+
+try to build docker images:
+  extends: .docker_build_base
+  stage: build
   rules:
     - if: $SCHEDULE
       when: never
@@ -421,9 +440,8 @@ try to build docker images:
         - tsconfig.json
       when: on_success
     - when: never
-  cache: []
   variables:
-    DOCKER_HOST: "unix:///var/run/docker.sock" # Use local Docker for shell executor
+    DOCKER_REGISTRY_PASSWORD: ${DOCKERHUB_PASSWORD_READ}
   needs:
     - job: initialise variables
       artifacts: true
@@ -432,11 +450,6 @@ try to build docker images:
     - job: sonarcloud-check
       artifacts: false
       optional: true
-  before_script:
-    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
-    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
-    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
-    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - |
@@ -449,8 +462,6 @@ try to build docker images:
         --platform linux/amd64,linux/arm64 \
         -t kirbownz/electrolux-to-mqtt:latest \
         -f docker/Dockerfile .
-  after_script:
-    - docker buildx rm "${BUILDER_NAME}" || true
 
 ################################################################# RELEASE STAGE JOBS ##################################################################
 
@@ -472,11 +483,8 @@ generate changelog:
     - combine-changelogs -include UNRELEASED-CHANGELOG.md
 
 build and deploy docker images:
+  extends: .docker_build_base
   stage: release
-  image: docker:latest
-  retry: 1
-  interruptible: true
-  allow_failure: false
   rules:
     - if: $SCHEDULE
       when: never
@@ -489,9 +497,6 @@ build and deploy docker images:
         - tsconfig.json
       when: on_success
     - when: never
-  cache: []
-  variables:
-    DOCKER_HOST: "unix:///var/run/docker.sock" # Use local Docker for shell executor
   needs:
     - job: initialise variables
       artifacts: true
@@ -502,11 +507,6 @@ build and deploy docker images:
       optional: true
     - job: generate changelog
       artifacts: true
-  before_script:
-    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
-    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
-    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
-    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - |
@@ -523,8 +523,6 @@ build and deploy docker images:
         -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
         -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
         -f docker/Dockerfile .
-  after_script:
-    - docker buildx rm "${BUILDER_NAME}" || true
 
 create gitlab release:
   stage: release
@@ -561,11 +559,8 @@ create gitlab release:
     - semantic-release --allow-no-changes
 
 build and deploy rc docker images:
+  extends: .docker_build_base
   stage: release
-  image: docker:latest
-  retry: 1
-  interruptible: true
-  allow_failure: false
   rules:
     - if: $SCHEDULE
       when: never
@@ -578,9 +573,6 @@ build and deploy rc docker images:
         - tsconfig.json
       when: on_success
     - when: never
-  cache: []
-  variables:
-    DOCKER_HOST: "unix:///var/run/docker.sock"
   needs:
     - job: initialise variables
       artifacts: true
@@ -591,11 +583,6 @@ build and deploy rc docker images:
       optional: true
     - job: generate changelog
       artifacts: true
-  before_script:
-    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
-    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
-    - echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin "${DOCKER_REGISTRY}"
-    - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
   script:
     - source build.env
     - |
@@ -612,8 +599,6 @@ build and deploy rc docker images:
         -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
         -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:next \
         -f docker/Dockerfile .
-  after_script:
-    - docker buildx rm "${BUILDER_NAME}" || true
 
 create gitlab prerelease:
   stage: release
