@@ -1,3 +1,14 @@
+################################################################### SHARED TEMPLATES ###################################################################
+
+.osv_scanner:
+  image: alpine:3
+  interruptible: true
+  cache: []
+  before_script:
+    - ARCH=$(uname -m); [ "$ARCH" = "x86_64" ] && ARCH="amd64" || ARCH="arm64"
+    - wget -q "https://github.com/google/osv-scanner/releases/download/v2.3.5/osv-scanner_linux_${ARCH}" -O /usr/local/bin/osv-scanner
+    - chmod +x /usr/local/bin/osv-scanner
+
 ################################################################### TEST STAGE JOBS ###################################################################
 
 test:
@@ -94,9 +105,8 @@ typecheck:
   allow_failure: false
 
 audit:
+  extends: .osv_scanner
   stage: test
-  image: ghcr.io/google/osv-scanner:v2.3.5
-  interruptible: true
   rules:
     - if: '$SCHEDULE == "AUDIT"'
       when: on_success
@@ -111,9 +121,8 @@ audit:
   allow_failure: false
 
 audit:backend:
+  extends: .osv_scanner
   stage: test
-  image: ghcr.io/google/osv-scanner:v2.3.5
-  interruptible: true
   rules:
     - if: '$SCHEDULE == "AUDIT"'
       when: on_success
