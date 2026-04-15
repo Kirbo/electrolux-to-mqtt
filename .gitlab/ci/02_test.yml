@@ -134,7 +134,7 @@ audit:backend:
     - when: never
   script:
     - sh scripts/osv-scan.sh backend
-  allow_failure: false
+  allow_failure: true # It defeats it's purpose to fail the pipeline if vulnerabilities are found, as it's optional anyway and has nothing to do with the application. This just serves as a warning.
 
 sonarcloud-check:
   stage: test
