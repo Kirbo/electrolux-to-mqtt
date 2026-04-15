@@ -1,0 +1,56 @@
+################################################################## BUILD STAGE JOBS ###################################################################
+
+try to build docker images:
+  extends: .docker_build_base
+  stage: build
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "next"'
+      changes:
+        - docker/Dockerfile
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
+      when: on_success
+    - when: never
+  variables:
+    DOCKER_REGISTRY_PASSWORD: ${DOCKERHUB_PASSWORD_READ}
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: bump version
+      artifacts: true
+    - job: sonarcloud-check
+      artifacts: false
+      optional: true
+  script:
+    - source build.env
+    - |
+      docker buildx build \
+        --builder "${BUILDER_NAME}" \
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        --build-arg VERSION=${VERSION} \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
+        --platform linux/amd64,linux/arm64 \
+        -t kirbownz/electrolux-to-mqtt:latest \
+        -f docker/Dockerfile .
+
+generate changelog:
+  image: kirbownz/combine-changelogs:latest
+  stage: build
+  interruptible: true
+  allow_failure: false
+  extends: .rules_code_changes
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: bump version
+      artifacts: true
+  artifacts:
+    paths:
+      - CHANGELOG.md
+  script:
+    - combine-changelogs -include UNRELEASED-CHANGELOG.md
