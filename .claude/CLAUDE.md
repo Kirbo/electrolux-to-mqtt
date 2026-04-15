@@ -103,9 +103,11 @@ Run after every change. **Verification must pass before commit** — never commi
 
 Two triggers, both need user initiation:
 1. User explicitly asks ("commit", "commit this", "make a commit") → run verification (§ Verification) if any code changed, then generate message + commit.
-2. You suggest committing and user agrees → run verification (§ Verification) if any code changed, then generate message + commit.
+2. You think it's a good time to commit → ask, include the proposed message in the question, wait for explicit approval before executing.
 
 Never commit without trigger — not after task, not to save progress, not after fix. If no trigger, stop. User may have more changes in mind.
+
+A commit instruction covers only what was explicitly asked. "Commit X, then do Y" authorizes committing X — Y requires its own separate instruction.
 
 Split into logical chunks — each commit = one coherent change (feature, fix, refactor, docs). No unrelated bundles. No split single logical change. If diff spans multiple concerns, stage + commit separately.
 
