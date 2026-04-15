@@ -22,6 +22,7 @@ export class Orchestrator {
   private readonly mqtt: IMqtt
   private readonly config: OrchestratorConfig
   private readonly activeIntervals = new Set<NodeJS.Timeout>()
+  private readonly activeTimeouts = new Set<NodeJS.Timeout>()
   private readonly applianceInstances = new Map<string, BaseAppliance>()
   private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
   private lastSuccessfulApiCall = Date.now()
@@ -107,7 +108,8 @@ export class Orchestrator {
       }
 
       // Start state polling after optional delay
-      setTimeout(async () => {
+      const timeoutId = setTimeout(async () => {
+        this.activeTimeouts.delete(timeoutId)
         if (this.isShuttingDown) return
 
         const state = await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
@@ -127,6 +129,7 @@ export class Orchestrator {
         this.activeIntervals.add(intervalId)
         this.applianceStateIntervals.set(applianceId, intervalId)
       }, delayMs)
+      this.activeTimeouts.add(timeoutId)
 
       // Subscribe to MQTT commands for this appliance
       await this.mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
@@ -255,6 +258,12 @@ export class Orchestrator {
     if (discoveryInterval) {
       clearInterval(discoveryInterval)
     }
+
+    // Clear pending startup timeouts
+    for (const t of this.activeTimeouts) {
+      clearTimeout(t)
+    }
+    this.activeTimeouts.clear()
 
     // Clear all intervals
     for (const interval of this.activeIntervals) {
