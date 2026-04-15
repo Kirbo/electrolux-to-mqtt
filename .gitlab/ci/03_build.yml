@@ -22,6 +22,8 @@ try to build docker images:
       artifacts: true
     - job: bump version
       artifacts: true
+    - job: generate changelog
+      artifacts: true
     - job: sonarcloud-check
       artifacts: false
       optional: true

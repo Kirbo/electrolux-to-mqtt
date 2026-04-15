@@ -18,7 +18,7 @@ test:
   extends: .rules_node_changes
   cache:
     key:
-      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
@@ -55,7 +55,7 @@ lint:
   extends: .rules_node_changes
   cache:
     key:
-      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
@@ -83,7 +83,7 @@ typecheck:
   extends: .rules_node_changes
   cache:
     key:
-      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
