@@ -9,6 +9,7 @@ import { startVersionChecker } from './version-checker.js'
 
 const currentVersion = packageJson.version
 const logger = createLogger('app')
+logger.info({ version: currentVersion }, 'Starting Electrolux to MQTT')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
 
