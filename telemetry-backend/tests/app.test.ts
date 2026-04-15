@@ -379,6 +379,36 @@ describe('POST /telemetry', () => {
       .send({ userHash: HASH_B, version: '1.0.0' })
     expect(blocked.status).toBe(429)
   })
+
+  it('includes Retry-After header when hash rate limit is exceeded', async () => {
+    const windowConfig = buildConfig({ rateLimitWindowMs: 120_000, rateLimitHashMax: 1 })
+    const app = createApp({ redis, config: windowConfig })
+
+    await request(app).post('/telemetry').set('X-Real-IP', '203.0.113.50').send({ userHash: HASH_C, version: '1.0.0' })
+
+    const blocked = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.51')
+      .send({ userHash: HASH_C, version: '1.0.0' })
+
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers['retry-after']).toBe('120')
+  })
+
+  it('includes Retry-After header when IP rate limit is exceeded', async () => {
+    const windowConfig = buildConfig({ rateLimitWindowMs: 60_000, rateLimitIpMax: 1, rateLimitHashMax: 1000 })
+    const app = createApp({ redis, config: windowConfig })
+
+    await request(app).post('/telemetry').set('X-Real-IP', '203.0.113.60').send({ userHash: HASH_A, version: '1.0.0' })
+
+    const blocked = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.60')
+      .send({ userHash: HASH_B, version: '1.0.0' })
+
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers['retry-after']).toBe('60')
+  })
 })
 
 describe('GET /telemetry', () => {

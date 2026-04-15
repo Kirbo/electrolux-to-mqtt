@@ -171,6 +171,7 @@ export function createApp(deps: AppDependencies): Express {
       }
 
       if (count > max) {
+        res.set('Retry-After', String(rateLimitWindowSeconds))
         res.status(429).json({ error: 'Too many requests' })
         return false
       }
