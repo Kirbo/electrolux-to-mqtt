@@ -47,11 +47,11 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
 
 ### TypeScript
 - Never `any`. Use `unknown` + type guards. No `as` without runtime check. No `// @ts-ignore`. No non-null assertions (`!`).
-- Keep `strict: true`, `noUncheckedIndexedAccess: true`.
+- Keep `strict: true`, `noUncheckedIndexedAccess: true`. `telemetry-backend/tsconfig.json` must maintain the same settings — don't let the backend drift weaker.
 - Validate state/config files from disk, don't cast blindly.
 
 ### Code quality
-- No `console.log` in `src/` — use `src/logger.ts` (pino). Exceptions: pre-pino bootstrap files (`config.ts`, `init.ts`, `logger.ts`). `telemetry-backend/` uses `console.*` directly.
+- No `console.log` in `src/` — use `src/logger.ts` (pino). Exceptions: pre-pino bootstrap files (`config.ts`, `logger.ts`). `telemetry-backend/` uses `console.*` directly.
 - No silent error swallowing (empty `catch {}`) unless fallback documented. No try/catch fallback patterns.
 - Retry loops: exponential backoff with max delay. No unbounded fixed-delay retries.
 - No hardcoded secrets outside test fixtures.
