@@ -134,7 +134,7 @@ audit:backend:
     - when: never
   script:
     - sh scripts/osv-scan.sh backend
-  allow_failure: true
+  allow_failure: false
 
 sonarcloud-check:
   stage: test

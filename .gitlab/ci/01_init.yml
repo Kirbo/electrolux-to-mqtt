@@ -66,7 +66,7 @@ install dependencies:
   extends: .rules_node_changes_or_schedule
   cache:
     key:
-      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+      prefix: ${CI_COMMIT_REF_SLUG}
       files:
         - pnpm-lock.yaml
     paths:
@@ -87,4 +87,4 @@ install dependencies:
     - pnpm --version
   script:
     - echo "Installing dependencies..."
-    - pnpm install --config.scripts-prepend-node-path=true
+    - pnpm install --frozen-lockfile --config.scripts-prepend-node-path=true
