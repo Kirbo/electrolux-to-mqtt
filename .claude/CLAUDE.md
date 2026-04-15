@@ -15,7 +15,8 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm test` | Vitest + coverage (all suites under `tests/`) |
 | `pnpm test:e2e` | `tests/e2e/*.test.ts` with `E2E_TEST=true`. Override ntfy topic via `E2M_NTFY_TOPIC` |
 | `pnpm sonar` | SonarQube scanner (reads `.env`) |
-| `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` / `pnpm update --latest` |
+| `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
+| `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm osv-scan` / `pnpm update --latest` |
 
 Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter: `pnpm vitest run -t "pattern"`.
 

@@ -302,7 +302,7 @@ typecheck:
 
 audit:
   stage: test
-  image: node:${NODE_VERSION}
+  image: ghcr.io/google/osv-scanner:v2.3.5
   interruptible: true
   rules:
     - if: '$SCHEDULE == "AUDIT"'
@@ -313,28 +313,26 @@ audit:
         - pnpm-lock.yaml
       when: on_success
     - when: never
-  cache:
-    key:
-      prefix: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
-      files:
-        - pnpm-lock.yaml
-    paths:
-      - .pnpm-store
-      - node_modules
-    policy: pull
-  needs:
-    - job: initialise variables
-      artifacts: true
-    - job: install dependencies
-      artifacts: false
-  before_script:
-    - echo "Running security audit..."
-    - corepack enable
-    - corepack install
-    - pnpm config set store-dir .pnpm-store
   script:
-    - pnpm audit
+    - sh scripts/osv-scan.sh root
   allow_failure: false
+
+audit:backend:
+  stage: test
+  image: ghcr.io/google/osv-scanner:v2.3.5
+  interruptible: true
+  rules:
+    - if: '$SCHEDULE == "AUDIT"'
+      when: on_success
+    - if: "$CI_COMMIT_TAG == null"
+      changes:
+        - telemetry-backend/package.json
+        - telemetry-backend/pnpm-lock.yaml
+      when: on_success
+    - when: never
+  script:
+    - sh scripts/osv-scan.sh backend
+  allow_failure: true
 
 sonarcloud-check:
   stage: test
