@@ -1,0 +1,218 @@
+################################################################# RELEASE STAGE JOBS ##################################################################
+
+build and deploy docker images:
+  extends: .docker_build_base
+  stage: release
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - docker/Dockerfile
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
+      when: on_success
+    - when: never
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: bump version
+      artifacts: true
+    - job: sonarcloud-check
+      artifacts: false
+      optional: true
+    - job: generate changelog
+      artifacts: true
+  script:
+    - source build.env
+    - |
+      docker buildx build \
+        --builder "${BUILDER_NAME}" \
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        --build-arg VERSION=${VERSION} \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
+        --push \
+        --provenance=true \
+        --sbom=true \
+        --platform linux/amd64,linux/arm64 \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
+        -f docker/Dockerfile .
+
+create gitlab release:
+  stage: release
+  image:
+    name: registry.gitlab.com/go-semantic-release/semantic-release:latest
+    entrypoint: [""]
+  interruptible: true
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - docker/Dockerfile
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
+      when: on_success
+    - when: never
+  cache: []
+  needs:
+    - job: initialise variables
+      artifacts: false
+    - job: bump version
+      artifacts: true
+    - job: build and deploy docker images
+      artifacts: false
+  before_script:
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
+    - git fetch --tags --force || true
+    - git fetch origin "$CI_DEFAULT_BRANCH" || true
+  script:
+    - semantic-release --allow-no-changes
+
+build and deploy rc docker images:
+  extends: .docker_build_base
+  stage: release
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "next"'
+      changes:
+        - docker/Dockerfile
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
+      when: on_success
+    - when: never
+  needs:
+    - job: initialise variables
+      artifacts: true
+    - job: bump version
+      artifacts: true
+    - job: sonarcloud-check
+      artifacts: false
+      optional: true
+    - job: generate changelog
+      artifacts: true
+  script:
+    - source build.env
+    - |
+      docker buildx build \
+        --builder "${BUILDER_NAME}" \
+        --build-arg NODE_VERSION=${NODE_VERSION} \
+        --build-arg VERSION=${VERSION} \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
+        --push \
+        --provenance=true \
+        --sbom=true \
+        --platform linux/amd64,linux/arm64 \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:next \
+        -f docker/Dockerfile .
+
+create gitlab prerelease:
+  stage: release
+  image: alpine:latest
+  interruptible: true
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "next"'
+      changes:
+        - docker/Dockerfile
+        - package.json
+        - pnpm-lock.yaml
+        - src/**/*
+        - tsconfig.json
+      when: on_success
+    - when: never
+  cache: []
+  needs:
+    - job: initialise variables
+      artifacts: false
+    - job: bump version
+      artifacts: true
+    - job: build and deploy rc docker images
+      artifacts: false
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - source build.env
+    - TAG="v${VERSION}"
+    - |
+      HTTP_STATUS=$(curl --silent --output /tmp/release_response.json --write-out "%{http_code}" \
+        --request POST \
+        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "$(jq -n \
+          --arg name "${TAG}" \
+          --arg tag_name "${TAG}" \
+          --arg ref "${CI_COMMIT_SHA}" \
+          --rawfile description UNRELEASED-CHANGELOG.md \
+          '{name: $name, tag_name: $tag_name, ref: $ref, description: $description}')" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases")
+      if [ "${HTTP_STATUS}" = "201" ]; then
+        echo "Release ${TAG} created"
+      elif [ "${HTTP_STATUS}" = "409" ]; then
+        echo "Release ${TAG} already exists, skipping"
+      else
+        echo "Failed to create release (HTTP ${HTTP_STATUS}):"
+        cat /tmp/release_response.json
+        exit 1
+      fi
+
+update telemetry backend:
+  stage: release
+  image: alpine:latest
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - telemetry-backend/**/*
+      when: on_success
+    - when: never
+  cache: []
+  needs:
+    - job: build and deploy docker images
+      artifacts: false
+      optional: true
+    - job: telemetry-backend test
+      artifacts: false
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh
+    - echo "${SSH_KEY}" | base64 -d > ~/.ssh/id_rsa
+    - chmod 700 ~/.ssh
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
+  script:
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && ./telemetry-backend/update.sh"
+
+update dockerhub description:
+  stage: release
+  image: peterevans/dockerhub-description:4
+  interruptible: true
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - README.md
+      when: on_success
+    - when: never
+  cache: []
+  needs:
+    - job: build and deploy docker images
+      artifacts: false
+      optional: true
+  script:
+    - "--pipeline"
