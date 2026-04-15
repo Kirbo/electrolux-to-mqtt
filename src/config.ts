@@ -2,9 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import yaml from 'yaml'
 import { z } from 'zod'
-import init from './init.js'
-
-init()
 
 // configSchema is the single source of truth for structure, constraints, and defaults.
 // See CLAUDE.md § Config schema architecture.
