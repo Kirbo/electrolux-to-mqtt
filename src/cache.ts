@@ -29,8 +29,7 @@ export class Cache {
   }
 
   matchByValue(key: string, value: unknown): boolean {
-    const cached = this.get(key)
-    const match = JSON.stringify(value) === JSON.stringify(cached)
+    const match = JSON.stringify(value) === this.lru.get(key)
     if (match) {
       if (!skipCacheLogging) {
         logger.debug(`Key "${key}" value has not changed.`)
