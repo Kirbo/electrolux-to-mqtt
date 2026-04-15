@@ -7,7 +7,7 @@ import { getClientIp, hashIp, validateTelemetryPayload } from './utils.js'
 // interface keeps the app testable with a lightweight in-memory fake.
 export interface RedisLike {
   incr(key: string): Promise<number>
-  expire(key: string, seconds: number): Promise<unknown>
+  expire(key: string, seconds: number): Promise<number>
   get(key: string): Promise<string | null>
   set(key: string, value: string): Promise<unknown>
   setEx(key: string, seconds: number, value: string): Promise<unknown>

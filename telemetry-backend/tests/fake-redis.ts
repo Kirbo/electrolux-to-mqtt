@@ -22,10 +22,10 @@ export class FakeRedis implements RedisLike {
     return next
   }
 
-  async expire(key: string, seconds: number): Promise<boolean> {
-    if (!this.store.has(key)) return false
+  async expire(key: string, seconds: number): Promise<0 | 1> {
+    if (!this.store.has(key)) return 0
     this.ttls.set(key, seconds)
-    return true
+    return 1
   }
 
   async get(key: string): Promise<string | null> {
