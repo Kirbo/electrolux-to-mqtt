@@ -1,9 +1,11 @@
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AppConfig, createApp, generateBadge, getUserKeys } from '../src/app.js'
+import { readMachineId } from '../src/utils.js'
 import { FakeRedis } from './fake-redis.js'
 
 // Some test paths exercise error-logging branches — silence the noise.
@@ -455,5 +457,26 @@ describe('GET /telemetry', () => {
 
     expect(res.status).toBe(500)
     expect(res.body.error).toMatch(/Internal/)
+  })
+})
+
+describe('readMachineId', () => {
+  it('returns null when neither machine-id path exists', () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false)
+    expect(readMachineId()).toBeNull()
+  })
+
+  it('returns trimmed content when a machine-id file exists', () => {
+    vi.spyOn(fs, 'existsSync').mockImplementation((p) => p === '/etc/machine-id')
+    vi.spyOn(fs, 'readFileSync').mockReturnValue('abc123\n')
+    expect(readMachineId()).toBe('abc123')
+  })
+
+  it('returns null when reading throws', () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('permission denied')
+    })
+    expect(readMachineId()).toBeNull()
   })
 })
