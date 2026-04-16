@@ -51,7 +51,7 @@ Before any change consult file checklist below for applicable change type + TDD 
 - Numeric schemas: `.positive()` / `.min(1)` for positive, `.int()` for whole, `.int().min(1).max(65535)` for ports.
 
 ### Breaking changes (`<type>!:` commit)
-- Bump `--maintained-version` in `.gitlab/ci/01_init.yml` (`1-rc` → `2-rc` etc.) so RC changelog scoping tracks the new major version.
+- No extra CI changes needed — RC versioning in `.gitlab/ci/01_init.yml` is version-agnostic.
 
 ### Config (`src/config.ts`) — any add, modify, or delete of a config option
 - `config.example.yml`

@@ -67,7 +67,7 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
   - `feat:` → minor bump
   - `fix:` → patch bump
   - `chore(deps):` → patch bump (dep updates only)
-  - `<type>!:` → major bump. **Mandatory** for breaking changes — `!` in type is required. `BREAKING CHANGE:` footer is nice-to-have; add when possible but not required. If introducing breaking change, prefer both. **Also update `--maintained-version` in `.gitlab/ci/01_init.yml`** (`1-rc` → `2-rc` etc.) — this controls RC changelog scoping on the `next` branch.
+  - `<type>!:` → major bump. **Mandatory** for breaking changes — `!` in type is required. `BREAKING CHANGE:` footer is nice-to-have; add when possible but not required. If introducing breaking change, prefer both.
 - **Non-bumping types** — CI, docs, config, sonar, `telemetry-backend/`, `.claude/`, scripts: `ci:`, `docs:`, `refactor:`, `test:`, `style:`, `perf:`, `chore:` (without `(deps)`), `build:`.
 - Never `git push` — leave to human.
 - Never `git checkout` / switch branches — leave to human. Commit to whatever branch is currently checked out.

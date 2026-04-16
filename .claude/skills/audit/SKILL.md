@@ -5,7 +5,7 @@ disable-model-invocation: true
 context: fork
 agent: auditor
 model: opus[1m]
-effort: max
+effort: xhigh
 ---
 
 Run auditor agent. Workflow/checklist/rules: `.claude/agents/auditor.md`.
