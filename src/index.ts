@@ -34,9 +34,14 @@ const orchestrator = new Orchestrator(client, mqtt, {
 
 let discoveryInterval: NodeJS.Timeout | null = null
 let stopVersionChecker: (() => void) | null = null
+let restartTimeout: NodeJS.Timeout | null = null
 
 // Graceful shutdown handler
 const shutdown = async () => {
+  if (restartTimeout !== null) {
+    clearTimeout(restartTimeout)
+    restartTimeout = null
+  }
   orchestrator.shutdown(stopVersionChecker, discoveryInterval)
   process.exit(0)
 }
@@ -66,7 +71,7 @@ const main = async () => {
     // API call failed (network error, DNS failure, etc.)
     logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshInterval / 1000} seconds...`)
     if (!orchestrator.isShuttingDown) {
-      setTimeout(() => main(), refreshInterval)
+      restartTimeout = setTimeout(() => main(), refreshInterval)
     }
     return
   }
@@ -76,7 +81,7 @@ const main = async () => {
       `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
     )
     if (!orchestrator.isShuttingDown) {
-      setTimeout(() => main(), refreshInterval)
+      restartTimeout = setTimeout(() => main(), refreshInterval)
     }
     return
   }
