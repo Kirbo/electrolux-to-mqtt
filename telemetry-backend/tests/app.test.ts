@@ -20,6 +20,9 @@ function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     rateLimitIpMax: 10,
     rateLimitHashMax: 1,
     rateLimitSalt: 'test-salt',
+    // Default behindProxy: true so existing tests keep their X-Real-IP semantics.
+    // Production default in index.ts is false (no proxy assumed).
+    behindProxy: true,
     badgeDir: path.join(os.tmpdir(), `telemetry-test-${Math.random().toString(36).slice(2)}`),
     ...overrides,
   }
@@ -337,13 +340,15 @@ describe('POST /telemetry', () => {
     const tightConfig = buildConfig({ rateLimitIpMax: 1, rateLimitHashMax: 1000 })
     const app = createApp({ redis, config: tightConfig })
 
+    // When behindProxy=true, Express resolves req.ip from X-Forwarded-For.
+    // Use that header so each request is seen as a distinct IP.
     const first = await request(app)
       .post('/telemetry')
-      .set('X-Real-IP', '198.51.100.1')
+      .set('X-Forwarded-For', '198.51.100.1')
       .send({ userHash: HASH_A, version: '1.0.0' })
     const second = await request(app)
       .post('/telemetry')
-      .set('X-Real-IP', '198.51.100.2')
+      .set('X-Forwarded-For', '198.51.100.2')
       .send({ userHash: HASH_B, version: '1.0.0' })
 
     expect(first.status).toBe(200)
@@ -478,5 +483,113 @@ describe('readMachineId', () => {
       throw new Error('permission denied')
     })
     expect(readMachineId()).toBeNull()
+  })
+})
+
+// ── C3: IP spoofing resistance when behindProxy = false ─────────────────────
+describe('POST /telemetry rate limit — behindProxy = false', () => {
+  it('applies the same rate-limit bucket to all requests sharing the TCP source, ignoring X-Real-IP rotation', async () => {
+    // With behindProxy=false, X-Real-IP must be ignored and the TCP source
+    // (req.socket.remoteAddress) used instead. Supertest connects from loopback,
+    // so all requests share the same bucket regardless of which X-Real-IP they set.
+    const redis = new FakeRedis()
+    const tightConfig = buildConfig({ rateLimitIpMax: 2, rateLimitHashMax: 1000, behindProxy: false })
+    const app = createApp({ redis, config: tightConfig })
+
+    // Two requests with different X-Real-IP values — both from the same TCP source
+    for (let i = 0; i < 2; i++) {
+      const res = await request(app)
+        .post('/telemetry')
+        .set('X-Real-IP', `203.0.113.${i + 1}`)
+        .send({ userHash: `${i}`.padStart(64, 'f'), version: '1.0.0' })
+      expect(res.status).toBe(200)
+    }
+
+    // Third request rotates X-Real-IP again — must still be blocked (quota exhausted by TCP source)
+    const blocked = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.99')
+      .send({ userHash: HASH_A, version: '1.0.0' })
+    expect(blocked.status).toBe(429)
+  })
+})
+
+// ── M5: /health and /health/redis endpoints ──────────────────────────────────
+describe('GET /health', () => {
+  it('returns 200 with { status: "ok" }', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/health')
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ status: 'ok' })
+  })
+
+  it('is not subject to the per-IP rate limit (100 rapid requests all succeed)', async () => {
+    const tightConfig = buildConfig({ rateLimitIpMax: 1, behindProxy: false })
+    const app = createApp({ redis: new FakeRedis(), config: tightConfig })
+
+    // Fire 100 rapid /health requests — all must return 200 regardless of rate limit
+    const results = await Promise.all(Array.from({ length: 100 }, () => request(app).get('/health')))
+    for (const res of results) {
+      expect(res.status).toBe(200)
+    }
+  })
+})
+
+describe('GET /health/redis', () => {
+  it('returns 200 with { redis: "ok" } when Redis responds normally', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/health/redis')
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ redis: 'ok' })
+  })
+
+  it('returns 503 with { redis: "down" } when Redis throws', async () => {
+    const brokenRedis = new FakeRedis()
+    const failingRedis = {
+      ...brokenRedis,
+      get: async (_key: string): Promise<string | null> => {
+        throw new Error('connection refused')
+      },
+      scanIterator: brokenRedis.scanIterator.bind(brokenRedis),
+      incr: brokenRedis.incr.bind(brokenRedis),
+      expire: brokenRedis.expire.bind(brokenRedis),
+      set: brokenRedis.set.bind(brokenRedis),
+      setEx: brokenRedis.setEx.bind(brokenRedis),
+    }
+    const app = createApp({ redis: failingRedis, config: buildConfig() })
+    const res = await request(app).get('/health/redis')
+    expect(res.status).toBe(503)
+    expect(res.body).toEqual({ redis: 'down' })
+  })
+
+  it('is not subject to the per-IP rate limit', async () => {
+    const tightConfig = buildConfig({ rateLimitIpMax: 1, behindProxy: false })
+    const app = createApp({ redis: new FakeRedis(), config: tightConfig })
+
+    const results = await Promise.all(Array.from({ length: 20 }, () => request(app).get('/health/redis')))
+    for (const res of results) {
+      expect(res.status).toBe(200)
+    }
+  })
+})
+
+// ── M6: security headers via helmet ─────────────────────────────────────────
+describe('security headers (helmet)', () => {
+  it('sets X-Content-Type-Options: nosniff on GET /telemetry', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/telemetry')
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
+  })
+
+  it('sets X-Frame-Options on GET /telemetry', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/telemetry')
+    expect(res.headers['x-frame-options']).toBeDefined()
+  })
+
+  it('sets X-Content-Type-Options: nosniff on GET /health', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/health')
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
   })
 })

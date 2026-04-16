@@ -20,10 +20,24 @@ export function hashIp(ip: string, salt: string): string {
   return crypto.createHmac('sha256', salt).update(ip).digest('hex')
 }
 
-export function getClientIp(req: Request): string {
-  const xRealIp = req.get('X-Real-IP')
-  if (xRealIp) return xRealIp
-  return req.ip || 'unknown'
+/**
+ * Returns the client IP address.
+ *
+ * Precedence when behindProxy = true (trusted reverse proxy present):
+ *   1. req.ip  — Express-resolved value from X-Forwarded-For (standard)
+ *   2. X-Real-IP header — legacy proxy header fallback
+ *   3. req.socket.remoteAddress — TCP source address
+ *   4. 'unknown'
+ *
+ * When behindProxy = false (direct exposure, default):
+ *   Only req.socket.remoteAddress is trusted; all client-supplied headers
+ *   are ignored to prevent rate-limit bypass via header rotation.
+ */
+export function getClientIp(req: Request, behindProxy: boolean): string {
+  if (!behindProxy) {
+    return req.socket.remoteAddress ?? 'unknown'
+  }
+  return req.ip ?? req.get('X-Real-IP') ?? req.socket.remoteAddress ?? 'unknown'
 }
 
 export function validateTelemetryPayload(userHash: unknown, version: unknown): string | null {

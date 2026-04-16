@@ -3,16 +3,29 @@ import type { Request } from 'express'
 import { describe, expect, it } from 'vitest'
 import { getClientIp, hashIp, validateTelemetryPayload } from '../src/utils.js'
 
-// Build a minimal Express-like request for getClientIp tests. Only the two
-// methods the function reads are implemented.
-function buildRequest({ xRealIp, ip }: { xRealIp?: string; ip?: string }): Request {
+// Build a minimal Express-like request for getClientIp tests. Includes socket
+// (for direct TCP address), ip (Express-populated when trust proxy is on), and
+// both proxy headers (X-Real-IP legacy, X-Forwarded-For standard).
+function buildRequest({
+  xRealIp,
+  xForwardedFor,
+  ip,
+  remoteAddress,
+}: {
+  xRealIp?: string
+  xForwardedFor?: string
+  ip?: string
+  remoteAddress?: string
+}): Request {
   const headers: Record<string, string> = {}
   if (xRealIp !== undefined) headers['x-real-ip'] = xRealIp
+  if (xForwardedFor !== undefined) headers['x-forwarded-for'] = xForwardedFor
   return {
     get(name: string) {
       return headers[name.toLowerCase()]
     },
     ip,
+    socket: { remoteAddress },
   } as unknown as Request
 }
 
@@ -95,18 +108,45 @@ describe('hashIp', () => {
 })
 
 describe('getClientIp', () => {
-  it('prefers X-Real-IP over req.ip', () => {
-    const req = buildRequest({ xRealIp: '10.0.0.1', ip: '127.0.0.1' })
-    expect(getClientIp(req)).toBe('10.0.0.1')
+  // ── behindProxy = false (direct exposure, default) ──────────────────────
+  describe('behindProxy = false', () => {
+    it('returns socket.remoteAddress regardless of X-Real-IP', () => {
+      const req = buildRequest({ xRealIp: '10.0.0.1', remoteAddress: '203.0.113.5' })
+      expect(getClientIp(req, false)).toBe('203.0.113.5')
+    })
+
+    it('returns socket.remoteAddress regardless of X-Forwarded-For', () => {
+      const req = buildRequest({ xForwardedFor: '1.2.3.4', remoteAddress: '203.0.113.5' })
+      expect(getClientIp(req, false)).toBe('203.0.113.5')
+    })
+
+    it('returns "unknown" when socket.remoteAddress is undefined', () => {
+      const req = buildRequest({ xRealIp: '10.0.0.1' })
+      expect(getClientIp(req, false)).toBe('unknown')
+    })
   })
 
-  it('falls back to req.ip when X-Real-IP is missing', () => {
-    const req = buildRequest({ ip: '127.0.0.1' })
-    expect(getClientIp(req)).toBe('127.0.0.1')
-  })
+  // ── behindProxy = true (trusted reverse proxy present) ──────────────────
+  describe('behindProxy = true', () => {
+    it('prefers req.ip (Express X-Forwarded-For resolution) over X-Real-IP', () => {
+      // Express sets req.ip from X-Forwarded-For when trust proxy is on
+      const req = buildRequest({ xRealIp: '10.0.0.1', ip: '192.168.1.50', remoteAddress: '127.0.0.1' })
+      expect(getClientIp(req, true)).toBe('192.168.1.50')
+    })
 
-  it('returns "unknown" when neither header nor req.ip is present', () => {
-    const req = buildRequest({})
-    expect(getClientIp(req)).toBe('unknown')
+    it('falls back to X-Real-IP when req.ip is absent', () => {
+      const req = buildRequest({ xRealIp: '10.0.0.1', remoteAddress: '127.0.0.1' })
+      expect(getClientIp(req, true)).toBe('10.0.0.1')
+    })
+
+    it('falls back to socket.remoteAddress when neither req.ip nor X-Real-IP is present', () => {
+      const req = buildRequest({ remoteAddress: '127.0.0.1' })
+      expect(getClientIp(req, true)).toBe('127.0.0.1')
+    })
+
+    it('returns "unknown" when all sources are absent', () => {
+      const req = buildRequest({})
+      expect(getClientIp(req, true)).toBe('unknown')
+    })
   })
 })

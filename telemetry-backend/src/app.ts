@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import express, { type Express, type Request, type Response } from 'express'
+import helmet from 'helmet'
 import { getClientIp, hashIp, validateTelemetryPayload } from './utils.js'
 
 // Minimal Redis surface used by the telemetry backend. Defining it as an
@@ -20,6 +21,13 @@ export interface AppConfig {
   rateLimitHashMax: number
   rateLimitSalt: string
   badgeDir: string
+  /**
+   * Set to true when the backend is fronted by a trusted reverse proxy that
+   * rewrites X-Forwarded-For / X-Real-IP before forwarding requests.
+   * When false (default), only the TCP source address is used for rate limiting
+   * so that clients cannot bypass the per-IP limit by rotating proxy headers.
+   */
+  behindProxy: boolean
 }
 
 export interface AppDependencies {
@@ -157,9 +165,32 @@ export function createApp(deps: AppDependencies): Express {
   const rateLimitWindowSeconds = Math.ceil(config.rateLimitWindowMs / 1000)
   const app = express()
 
-  // Respect proxy headers (e.g., X-Forwarded-For) when behind a reverse proxy
-  app.set('trust proxy', 1)
+  // Security headers — applied first so every response, including health endpoints, carries them
+  app.use(helmet())
+
+  // Only trust proxy headers when explicitly configured. When false (default),
+  // Express will not populate req.ip from X-Forwarded-For, and getClientIp
+  // will use the raw TCP source address to prevent rate-limit header spoofing.
+  if (config.behindProxy) {
+    app.set('trust proxy', 1)
+  }
   app.use(express.json({ limit: '10kb' }))
+
+  // Health endpoints — placed before rate-limit middleware so they are never
+  // rate-limited and remain reachable during traffic spikes.
+  app.get('/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok' })
+  })
+
+  app.get('/health/redis', async (_req: Request, res: Response) => {
+    try {
+      await redis.get('health-probe')
+      res.json({ redis: 'ok' })
+    } catch (error) {
+      console.error('Redis health probe failed:', error)
+      res.status(503).json({ redis: 'down' })
+    }
+  })
 
   async function enforceRateLimitRedis(key: string, max: number, res: Response): Promise<boolean> {
     try {
@@ -185,7 +216,7 @@ export function createApp(deps: AppDependencies): Express {
   }
 
   async function rateLimitByIp(req: Request, res: Response, next: () => void) {
-    const ip = getClientIp(req)
+    const ip = getClientIp(req, config.behindProxy)
     const ipKey = `ip:${hashIp(ip, config.rateLimitSalt)}`
     if (!(await enforceRateLimitRedis(ipKey, config.rateLimitIpMax, res))) {
       return
@@ -203,7 +234,7 @@ export function createApp(deps: AppDependencies): Express {
       const hashKey =
         typeof userHash === 'string' && userHash
           ? `hash:${userHash}`
-          : `hash:unknown-${hashIp(getClientIp(req), config.rateLimitSalt)}`
+          : `hash:unknown-${hashIp(getClientIp(req, config.behindProxy), config.rateLimitSalt)}`
       if (!(await enforceRateLimitRedis(hashKey, config.rateLimitHashMax, res))) {
         return
       }

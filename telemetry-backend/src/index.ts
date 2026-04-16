@@ -12,6 +12,10 @@ const config: AppConfig = {
   rateLimitHashMax: Number(process.env.RATE_LIMIT_HASH_MAX || 1),
   rateLimitSalt: process.env.RATE_LIMIT_SALT || readMachineId() || os.hostname(),
   badgeDir: path.join(process.cwd(), 'badge'),
+  // Trust reverse-proxy headers (X-Forwarded-For) only when TELEMETRY_BEHIND_PROXY
+  // is explicitly set to a truthy string. Default false to prevent rate-limit bypass
+  // when the backend is exposed directly to the internet without a fronting proxy.
+  behindProxy: ['true', '1', 'yes'].includes((process.env.TELEMETRY_BEHIND_PROXY ?? '').toLowerCase()),
 }
 
 // Redis client setup

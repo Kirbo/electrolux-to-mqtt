@@ -61,5 +61,11 @@ USER nodejs
 # Expose port
 EXPOSE 3001
 
+# Liveness probe — hits the dedicated /health endpoint which has no rate limit
+# and no Redis dependency, so it reflects Express event loop health only.
+# PORT defaults to 3001 if not overridden at runtime.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- "http://localhost:${PORT:-3001}/health" || exit 1
+
 # Start the server
 CMD ["node", "dist/index.js"]
