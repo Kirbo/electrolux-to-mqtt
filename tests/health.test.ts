@@ -259,7 +259,7 @@ describe('health', () => {
         },
       }))
       writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
-        const err = new Error("EACCES: permission denied, open HEALTH_FILE")
+        const err = new Error('EACCES: permission denied, open HEALTH_FILE')
         ;(err as NodeJS.ErrnoException).code = 'EACCES'
         throw err
       })
