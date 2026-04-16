@@ -24,7 +24,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
     echo "                Node Version:                 ${NODE_VERSION}" && \
     echo "                Package manager:              ${PACKAGE_MANAGER}" && \
     echo "====================================================================================" && \
-    pnpm install && \
+    pnpm install --frozen-lockfile && \
     pnpm run build
 
 # ── Stage 2: production ────────────────────────────────────────────
@@ -45,7 +45,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
     npm pkg set packageManager="${PACKAGE_MANAGER}" && \
     corepack enable && \
     corepack install && \
-    pnpm install --prod && \
+    pnpm install --prod --frozen-lockfile && \
     rm -f application.json
 
 # Copy compiled output
