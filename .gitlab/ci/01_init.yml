@@ -57,7 +57,7 @@ bump version:
           semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --maintained-version "${MAJOR}-rc"
         fi
         echo "${BASE_VERSION}-rc.${RC_NUM}" > .version-unreleased
-        sed -i "s/## v${BASE_VERSION}/## v${BASE_VERSION}-rc.${RC_NUM}/g" UNRELEASED-CHANGELOG.md
+        sed -i "s/## ${BASE_VERSION}/## ${BASE_VERSION}-rc.${RC_NUM}/g" UNRELEASED-CHANGELOG.md
       else
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       fi
