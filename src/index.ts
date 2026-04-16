@@ -57,7 +57,7 @@ const waitForLogin = async () => {
   await client.waitForLogin()
 }
 
-const main = async () => {
+export const main = async () => {
   logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
 
   // Initialize the client
@@ -116,8 +116,10 @@ const main = async () => {
   stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt)
 }
 
-try {
-  await main()
-} catch (err: unknown) {
-  logger.error('Fatal error in main:', err)
+if (process.env.VITEST !== 'true') {
+  try {
+    await main()
+  } catch (err: unknown) {
+    logger.error('Fatal error in main:', err)
+  }
 }
