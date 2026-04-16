@@ -5,10 +5,18 @@
 #   - Exit non-zero if any findings exist so the verification pipeline catches them
 [ -f .env ] && export $(grep -v '^#' .env | xargs)
 
+# SonarCloud free tier only analyses the `main` branch. On any other branch the
+# dashboard URL fails with "branch not found", so skip the whole pipeline rather
+# than waste a scan and emit a broken link.
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "${BRANCH}" != "main" ]; then
+  printf 'Skipping SonarCloud: branch "%s" is not "main" (free tier limitation)\n' "${BRANCH}"
+  exit 0
+fi
+
 sonar-scanner
 CODE=$?
 
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
 URL="https://sonarcloud.io/summary/new_code?id=kirbo_electrolux-to-mqtt&branch=${BRANCH}"
 BASE="https://sonarcloud.io/api"
 AUTH="${SONAR_TOKEN}:"
