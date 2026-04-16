@@ -29,7 +29,7 @@ Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `O
 - **`Orchestrator`** — polls appliances, periodic discovery, subscribes command topics, clean shutdown. Holds mutable runtime state (with `Cache`).
 - **`ElectroluxClient`** — Electrolux API client. OAuth (persisted to `tokens.json`), exponential-backoff retries, normalizers for model-agnostic state.
 - **`Mqtt`** — thin broker wrapper behind `IMqtt` interface (testable). Discovery payloads from appliance instance, not MQTT layer.
-- **`appliances/`** — `BaseAppliance` abstract → `ApplianceFactory.create()`. Each owns discovery config, normalization, command denormalization.
+- **`appliances/`** — `BaseAppliance` abstract → `createAppliance()` factory function. Each owns discovery config, normalization, command denormalization.
 - **`config.ts`** — Zod schemas. YAML or env vars, never mixed. `envSchema` coerces/defaults; `configSchema` validates.
 - **`cache.ts`** — state cache. Orchestrator diffs vs cache for MQTT publishing.
 - **`version-checker.ts`** — periodic release check + ntfy + anon telemetry to `telemetry-backend/`.

@@ -1,5 +1,5 @@
 import type { BaseAppliance } from './appliances/base.js'
-import { ApplianceFactory } from './appliances/factory.js'
+import { createAppliance } from './appliances/factory.js'
 import { cache } from './cache.js'
 import type { ElectroluxClient } from './electrolux.js'
 import { writeHealthFile } from './health.js'
@@ -70,7 +70,7 @@ export class Orchestrator {
       }
 
       // Create appliance instance using the factory
-      const appliance = ApplianceFactory.create(applianceStub, applianceInfo)
+      const appliance = createAppliance(applianceStub, applianceInfo)
       this.applianceInstances.set(applianceId, appliance)
 
       logger.info(
