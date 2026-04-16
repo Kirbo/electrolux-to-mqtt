@@ -1,11 +1,15 @@
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const HEALTH_FILE = path.join(os.tmpdir(), `e2m-health-test-${process.pid}`)
 
 vi.mock('../src/config.js', () => ({
   default: {
     healthCheck: {
       enabled: true,
-      filePath: '/tmp/e2m-health-test',
+      filePath: HEALTH_FILE,
     },
   },
 }))
@@ -25,7 +29,7 @@ describe('health', () => {
   beforeEach(() => {
     // Clean up any leftover health files
     try {
-      fs.unlinkSync('/tmp/e2m-health-test')
+      fs.unlinkSync(HEALTH_FILE)
     } catch {
       // File doesn't exist
     }
@@ -33,7 +37,7 @@ describe('health', () => {
 
   afterEach(() => {
     try {
-      fs.unlinkSync('/tmp/e2m-health-test')
+      fs.unlinkSync(HEALTH_FILE)
     } catch {
       // File doesn't exist
     }
@@ -45,7 +49,7 @@ describe('health', () => {
 
       writeHealthFile()
 
-      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const content = fs.readFileSync(HEALTH_FILE, 'utf8')
       const timestamp = Number.parseInt(content, 10)
       const now = Math.floor(Date.now() / 1000)
 
@@ -57,13 +61,13 @@ describe('health', () => {
       const { writeHealthFile } = await import('../src/health.js')
 
       writeHealthFile()
-      const first = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const first = fs.readFileSync(HEALTH_FILE, 'utf8')
 
       // Wait a tiny bit to ensure different timestamp
       await new Promise((resolve) => setTimeout(resolve, 10))
 
       writeHealthFile()
-      const second = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const second = fs.readFileSync(HEALTH_FILE, 'utf8')
 
       // Both should be valid timestamps (may or may not be different within 10ms)
       expect(Number.parseInt(first, 10)).toBeGreaterThan(0)
@@ -72,12 +76,25 @@ describe('health', () => {
   })
 
   describe('writeHealthFile when disabled', () => {
+    afterEach(() => {
+      vi.resetModules()
+      vi.doMock('../src/config.js', () => ({
+        default: {
+          healthCheck: {
+            enabled: true,
+            filePath: HEALTH_FILE,
+          },
+        },
+      }))
+    })
+
     it('should not write file when health check is disabled', async () => {
+      vi.resetModules()
       vi.doMock('../src/config.js', () => ({
         default: {
           healthCheck: {
             enabled: false,
-            filePath: '/tmp/e2m-health-test-disabled',
+            filePath: HEALTH_FILE,
           },
         },
       }))
@@ -85,7 +102,7 @@ describe('health', () => {
       const { writeHealthFile } = await import('../src/health.js')
       writeHealthFile()
 
-      expect(fs.existsSync('/tmp/e2m-health-test-disabled')).toBe(false)
+      expect(fs.existsSync(HEALTH_FILE)).toBe(false)
     })
   })
 
@@ -95,7 +112,7 @@ describe('health', () => {
 
       writeHealthFile({ mqttConnected: false, apiConnected: true })
 
-      expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
+      expect(fs.existsSync(HEALTH_FILE)).toBe(false)
     })
 
     it('should write file when MQTT is connected', async () => {
@@ -103,7 +120,7 @@ describe('health', () => {
 
       writeHealthFile({ mqttConnected: true, apiConnected: true })
 
-      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const content = fs.readFileSync(HEALTH_FILE, 'utf8')
       const timestamp = Number.parseInt(content, 10)
       expect(timestamp).toBeGreaterThan(0)
     })
@@ -113,7 +130,7 @@ describe('health', () => {
 
       writeHealthFile()
 
-      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const content = fs.readFileSync(HEALTH_FILE, 'utf8')
       const timestamp = Number.parseInt(content, 10)
       expect(timestamp).toBeGreaterThan(0)
     })
@@ -125,7 +142,7 @@ describe('health', () => {
 
       writeHealthFile({ mqttConnected: true, apiConnected: false })
 
-      expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
+      expect(fs.existsSync(HEALTH_FILE)).toBe(false)
     })
 
     it('should not write file when both MQTT and API are disconnected', async () => {
@@ -133,7 +150,7 @@ describe('health', () => {
 
       writeHealthFile({ mqttConnected: false, apiConnected: false })
 
-      expect(fs.existsSync('/tmp/e2m-health-test')).toBe(false)
+      expect(fs.existsSync(HEALTH_FILE)).toBe(false)
     })
 
     it('should write file when both MQTT and API are connected', async () => {
@@ -141,7 +158,7 @@ describe('health', () => {
 
       writeHealthFile({ mqttConnected: true, apiConnected: true })
 
-      const content = fs.readFileSync('/tmp/e2m-health-test', 'utf8')
+      const content = fs.readFileSync(HEALTH_FILE, 'utf8')
       const timestamp = Number.parseInt(content, 10)
       expect(timestamp).toBeGreaterThan(0)
     })
@@ -161,7 +178,7 @@ describe('health', () => {
 
       // Write a timestamp from 5 minutes ago
       const staleTimestamp = Math.floor(Date.now() / 1000) - 300
-      fs.writeFileSync('/tmp/e2m-health-test', String(staleTimestamp), 'utf8')
+      fs.writeFileSync(HEALTH_FILE, String(staleTimestamp), 'utf8')
 
       expect(isHealthy(60)).toBe(false)
     })
@@ -185,7 +202,7 @@ describe('health', () => {
         default: {
           healthCheck: {
             enabled: true,
-            filePath: '/tmp/e2m-health-test',
+            filePath: HEALTH_FILE,
           },
         },
       }))
@@ -237,12 +254,12 @@ describe('health', () => {
         default: {
           healthCheck: {
             enabled: true,
-            filePath: '/tmp/e2m-health-test',
+            filePath: HEALTH_FILE,
           },
         },
       }))
       writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
-        const err = new Error("EACCES: permission denied, open '/tmp/e2m-health-test'")
+        const err = new Error("EACCES: permission denied, open HEALTH_FILE")
         ;(err as NodeJS.ErrnoException).code = 'EACCES'
         throw err
       })

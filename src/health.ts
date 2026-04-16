@@ -4,8 +4,8 @@ import createLogger from './logger.js'
 
 const logger = createLogger('health')
 
-const healthFilePath = config.healthCheck?.filePath ?? '/tmp/e2m-health'
-const healthEnabled = config.healthCheck?.enabled ?? false
+const healthFilePath = config.healthCheck.filePath
+const healthEnabled = config.healthCheck.enabled
 let hasWarnedAboutWriteFailure = false
 
 interface HealthStatus {
