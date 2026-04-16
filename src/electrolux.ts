@@ -64,6 +64,12 @@ const TOKEN_REFRESH_BASE_DELAY_MS = 5_000 // Initial retry delay for token refre
 const TOKEN_REFRESH_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
 const API_TIMEOUT_MS = 10_000 // Default timeout for API requests
 
+// Decorrelated jitter prevents coordinated retry storms across instances.
+// Returns a value in [baseDelay/2, baseDelay] using full-jitter within the upper half.
+function applyJitter(baseDelay: number): number {
+  return baseDelay / 2 + Math.random() * (baseDelay / 2) // NOSONAR — non-crypto use; predictability is acceptable for retry jitter
+}
+
 // Track timeouts for cleanup
 const activeTimeouts = new Set<NodeJS.Timeout>()
 
@@ -451,7 +457,9 @@ export class ElectroluxClient {
       return true
     } catch (error) {
       this.finishLogin(false)
-      const delay = Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** this.loginRetryCount, LOGIN_RETRY_MAX_DELAY_MS)
+      const delay = applyJitter(
+        Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** this.loginRetryCount, LOGIN_RETRY_MAX_DELAY_MS),
+      )
       this.loginRetryCount++
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
       logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${this.loginRetryCount})...`)
@@ -505,8 +513,22 @@ export class ElectroluxClient {
 
   private saveTokens(tokens: Partial<Tokens>): void {
     const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
+    const tmpPath = `${filePath}.tmp`
     try {
-      fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), 'utf-8')
+      // Atomic write: write to .tmp then rename — rename(2) is POSIX-atomic on the same filesystem,
+      // so a crash mid-write cannot leave tokens.json in a truncated/corrupt state.
+      fs.writeFileSync(tmpPath, JSON.stringify(tokens, null, 2), 'utf-8')
+      try {
+        fs.renameSync(tmpPath, filePath)
+      } catch (renameError) {
+        // Rename failed — clean up the orphaned tmp file so we don't litter the filesystem.
+        try {
+          fs.unlinkSync(tmpPath)
+        } catch {
+          /* best-effort cleanup; primary error preserved */
+        }
+        throw renameError
+      }
       logger.debug('Tokens saved to', filePath)
     } catch (writeError) {
       logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
@@ -598,7 +620,9 @@ export class ElectroluxClient {
         }
       } else {
         // Transient error (network issue, 5xx) — retry the refresh with exponential backoff
-        const delay = Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** this.refreshRetryCount, TOKEN_REFRESH_MAX_DELAY_MS)
+        const delay = applyJitter(
+          Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** this.refreshRetryCount, TOKEN_REFRESH_MAX_DELAY_MS),
+        )
         this.refreshRetryCount++
         logger.warn(`Retrying token refresh in ${Math.round(delay / 1000)}s (attempt ${this.refreshRetryCount})...`)
         const retryTimeout = setTimeout(() => {

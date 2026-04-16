@@ -1944,6 +1944,68 @@ describe('electrolux', () => {
         expect(mockAxiosInstance.post).toHaveBeenCalled()
       })
 
+      it('should apply jitter to login retry delay — Math.random=0 gives base/2', async () => {
+        // LOGIN_RETRY_BASE_DELAY_MS = 5000, loginRetryCount starts at 0
+        // applyJitter(5000): base/2 + random * base/2 = 2500 + 0 * 2500 = 2500 when random=0
+        // Without jitter the delay would be exactly 5000; with jitter at random=0 it is 2500.
+        const LOGIN_RETRY_BASE_DELAY_MS = 5_000
+        const LOGIN_RETRY_MAX_DELAY_MS = 300_000
+
+        vi.spyOn(Math, 'random').mockReturnValue(0)
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error('Network error'))
+        // Use real timers + spy to capture the delay without blocking the event loop.
+        // vi.useFakeTimers() would prevent cleanup and contaminate subsequent tests.
+        const capturedDelays: number[] = []
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation((_fn, delay, ..._args) => {
+          if (typeof delay === 'number') capturedDelays.push(delay)
+          // Don't actually schedule — just capture the delay and discard the callback
+          return 0 as unknown as NodeJS.Timeout
+        })
+
+        try {
+          await client.login()
+
+          const baseDelay = Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** 0, LOGIN_RETRY_MAX_DELAY_MS)
+          expect(capturedDelays.length).toBeGreaterThan(0)
+          const retryDelay = capturedDelays[0] ?? 0
+          // With Math.random() === 0, jitter formula gives exactly base/2
+          expect(retryDelay).toBe(baseDelay / 2)
+        } finally {
+          setTimeoutSpy.mockRestore()
+          vi.restoreAllMocks()
+        }
+      })
+
+      it('should apply jitter to token refresh retry delay — Math.random=0 gives base/2', async () => {
+        // TOKEN_REFRESH_BASE_DELAY_MS = 5000, refreshRetryCount starts at 0
+        // applyJitter(5000): 2500 + 0 * 2500 = 2500 when random=0
+        const TOKEN_REFRESH_BASE_DELAY_MS = 5_000
+        const TOKEN_REFRESH_MAX_DELAY_MS = 300_000
+
+        vi.spyOn(Math, 'random').mockReturnValue(0)
+        mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network error'))
+        const capturedDelays: number[] = []
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation((_fn, delay, ..._args) => {
+          if (typeof delay === 'number') capturedDelays.push(delay)
+          // Don't actually schedule — just capture the delay and discard the callback
+          return 0 as unknown as NodeJS.Timeout
+        })
+
+        try {
+          await client.initialize()
+          await client.refreshTokens()
+
+          const baseDelay = Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** 0, TOKEN_REFRESH_MAX_DELAY_MS)
+          expect(capturedDelays.length).toBeGreaterThan(0)
+          const retryDelay = capturedDelays[0] ?? 0
+          // With Math.random() === 0, jitter formula gives exactly base/2
+          expect(retryDelay).toBe(baseDelay / 2)
+        } finally {
+          setTimeoutSpy.mockRestore()
+          vi.restoreAllMocks()
+        }
+      })
+
       it('should write tokens to file on successful login', async () => {
         const fsMock = await import('node:fs')
         const writeFileSyncSpy = vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {})
@@ -2431,6 +2493,78 @@ describe('electrolux', () => {
         vi.restoreAllMocks()
       })
 
+      it('should write to .tmp file before renaming to final path (atomic write)', async () => {
+        const fsMock = await import('node:fs')
+        const writeOrder: string[] = []
+        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation((filePath) => {
+          writeOrder.push(String(filePath))
+        })
+        const renameSyncSpy = vi.spyOn(fsMock.default, 'renameSync').mockImplementation((src, dest) => {
+          writeOrder.push(`rename:${String(src)}->${String(dest)}`)
+        })
+
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        await client.login()
+
+        // tmp write must precede the rename
+        const tmpWriteIdx = writeOrder.findIndex((s) => s.endsWith('.tmp'))
+        const renameIdx = writeOrder.findIndex((s) => s.startsWith('rename:'))
+        expect(tmpWriteIdx).toBeGreaterThanOrEqual(0)
+        expect(renameIdx).toBeGreaterThan(tmpWriteIdx)
+
+        // rename must move .tmp → final tokens.json
+        const renameEntry = writeOrder[renameIdx] ?? ''
+        expect(renameEntry).toContain('.tmp')
+        expect(renameEntry).toContain('tokens.json')
+        expect(renameSyncSpy).toHaveBeenCalledTimes(1)
+        vi.restoreAllMocks()
+      })
+
+      it('should clean up .tmp file when rename fails', async () => {
+        const fsMock = await import('node:fs')
+        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {})
+        vi.spyOn(fsMock.default, 'renameSync').mockImplementation(() => {
+          throw new Error('EXDEV: cross-device link not permitted')
+        })
+        const unlinkSyncSpy = vi.spyOn(fsMock.default, 'unlinkSync').mockImplementation(() => {})
+
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        loggerWarnSpy.mockClear()
+        await client.login()
+
+        // unlink must be called on the .tmp path to clean up the partial file
+        expect(unlinkSyncSpy).toHaveBeenCalledTimes(1)
+        const [unlinkedPath] = unlinkSyncSpy.mock.calls[0] ?? []
+        expect(String(unlinkedPath)).toMatch(/\.tmp$/)
+        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist tokens'))
+        vi.restoreAllMocks()
+      })
+
+      it('should not crash when both rename and unlink fail (double read-only fault)', async () => {
+        const fsMock = await import('node:fs')
+        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {})
+        vi.spyOn(fsMock.default, 'renameSync').mockImplementation(() => {
+          throw new Error('EXDEV: cross-device link not permitted')
+        })
+        vi.spyOn(fsMock.default, 'unlinkSync').mockImplementation(() => {
+          throw new Error('ENOENT: no such file or directory')
+        })
+
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        // Must not throw even if both rename and unlink fail
+        await expect(client.login()).resolves.toBe(true)
+        vi.restoreAllMocks()
+      })
+
       it('should handle 401 during token refresh by clearing tokens and re-logging in', async () => {
         const error401 = new Error('Unauthorized') as AxiosError
         error401.response = { status: 401 } as AxiosResponse
@@ -2506,6 +2640,95 @@ describe('electrolux', () => {
 
         await refreshPromise
         // Should have logged error about undefined token
+        expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error refreshing access token'))
+      })
+
+      it('should retry login with exponential backoff when API times out (m12)', async () => {
+        // ECONNABORTED is axios's code for a timeout / connection aborted mid-operation.
+        // login() should fail, schedule a retry, and eventually succeed on the third attempt.
+        const timeoutError = Object.assign(new Error('timeout of 10000ms exceeded'), { code: 'ECONNABORTED' })
+
+        // First two attempts fail with timeout; third succeeds
+        vi.mocked(axios.get)
+          .mockRejectedValueOnce(timeoutError)
+          .mockRejectedValueOnce(timeoutError)
+          .mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        vi.useFakeTimers()
+
+        await client.initialize()
+        const loginPromise = client.login()
+
+        // Advance all pending timers to fire retry callbacks
+        await vi.runAllTimersAsync()
+
+        vi.useRealTimers()
+
+        await loginPromise
+
+        // Attempted at least 3 times (2 failures + 1 success)
+        expect(vi.mocked(axios.get).mock.calls.length).toBeGreaterThanOrEqual(3)
+        expect(client.isLoggedIn).toBe(true)
+      })
+
+      it('should cap login retry delay at LOGIN_RETRY_MAX_DELAY_MS (m12)', async () => {
+        // With loginRetryCount = 20 the uncapped backoff would be 5000 * 2^20 ≈ 5 billion ms.
+        // The cap is 300_000 ms (5 minutes). With Math.random = 0, jitter gives exactly MAX/2 = 150_000.
+        const LOGIN_RETRY_MAX_DELAY_MS = 300_000
+
+        vi.spyOn(Math, 'random').mockReturnValue(0)
+        // Single network failure so login() hits the catch branch
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error('Network error'))
+
+        const capturedDelays: number[] = []
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation((_fn, delay, ..._args) => {
+          if (typeof delay === 'number') capturedDelays.push(delay)
+          return 0 as unknown as NodeJS.Timeout
+        })
+
+        try {
+          // Prime the retry count so the exponent overflows the cap
+          client.loginRetryCount = 20
+
+          await client.login()
+
+          expect(capturedDelays.length).toBeGreaterThan(0)
+          const capturedDelay = capturedDelays[0] ?? 0
+          // With jitter at Math.random=0 the delay is MAX_DELAY/2 (within [MAX/2, MAX])
+          expect(capturedDelay).toBeLessThanOrEqual(LOGIN_RETRY_MAX_DELAY_MS)
+          expect(capturedDelay).toBeGreaterThanOrEqual(LOGIN_RETRY_MAX_DELAY_MS / 2)
+        } finally {
+          setTimeoutSpy.mockRestore()
+          vi.restoreAllMocks()
+        }
+      })
+
+      it('should retry token refresh on 5xx error with backoff (m12)', async () => {
+        // Simulate server-side 5xx (503 Service Unavailable) then success
+        const error503 = Object.assign(new Error('Service Unavailable'), {
+          response: { status: 503, statusText: 'Service Unavailable' },
+          isAxiosError: true,
+        })
+        vi.spyOn(axios, 'isAxiosError').mockReturnValue(false)
+
+        // First refresh attempt → 503, second attempt → success
+        mockAxiosInstance.post.mockRejectedValueOnce(error503).mockResolvedValueOnce(mockTokenRefreshResponse)
+
+        vi.useFakeTimers()
+
+        await client.initialize()
+        const refreshPromise = client.refreshTokens()
+
+        await vi.runAllTimersAsync()
+
+        vi.useRealTimers()
+
+        await refreshPromise
+
+        // Should have attempted at least 2 POST calls (original + retry)
+        expect(mockAxiosInstance.post.mock.calls.length).toBeGreaterThanOrEqual(2)
+        // Error should have been logged
         expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error refreshing access token'))
       })
     })
