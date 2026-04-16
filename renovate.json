@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommitTypeAll(chore)", ":semanticCommitScope(deps)"],
+  "labels": ["dependencies"],
+  "schedule": ["before 9am on monday"],
+  "timezone": "Europe/Helsinki",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 9am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Group all non-major npm updates into a single MR per week.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm minor and patch",
+      "schedule": ["before 9am on monday"]
+    },
+    {
+      "description": "Major npm updates open individually so breaking-change review stays scoped.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major-update"]
+    },
+    {
+      "description": "Pin GitHub-style action SHAs for supply-chain integrity (used by GitLab CI helpers if any).",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    },
+    {
+      "description": "Docker base images (incl. dhi.io) — separate MRs so security-relevant changes are reviewed individually.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "groupName": null
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "schedule": []
+  },
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 0,
+  "rebaseWhen": "behind-base-branch"
+}
