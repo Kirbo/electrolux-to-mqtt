@@ -100,6 +100,19 @@ describe('Cache', () => {
     expect(cache.has('key3')).toBe(true)
   })
 
+  it('should round-trip string values through set, matchByValue, and get', () => {
+    const cache = new Cache()
+
+    // First matchByValue call: value is new, returns false (and stores it)
+    expect(cache.matchByValue('str-key', 'hello')).toBe(false)
+
+    // Second call with same string: should match (returns true)
+    expect(cache.matchByValue('str-key', 'hello')).toBe(true)
+
+    // get() should return the original string
+    expect(cache.get('str-key')).toBe('hello')
+  })
+
   it('should handle value comparison with different types', () => {
     const cache = new Cache()
 
