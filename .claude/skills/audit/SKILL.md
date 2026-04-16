@@ -4,7 +4,7 @@ description: Full codebase audit — lint, typecheck, tests, manual review
 disable-model-invocation: true
 context: fork
 agent: auditor
-model: opus[1m]
+model: claude-opus-4-7
 effort: xhigh
 ---
 

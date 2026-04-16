@@ -1,7 +1,7 @@
 ---
 name: "auditor"
 description: "Use PROACTIVELY when user says 'audit', 'review the codebase', 'run all checks', or invokes `/audit` — reports findings only, never fixes (fixes go to engineer or user). For pre-release audits, post-refactor verification, or codebase health checks.\\n<example>\\nuser: \"audit\" / \"do a full audit\" / \"run all checks\"\\nassistant: launches auditor agent for automated checks + manual review\\n</example>"
-model: opus
+model: claude-opus-4-7
 color: green
 memory: project
 ---
