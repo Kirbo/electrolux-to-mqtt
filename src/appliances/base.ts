@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto'
 import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '@/types/homeassistant.js'
 import type { NormalizedClimateMode, NormalizedState } from '@/types/normalized.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
+import { canonicalStringify } from '../canonical-stringify.js'
 
 export type CommandValidationResult = { valid: true } | { valid: false; reason: string }
 
@@ -47,6 +49,21 @@ export abstract class BaseAppliance {
    */
   public getApplianceInfo(): ApplianceInfo {
     return this.applianceInfo
+  }
+
+  /**
+   * Return a stable 12-char hex hash of this appliance's capabilities.
+   * Used as a cache-key component so that auto-discovery cache entries are
+   * automatically invalidated when capabilities change (e.g. after a firmware
+   * OTA), without relying on TTL expiry.
+   *
+   * Non-cryptographic use: key disambiguation only, not security. NOSONAR
+   */
+  public getCapabilitiesHash(): string {
+    return createHash('sha256') // NOSONAR
+      .update(canonicalStringify(this.applianceInfo.capabilities))
+      .digest('hex')
+      .slice(0, 12)
   }
 
   /**

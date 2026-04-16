@@ -132,6 +132,94 @@ describe('Cache', () => {
     expect(cache.matchByValue('num-key', num)).toBe(true)
   })
 
+  describe('m5 — hash-based equality in matchByValue', () => {
+    it('should treat structurally-equal but reference-different objects as a HIT', () => {
+      const cache = new Cache()
+      const first = { temp: 22, mode: 'cool' }
+      const second = { temp: 22, mode: 'cool' } // different reference, same content
+
+      expect(cache.matchByValue('key', first)).toBe(false) // MISS: new key
+      expect(cache.matchByValue('key', second)).toBe(true) // HIT: same content
+    })
+
+    it('should treat objects with a single changed field as a MISS', () => {
+      const cache = new Cache()
+      cache.matchByValue('key', { temp: 22 })
+
+      expect(cache.matchByValue('key', { temp: 23 })).toBe(false)
+    })
+
+    it('should preserve get() round-trip after matchByValue', () => {
+      const cache = new Cache()
+      const value = { mode: 'heat', targetTemperatureC: 24 }
+
+      cache.matchByValue('key', value)
+
+      expect(cache.get('key')).toEqual(value)
+    })
+
+    it('should preserve get() round-trip after explicit set()', () => {
+      const cache = new Cache()
+      const value = { fans: ['auto', 'high'], swing: 'on' }
+
+      cache.set('key', value)
+
+      expect(cache.get('key')).toEqual(value)
+      // matchByValue after set should HIT
+      expect(cache.matchByValue('key', value)).toBe(true)
+    })
+
+    it('should clear hash entry on delete', () => {
+      const cache = new Cache()
+      cache.matchByValue('key', { a: 1 })
+
+      cache.delete('key')
+
+      // After delete, same value must be treated as MISS again
+      expect(cache.matchByValue('key', { a: 1 })).toBe(false)
+    })
+  })
+
+  describe('m4 — capability-hashed autoDiscovery cache key', () => {
+    it('should produce the legacy autoDiscovery key when no hash is provided', () => {
+      const cache = new Cache()
+      const keys = cache.cacheKey('appliance-xyz')
+
+      expect(keys.autoDiscovery).toBe('appliance-xyz:auto-discovery')
+    })
+
+    it('should embed the capabilities hash in the autoDiscovery key', () => {
+      const cache = new Cache()
+      const keys = cache.cacheKey('appliance-xyz', 'abc123def456')
+
+      expect(keys.autoDiscovery).toBe('appliance-xyz:auto-discovery:abc123def456')
+      // State key must be unchanged regardless
+      expect(keys.state).toBe('appliance-xyz:state')
+    })
+
+    it('should produce a MISS when capabilities hash changes', () => {
+      const cache = new Cache()
+      const config = { modes: ['cool', 'heat'], fans: ['auto', 'high'] }
+
+      // Prime with hash A
+      const keyA = cache.cacheKey('appliance-1', 'hashAAAAAAAAAAA').autoDiscovery
+      expect(cache.matchByValue(keyA, config)).toBe(false) // MISS
+
+      // Same config but with hash B — different key → MISS
+      const keyB = cache.cacheKey('appliance-1', 'hashBBBBBBBBBBB').autoDiscovery
+      expect(cache.matchByValue(keyB, config)).toBe(false) // MISS (different key)
+    })
+
+    it('should produce a HIT when capabilities hash and config are both unchanged', () => {
+      const cache = new Cache()
+      const config = { modes: ['cool', 'heat'] }
+      const key = cache.cacheKey('appliance-1', 'stableHash12').autoDiscovery
+
+      cache.matchByValue(key, config) // prime
+      expect(cache.matchByValue(key, config)).toBe(true) // HIT
+    })
+  })
+
   describe('with skipCacheLogging disabled', () => {
     const loggerDebugSpy = vi.fn()
 

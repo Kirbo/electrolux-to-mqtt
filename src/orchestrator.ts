@@ -172,7 +172,8 @@ export class Orchestrator {
         })
 
         applianceDiscoveryCallback = () => {
-          const cacheKey = cache.cacheKey(applianceId).autoDiscovery
+          const capabilitiesHash = appliance.getCapabilitiesHash()
+          const cacheKey = cache.cacheKey(applianceId, capabilitiesHash).autoDiscovery
           const autoDiscoveryConfig = appliance.generateAutoDiscoveryConfig(this.mqtt.topicPrefix)
 
           if (cache.matchByValue(cacheKey, autoDiscoveryConfig)) {

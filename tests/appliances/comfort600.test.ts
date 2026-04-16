@@ -860,6 +860,70 @@ describe('Comfort600Appliance', () => {
     })
   })
 
+  describe('getCapabilitiesHash', () => {
+    it('should return a 12-character hex string', () => {
+      const hash = appliance.getCapabilitiesHash()
+      expect(hash).toMatch(/^[0-9a-f]{12}$/)
+    })
+
+    it('should be stable across multiple calls with the same capabilities', () => {
+      expect(appliance.getCapabilitiesHash()).toBe(appliance.getCapabilitiesHash())
+    })
+
+    it('should produce the same hash regardless of capability object insertion order', () => {
+      // Build two ApplianceInfo objects with the same capabilities but different key order
+      const infoA: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          fanSpeedSetting: {
+            access: 'readwrite',
+            schedulable: true,
+            type: 'string',
+            values: { AUTO: {}, HIGH: {}, LOW: {} }, // A, H, L order
+          },
+        },
+      }
+      const infoB: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          fanSpeedSetting: {
+            access: 'readwrite',
+            schedulable: true,
+            type: 'string',
+            values: { LOW: {}, AUTO: {}, HIGH: {} }, // L, A, H order
+          },
+        },
+      }
+      const appA = new Comfort600Appliance(mockStub, infoA)
+      const appB = new Comfort600Appliance(mockStub, infoB)
+
+      expect(appA.getCapabilitiesHash()).toBe(appB.getCapabilitiesHash())
+    })
+
+    it('should produce a different hash when capabilities change', () => {
+      const originalHash = appliance.getCapabilitiesHash()
+
+      // Create appliance with an additional fan mode
+      const infoExtra: ApplianceInfo = {
+        ...mockInfo,
+        capabilities: {
+          ...mockInfo.capabilities,
+          fanSpeedSetting: {
+            access: 'readwrite',
+            schedulable: true,
+            type: 'string',
+            values: { AUTO: {}, LOW: {}, MIDDLE: {}, HIGH: {}, TURBO: {} }, // extra TURBO
+          },
+        },
+      }
+      const applianceExtra = new Comfort600Appliance(mockStub, infoExtra)
+
+      expect(applianceExtra.getCapabilitiesHash()).not.toBe(originalHash)
+    })
+  })
+
   describe('normalizeState', () => {
     it('should normalize raw API state using climate appliance normalizer', () => {
       const rawState: Appliance = {
