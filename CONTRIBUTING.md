@@ -118,11 +118,15 @@ pnpm test tests/cache.test.ts
 
 ## Running E2E Tests
 
+> **E2E tests are skipped by default.** Running `pnpm test` does NOT run them. They only run when `E2E_TEST=true` is set, which `pnpm test:e2e` does for you. They also require a real `config.yml` with valid Electrolux API credentials.
+
 ```bash
-# Run E2E tests (required `config.yml` file to exist and contain Electrolux API credentials).
-# This just fetches the data from Electrolux API and checks that the structure is valid/hasn't changed.
+# Run E2E tests — fetches live data from the Electrolux API and verifies the
+# response shape against typed fixtures. Requires config.yml with credentials.
 pnpm test:e2e
 ```
+
+E2E snapshots live under `tests/e2e/snapshots/` and are deliberately gitignored — they encode device serials and per-account identifiers we don't want in version control. After API contract changes, regenerate snapshots locally with `pnpm test:e2e` and review the resulting diff before merging the type changes.
 
 ### Controlling Test Output with LOG_LEVEL
 
@@ -160,7 +164,7 @@ LOG_LEVEL=error pnpm test
 - Use **Vitest** for testing
 - Place tests in `tests/` directory mirroring `src/` structure
 - Name test files with `.test.ts` extension
-- Aim to maintain the project's coverage thresholds (95% lines/statements/functions, 80% branches)
+- Aim to maintain the project's coverage thresholds (96% lines/statements/functions, 90% branches)
 - Test both success and error cases
 
 ### Coverage Requirements
@@ -168,10 +172,10 @@ LOG_LEVEL=error pnpm test
 The project maintains test coverage with the following requirements:
 
 **Minimum Coverage Thresholds:**
-- **Lines**: 95%
-- **Statements**: 95%
-- **Branches**: 80%
-- **Functions**: 95%
+- **Lines**: 96%
+- **Statements**: 96%
+- **Branches**: 90%
+- **Functions**: 96%
 
 Up-to-date thresholds can be found [here](./vitest.config.ts#L33)
 
@@ -343,7 +347,7 @@ This project supports AI-assisted development with [Claude Code](https://docs.an
 
 4. **Open a Merge Request** on GitLab (or Pull Request on GitHub mirror)
 
-5. **Fill out the MR template**:
+5. **Fill out the MR template** (auto-loaded from `.gitlab/merge_request_templates/Default.md`):
    - Describe what changes you made
    - Link related issues
    - Add screenshots if applicable
