@@ -1,0 +1,15 @@
+# Default owner for everything in the repo.
+* @Kirbo
+
+# AI tooling and project rules.
+/.claude/ @Kirbo
+/CLAUDE.md @Kirbo
+/AI_DEVELOPMENT.md @Kirbo
+
+# Release/CI surfaces.
+/.gitlab-ci.yml @Kirbo
+/.gitlab/ @Kirbo
+/.semrelrc @Kirbo
+
+# Telemetry backend (separate package).
+/telemetry-backend/ @Kirbo
