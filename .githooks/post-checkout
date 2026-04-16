@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+# post-checkout hook
+# When switching TO the `next` branch, automatically rebase it on top of `main`.
+#
+# Hook arguments:
+#   $1 = previous HEAD ref
+#   $2 = new HEAD ref
+#   $3 = checkout type: 1 = branch checkout, 0 = file checkout
+
+CHECKOUT_TYPE="$3"
+
+# Only act on branch checkouts, not file checkouts
+if [ "$CHECKOUT_TYPE" != "1" ]; then
+  exit 0
+fi
+
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$CURRENT_BRANCH" != "next" ]; then
+  exit 0
+fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Source common functions
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/.githooks/common.sh"
+
+# Verify main branch exists
+if ! git rev-parse --verify main > /dev/null 2>&1; then
+  step_skip "auto-rebase skipped: 'main' branch not found"
+  exit 0
+fi
+
+# Bail out if index or working tree is dirty (rebase would fail anyway)
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  step_skip "auto-rebase skipped: working tree has uncommitted changes"
+  exit 0
+fi
+
+step_exec "Rebasing 'next' on top of 'main'..."
+if git rebase main > /dev/null 2>&1; then
+  step_done "Rebased 'next' on top of 'main'"
+else
+  printf '%s' "$CLEAR_LINE"
+  git rebase --abort > /dev/null 2>&1
+  print_status "$YELLOW" " WARN " "auto-rebase failed (conflicts?) — aborted. Rebase manually: git rebase main"
+fi
+
+exit 0
