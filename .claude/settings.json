@@ -2,5 +2,20 @@
   "statusLine": {
     "type": "command",
     "command": "bash .claude/statusline.sh"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "read -r input; fp=$(echo \"$input\" | jq -r '.tool_input.file_path'); root=$(git -C \"$(dirname \"$fp\")\" rev-parse --show-toplevel 2>/dev/null); [[ -n \"$root\" && \"$fp\" == \"$root\"/* ]] && cd \"$root\" && pnpm check 2>&1 || true",
+            "timeout": 30,
+            "statusMessage": "Running pnpm check..."
+          }
+        ]
+      }
+    ]
   }
 }
