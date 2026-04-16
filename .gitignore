@@ -17,3 +17,7 @@ tests/e2e/snapshots
 !.env.example
 .scannerwork
 **.original.md
+.semrel/
+.version-unreleased
+UNRELEASED-CHANGELOG.md
+audit-report.md
