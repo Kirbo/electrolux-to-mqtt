@@ -1,7 +1,7 @@
 {
   "name": "electrolux-to-mqtt",
   "version": "development",
-  "description": "",
+  "description": "TypeScript bridge from the Electrolux appliance API to MQTT, with Home Assistant auto-discovery.",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -24,7 +24,14 @@
     "deps:check": "pnpm outdated ; pnpm osv-scan",
     "deps:update": "pnpm update --latest && pnpm install"
   },
-  "keywords": [],
+  "keywords": [
+    "electrolux",
+    "home-assistant",
+    "homeassistant",
+    "mqtt",
+    "iot",
+    "smart-home"
+  ],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
   "license": "MIT",
   "engines": {

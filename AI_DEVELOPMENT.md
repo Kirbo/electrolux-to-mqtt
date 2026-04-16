@@ -1,6 +1,6 @@
 # AI-Assisted Development
 
-<!-- AI note: Do not read this file unless you are explicitly editing it or the user asks about AI tooling. -->
+<!-- This file documents the AI-assisted development setup. AI agents only need to load it when the task explicitly involves the .claude/ tooling, agents, or skills; CLAUDE.md is the primary entrypoint for everything else. -->
 
 This project is set up for AI-assisted development with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The configuration lives in `.claude/`.
 
