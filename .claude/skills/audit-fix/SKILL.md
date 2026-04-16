@@ -1,6 +1,7 @@
 ---
 name: audit-fix
 description: Full audit-fix-commit pipeline — audit → save report → fix approved findings → verify → commit batches
+disable-model-invocation: true
 ---
 
 Orchestrator for full audit-fix-commit pipeline. Execute steps in order. No skipping. No commit without explicit user approval.
