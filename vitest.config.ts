@@ -30,17 +30,19 @@ export default defineConfig({
         '**/*.config.*',
         '**/types/',
         'tests/',
-        'src/index.ts', // Main entry point (integration tested separately)
         'telemetry-backend/**', // Separate package with its own test suite
         'package.json',
       ],
-      // Coverage thresholds set slightly below current values to allow flexibility
-      // Disabled for E2E tests which only test real API integration
+      // Thresholds locked at slightly below current measured coverage so a
+      // regression (deleted test, weakened assertion) trips CI fast. Bump these
+      // when coverage genuinely improves; don't lower for "flexibility" — that
+      // re-introduces the slow-drift slack that caused the earlier 80% branch
+      // floor to mask gains. E2E tests run separately and are excluded.
       thresholds: {
-        lines: 95,
-        functions: 95,
-        branches: 80,
-        statements: 95,
+        lines: 96,
+        functions: 96,
+        branches: 90,
+        statements: 96,
       },
     },
   },
