@@ -33,9 +33,16 @@ const client = mqtt.connect(config.mqtt.url, {
 // Exact-topic router: topic -> handler(topic, payload)
 const topicHandlers = new Map<string, (topic: string, message: Buffer) => void>()
 
+// Fan-out callbacks fired on every 'connect' event (initial connect + reconnects).
+// Registered via IMqtt.onReconnect(); see Orchestrator for the republish-on-reconnect use case.
+const reconnectCallbacks: Array<() => void> = []
+
 client
   .on('connect', () => {
     logger.info(`Connected to MQTT broker: ${config.mqtt.url}`)
+    for (const cb of reconnectCallbacks) {
+      cb()
+    }
   })
   .on('error', (error) => {
     logger.error('MQTT connection error:', error)
@@ -74,6 +81,8 @@ export interface IMqtt {
   subscribe(topicSuffix: string, callback: (topic: string, message: Buffer) => void): Promise<void>
   unsubscribe(topicSuffix: string): void
   disconnect(): void
+  /** Register a callback to be fired on every MQTT 'connect' event (initial + reconnects). */
+  onReconnect(callback: () => void): void
 }
 
 class Mqtt implements IMqtt {
@@ -86,6 +95,13 @@ class Mqtt implements IMqtt {
   }
 
   private _publish(topic: string, message: string, options?: mqtt.IClientPublishOptions) {
+    // Drop publishes while disconnected rather than letting the mqtt library
+    // queue them unboundedly. State correctness is preferred over message
+    // delivery during outages; the orchestrator republishes on reconnect (M9).
+    if (!this.client.connected) {
+      logger.warn(`Dropping publish to "${topic}" — client is disconnected`)
+      return
+    }
     try {
       logger.debug('Publishing to topic:', topic, 'Message:', JSON.parse(message))
     } catch {
@@ -162,15 +178,21 @@ class Mqtt implements IMqtt {
       } else {
         logger.info(`Unsubscribed from topic "${topic}" successfully`)
       }
+      // Delete after broker confirms (or errors) to preserve the handler
+      // for any commands that arrive during the in-flight unsubscribe window.
+      // Mirrors the subscribe pattern that adds the handler inside the callback.
+      topicHandlers.delete(topic)
     })
-
-    topicHandlers.delete(topic)
   }
 
   public disconnect() {
     this.client.end(() => {
       logger.info('Disconnected from MQTT broker')
     })
+  }
+
+  public onReconnect(callback: () => void): void {
+    reconnectCallbacks.push(callback)
   }
 }
 

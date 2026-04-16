@@ -1,20 +1,37 @@
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Build a fresh mock client for each test module reset cycle.
+// EventEmitter is required so that module-level client.on('message', …)
+// registrations actually dispatch when we emit.
+function createMockClient() {
+  const emitter = new EventEmitter()
+  const mockClient = Object.assign(emitter, {
+    connected: true,
+    publish: vi.fn((_topic: unknown, _message: unknown, _options: unknown, callback: (err: null) => void) => {
+      if (callback) callback(null)
+    }),
+    subscribe: vi.fn((topic: unknown, callback: (err: null, granted: { topic: unknown; qos: number }[]) => void) => {
+      if (callback) callback(null, [{ topic, qos: 0 }])
+    }),
+    unsubscribe: vi.fn((_topic: unknown, callback: (err: null) => void) => {
+      if (callback) callback(null)
+    }),
+    end: vi.fn(),
+  })
+  return mockClient
+}
+
+// Shared logger spy — captured when createLogger mock is called
+let loggerWarnSpy: ReturnType<typeof vi.fn>
+let loggerInfoSpy: ReturnType<typeof vi.fn>
+let loggerErrorSpy: ReturnType<typeof vi.fn>
+let loggerDebugSpy: ReturnType<typeof vi.fn>
+
+let mockClient: ReturnType<typeof createMockClient>
 
 // Mock mqtt module before importing the Mqtt class
 vi.mock('mqtt', () => {
-  const mockClient = {
-    on: vi.fn(function (this: typeof mockClient) {
-      return this
-    }),
-    publish: vi.fn((_topic, _message, _options, callback) => {
-      if (callback) callback(null)
-    }),
-    subscribe: vi.fn((topic, callback) => {
-      if (callback) callback(null, [{ topic, qos: 0 }])
-    }),
-    end: vi.fn(),
-  }
-
   return {
     default: {
       connect: vi.fn(() => mockClient),
@@ -35,14 +52,20 @@ vi.mock('@/config.js', () => ({
   },
 }))
 
-// Mock logger
+// Mock logger — captures logger spies so tests can assert on them
 vi.mock('@/logger.js', () => ({
-  default: vi.fn(() => ({
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  })),
+  default: vi.fn(() => {
+    loggerWarnSpy = vi.fn()
+    loggerInfoSpy = vi.fn()
+    loggerErrorSpy = vi.fn()
+    loggerDebugSpy = vi.fn()
+    return {
+      info: loggerInfoSpy,
+      error: loggerErrorSpy,
+      warn: loggerWarnSpy,
+      debug: loggerDebugSpy,
+    }
+  }),
 }))
 
 describe('Mqtt', () => {
@@ -50,7 +73,14 @@ describe('Mqtt', () => {
   let mqttInstance: InstanceType<typeof import('@/mqtt.js').default>
 
   beforeEach(async () => {
+    // Reset modules so topicHandlers Map and module-level client state is fresh.
+    // This also causes the logger mock factory to run again on re-import,
+    // refreshing the captured logger spies.
+    vi.resetModules()
     vi.clearAllMocks()
+
+    // Fresh mock client for each test (EventEmitter + vi.fn methods)
+    mockClient = createMockClient()
 
     // Dynamically import the actual module after mocks are set up
     const module = await import('@/mqtt.js')
@@ -63,8 +93,11 @@ describe('Mqtt', () => {
       expect(mqttInstance.topicPrefix).toBe('test_appliances')
     })
 
-    it('should create mqtt client', () => {
-      expect(mqttInstance.client).toBeDefined()
+    it('should create mqtt client with mqtt interface', () => {
+      expect(mqttInstance.client).not.toBeNull()
+      expect(typeof mqttInstance.client.on).toBe('function')
+      expect(typeof mqttInstance.client.publish).toBe('function')
+      expect(typeof mqttInstance.client.subscribe).toBe('function')
     })
   })
 
@@ -118,6 +151,37 @@ describe('Mqtt', () => {
         expect.any(Function),
       )
     })
+
+    it('should not call client.publish when disconnected (M1)', () => {
+      // M1: when client is disconnected, publish must be a no-op
+      mockClient.connected = false
+      const message = JSON.stringify({ mode: 'cool' })
+
+      mqttInstance.publish('device-123', message)
+
+      expect(mockClient.publish).not.toHaveBeenCalled()
+    })
+
+    it('should log a warning with the topic when publish is dropped due to disconnection (M1)', () => {
+      // M1: dropped publish must emit a warn with the topic for observability
+      mockClient.connected = false
+      const message = JSON.stringify({ mode: 'cool' })
+
+      mqttInstance.publish('device-123', message)
+
+      // loggerWarnSpy is set by the logger mock factory when the module loads
+      expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('test_appliances/device-123'))
+    })
+
+    it('should call client.publish when connected', () => {
+      // Inverse: connected = true (default) → publish proceeds normally
+      mockClient.connected = true
+      const message = JSON.stringify({ mode: 'fan' })
+
+      mqttInstance.publish('device-123', message)
+
+      expect(mockClient.publish).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('subscribe', () => {
@@ -144,10 +208,10 @@ describe('Mqtt', () => {
     })
 
     it('should reject when subscription fails', async () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         subscribe: ReturnType<typeof vi.fn>
       }
-      mockClient.subscribe = vi.fn((_topic, callback) => {
+      mockClientTyped.subscribe = vi.fn((_topic, callback) => {
         if (callback) callback(new Error('Subscription failed'))
       })
 
@@ -158,7 +222,6 @@ describe('Mqtt', () => {
 
   describe('unsubscribe', () => {
     it('should unsubscribe from topic', () => {
-      // First mock an unsubscribe method
       mqttInstance.client.unsubscribe = vi.fn((_topic) => {
         return mqttInstance.client
       }) as unknown as typeof mqttInstance.client.unsubscribe
@@ -176,6 +239,66 @@ describe('Mqtt', () => {
       mqttInstance.unsubscribe('device-456')
 
       expect(mqttInstance.client.unsubscribe).toHaveBeenCalled()
+    })
+
+    it('should preserve handler in topicHandlers during in-flight unsubscribe (C2 race)', async () => {
+      // C2: handler must remain active until broker confirms unsubscribe.
+      // Steps:
+      //   1. Subscribe — installs handler in topicHandlers.
+      //   2. Call unsubscribe — broker callback is captured but NOT yet fired.
+      //   3. Emit 'message' on the mock client — handler must still be invoked.
+      //   4. Fire the captured broker callback (success) — handler removed.
+      //   5. Emit 'message' again — handler must NOT be invoked.
+
+      const handler = vi.fn()
+      await mqttInstance.subscribe('commands/device-123', handler)
+
+      const fullTopic = 'test_appliances/commands/device-123'
+
+      // Capture the unsubscribe broker callback without firing it
+      let capturedUnsubCallback: ((err: Error | null) => void) | undefined
+      mqttInstance.client.unsubscribe = vi.fn((_topic, cb) => {
+        capturedUnsubCallback = cb as (err: Error | null) => void
+        // Do NOT call cb yet — simulates broker in-flight delay
+      }) as unknown as typeof mqttInstance.client.unsubscribe
+
+      mqttInstance.unsubscribe('commands/device-123')
+
+      // Message arrives BEFORE broker confirms unsubscribe — handler must still fire
+      mockClient.emit('message', fullTopic, Buffer.from('payload'))
+      expect(handler).toHaveBeenCalledTimes(1)
+
+      // Broker confirms unsubscribe
+      expect(capturedUnsubCallback).toBeDefined()
+      capturedUnsubCallback?.(null)
+
+      // Message arrives AFTER broker confirms — handler must NOT fire
+      handler.mockClear()
+      mockClient.emit('message', fullTopic, Buffer.from('payload2'))
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('should remove handler even when unsubscribe returns an error (C2 error branch)', async () => {
+      // Even on broker error the local route should be cleaned up (broker may be
+      // in inconsistent state but locally the topic is unwanted).
+      const handler = vi.fn()
+      await mqttInstance.subscribe('commands/device-error', handler)
+
+      const fullTopic = 'test_appliances/commands/device-error'
+
+      let capturedUnsubCallback: ((err: Error | null) => void) | undefined
+      mqttInstance.client.unsubscribe = vi.fn((_topic, cb) => {
+        capturedUnsubCallback = cb as (err: Error | null) => void
+      }) as unknown as typeof mqttInstance.client.unsubscribe
+
+      mqttInstance.unsubscribe('commands/device-error')
+
+      // Fire the broker callback with an error
+      capturedUnsubCallback?.(new Error('Broker error'))
+
+      // After error callback fires, handler must be removed
+      mockClient.emit('message', fullTopic, Buffer.from('payload'))
+      expect(handler).not.toHaveBeenCalled()
     })
   })
 
@@ -282,27 +405,31 @@ describe('Mqtt', () => {
   })
 
   describe('error handling', () => {
-    it('should handle publish errors gracefully', () => {
-      const mockClientWithError = {
-        on: vi.fn(function (this: typeof mockClientWithError) {
-          return this
-        }),
-        publish: vi.fn((_topic, _message, _options, callback) => {
-          if (callback) callback(new Error('Publish failed'))
-        }),
-        subscribe: vi.fn(),
-        end: vi.fn(),
+    it('should log error and not throw when publish callback returns an error (m12)', () => {
+      const mockClientTyped = mqttInstance.client as unknown as {
+        publish: ReturnType<typeof vi.fn>
       }
 
-      // This test verifies the error callback path exists
-      expect(mockClientWithError.publish).toBeDefined()
+      mockClientTyped.publish = vi.fn((_topic, _message, _options, callback) => {
+        if (callback) callback(new Error('Publish failed'))
+      })
+
+      const message = JSON.stringify({ mode: 'cool' })
+
+      // Must not throw even when callback fires with an error
+      expect(() => mqttInstance.publish('device-error', message)).not.toThrow()
+      // Error must be logged for observability
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error publishing message'),
+        expect.objectContaining({ message: 'Publish failed' }),
+      )
     })
 
     it('should handle subscribe errors', async () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         subscribe: ReturnType<typeof vi.fn>
       }
-      mockClient.subscribe = vi.fn((_topic, callback) => {
+      mockClientTyped.subscribe = vi.fn((_topic, callback) => {
         callback(new Error('Subscribe failed'))
       })
 
@@ -311,16 +438,16 @@ describe('Mqtt', () => {
     })
 
     it('should handle unsubscribe errors', () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         unsubscribe: ReturnType<typeof vi.fn>
       }
-      mockClient.unsubscribe = vi.fn((_topic, callback) => {
+      mockClientTyped.unsubscribe = vi.fn((_topic, callback) => {
         callback(new Error('Unsubscribe failed'))
       })
 
       mqttInstance.unsubscribe('device-error')
 
-      expect(mockClient.unsubscribe).toHaveBeenCalled()
+      expect(mockClientTyped.unsubscribe).toHaveBeenCalled()
     })
   })
 
@@ -332,31 +459,85 @@ describe('Mqtt', () => {
     })
 
     it('should call end callback when disconnecting', () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         end: ReturnType<typeof vi.fn>
       }
       let endCallback: (() => void) | undefined
 
-      mockClient.end = vi.fn((callback) => {
+      mockClientTyped.end = vi.fn((callback) => {
         endCallback = callback
         if (callback) callback()
       })
 
       mqttInstance.disconnect()
 
-      expect(mockClient.end).toHaveBeenCalled()
+      expect(mockClientTyped.end).toHaveBeenCalled()
       expect(endCallback).toBeDefined()
+    })
+  })
+
+  describe('onReconnect (M9)', () => {
+    it('should fire the callback on a connect event from the underlying client', () => {
+      const cb = vi.fn()
+      mqttInstance.onReconnect(cb)
+
+      mockClient.emit('connect')
+
+      expect(cb).toHaveBeenCalledTimes(1)
+    })
+
+    it('should fire the callback on every subsequent connect event', () => {
+      const cb = vi.fn()
+      mqttInstance.onReconnect(cb)
+
+      mockClient.emit('connect')
+      mockClient.emit('connect')
+      mockClient.emit('connect')
+
+      expect(cb).toHaveBeenCalledTimes(3)
+    })
+
+    it('should fire all registered callbacks on each connect event', () => {
+      const cb1 = vi.fn()
+      const cb2 = vi.fn()
+      mqttInstance.onReconnect(cb1)
+      mqttInstance.onReconnect(cb2)
+
+      mockClient.emit('connect')
+
+      expect(cb1).toHaveBeenCalledTimes(1)
+      expect(cb2).toHaveBeenCalledTimes(1)
+    })
+
+    it('should fire all callbacks in registration order', () => {
+      const callOrder: number[] = []
+      mqttInstance.onReconnect(() => callOrder.push(1))
+      mqttInstance.onReconnect(() => callOrder.push(2))
+
+      mockClient.emit('connect')
+
+      expect(callOrder).toEqual([1, 2])
+    })
+
+    it('should not fire a callback registered after the connect event', () => {
+      const cb = vi.fn()
+
+      // Emit before registration
+      mockClient.emit('connect')
+      mqttInstance.onReconnect(cb)
+
+      expect(cb).not.toHaveBeenCalled()
     })
   })
 
   describe('publish error handling', () => {
     it('should handle publish errors in callback', () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         publish: ReturnType<typeof vi.fn>
       }
 
       // Mock publish to call callback with error
-      mockClient.publish = vi.fn((_topic, _message, _options, callback) => {
+      mockClientTyped.publish = vi.fn((_topic, _message, _options, callback) => {
         if (callback) callback(new Error('Publish failed'))
       })
 
@@ -369,12 +550,12 @@ describe('Mqtt', () => {
 
   describe('subscribe error handling', () => {
     it('should reject promise when subscribe fails', async () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         subscribe: ReturnType<typeof vi.fn>
       }
 
       // Mock subscribe to call callback with error
-      mockClient.subscribe = vi.fn((_topic, callback) => {
+      mockClientTyped.subscribe = vi.fn((_topic, callback) => {
         if (callback) callback(new Error('Subscribe failed'))
       })
 
@@ -386,12 +567,12 @@ describe('Mqtt', () => {
 
   describe('unsubscribe error handling', () => {
     it('should handle unsubscribe errors in callback', () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         unsubscribe: ReturnType<typeof vi.fn>
       }
 
       // Mock unsubscribe to call callback with error
-      mockClient.unsubscribe = vi.fn((_topic, callback) => {
+      mockClientTyped.unsubscribe = vi.fn((_topic, callback) => {
         if (callback) callback(new Error('Unsubscribe failed'))
       })
 
@@ -400,17 +581,20 @@ describe('Mqtt', () => {
     })
 
     it('should log success when unsubscribe completes without error', () => {
-      const mockClient = mqttInstance.client as unknown as {
+      const mockClientTyped = mqttInstance.client as unknown as {
         unsubscribe: ReturnType<typeof vi.fn>
       }
 
       // Mock unsubscribe to call callback with no error (success)
-      mockClient.unsubscribe = vi.fn((_topic, callback) => {
+      mockClientTyped.unsubscribe = vi.fn((_topic, callback) => {
         if (callback) callback(null)
       })
 
       expect(() => mqttInstance.unsubscribe('device-123')).not.toThrow()
-      expect(mockClient.unsubscribe).toHaveBeenCalledWith(expect.stringContaining('device-123'), expect.any(Function))
+      expect(mockClientTyped.unsubscribe).toHaveBeenCalledWith(
+        expect.stringContaining('device-123'),
+        expect.any(Function),
+      )
     })
   })
 })
