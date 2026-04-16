@@ -33,10 +33,13 @@ bump version:
     - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
     - git fetch --tags --force || true
     - git fetch origin "$CI_DEFAULT_BRANCH" || true
+    # Create a real local branch so go-semantic-release detects the branch name correctly
+    # (GitLab CI checks out in detached HEAD mode, causing it to report the SHA as branch).
+    - git checkout -B "$CI_COMMIT_BRANCH" || true
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --prerelease --maintained-version 1-rc
+        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --prerelease
       else
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       fi
