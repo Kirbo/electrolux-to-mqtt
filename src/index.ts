@@ -71,7 +71,9 @@ const main = async () => {
     // API call failed (network error, DNS failure, etc.)
     logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshInterval / 1000} seconds...`)
     if (!orchestrator.isShuttingDown) {
-      restartTimeout = setTimeout(() => main(), refreshInterval)
+      restartTimeout = setTimeout(() => {
+        main().catch((err: unknown) => logger.error('Error in restart:', err))
+      }, refreshInterval)
     }
     return
   }
@@ -81,7 +83,9 @@ const main = async () => {
       `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
     )
     if (!orchestrator.isShuttingDown) {
-      restartTimeout = setTimeout(() => main(), refreshInterval)
+      restartTimeout = setTimeout(() => {
+        main().catch((err: unknown) => logger.error('Error in restart:', err))
+      }, refreshInterval)
     }
     return
   }
