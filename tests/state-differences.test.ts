@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { getStateDifferences } from '../src/electrolux.js'
-import type { NormalizedState } from '../src/types/normalized.js'
+import { getStateDifferences } from '@/electrolux.js'
+import type { NormalizedState } from '@/types/normalized.js'
 
 describe('State Differences', () => {
   describe('getStateDifferences', () => {

@@ -16,8 +16,8 @@ import {
   normalizeOnOffState,
   normalizeTemperatureUnit,
   normalizeUpgradeState,
-} from '../../src/appliances/normalizers.js'
-import type { Appliance } from '../../src/types.js'
+} from '@/appliances/normalizers.js'
+import type { Appliance } from '@/types.js'
 
 describe('normalizers', () => {
   describe('denormalizeClimateMode', () => {

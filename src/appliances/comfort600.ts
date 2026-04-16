@@ -1,6 +1,6 @@
-import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '../types/homeassistant.js'
-import type { NormalizedClimateMode, NormalizedState } from '../types/normalized.js'
-import type { Appliance } from '../types.js'
+import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '@/types/homeassistant.js'
+import type { NormalizedClimateMode, NormalizedState } from '@/types/normalized.js'
+import type { Appliance } from '@/types.js'
 import { BaseAppliance, type CommandValidationResult } from './base.js'
 import {
   denormalizeClimateMode,

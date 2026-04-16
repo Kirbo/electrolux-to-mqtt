@@ -1,10 +1,10 @@
 import axios from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { IMqtt } from '../src/mqtt.js'
+import type { IMqtt } from '@/mqtt.js'
 
 // Mock dependencies before importing the module
 vi.mock('axios')
-vi.mock('../src/logger.js', () => ({
+vi.mock('@/logger.js', () => ({
   default: () => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('../src/logger.js', () => ({
 }))
 
 // Mock config with default values
-vi.mock('../src/config.js', () => ({
+vi.mock('@/config.js', () => ({
   default: {
     versionCheck: {
       checkInterval: 3600,
@@ -25,7 +25,7 @@ vi.mock('../src/config.js', () => ({
 }))
 
 describe('version-checker', () => {
-  let startVersionChecker: typeof import('../src/version-checker.js')['startVersionChecker']
+  let startVersionChecker: typeof import('@/version-checker.js')['startVersionChecker']
   let mockAxiosGet: ReturnType<typeof vi.fn>
   let mockAxiosPost: ReturnType<typeof vi.fn>
 
@@ -43,7 +43,7 @@ describe('version-checker', () => {
     vi.mocked(axios.isAxiosError).mockReturnValue(false)
 
     // Dynamically import the module to ensure mocks are applied
-    const module = await import('../src/version-checker.js')
+    const module = await import('@/version-checker.js')
     startVersionChecker = module.startVersionChecker
   })
 
@@ -346,19 +346,19 @@ describe('version-checker', () => {
   })
 
   describe('telemetry opt-out', () => {
-    let moduleWithOptOut: typeof import('../src/version-checker.js')
+    let moduleWithOptOut: typeof import('@/version-checker.js')
 
     beforeEach(async () => {
       vi.resetModules()
 
-      vi.doMock('../src/config.js', () => ({
+      vi.doMock('@/config.js', () => ({
         default: {
           versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined },
           telemetryEnabled: false,
         },
       }))
 
-      moduleWithOptOut = await import('../src/version-checker.js')
+      moduleWithOptOut = await import('@/version-checker.js')
     })
 
     it('should skip telemetry POST when telemetryEnabled is false', async () => {
@@ -383,13 +383,13 @@ describe('version-checker', () => {
 
     it('should send telemetry when telemetryEnabled is explicitly true', async () => {
       vi.resetModules()
-      vi.doMock('../src/config.js', () => ({
+      vi.doMock('@/config.js', () => ({
         default: {
           versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined },
           telemetryEnabled: true,
         },
       }))
-      const mod = await import('../src/version-checker.js')
+      const mod = await import('@/version-checker.js')
 
       mockAxiosGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
@@ -456,13 +456,13 @@ describe('version-checker', () => {
   })
 
   describe('ntfy notifications', () => {
-    let moduleWithNtfy: typeof import('../src/version-checker.js')
+    let moduleWithNtfy: typeof import('@/version-checker.js')
 
     beforeEach(async () => {
       // Clear module cache and re-mock config with ntfy webhook
       vi.resetModules()
 
-      vi.doMock('../src/config.js', () => ({
+      vi.doMock('@/config.js', () => ({
         default: {
           versionCheck: {
             checkInterval: 3600,
@@ -473,7 +473,7 @@ describe('version-checker', () => {
       }))
 
       // Re-import the module with the new config
-      moduleWithNtfy = await import('../src/version-checker.js')
+      moduleWithNtfy = await import('@/version-checker.js')
     })
 
     it('should send ntfy notification when newer version is found', async () => {
@@ -906,17 +906,17 @@ describe('version-checker', () => {
 
   describe('updateChannel filtering', () => {
     describe("stable channel (default) — skips releases whose tag_name contains '-'", () => {
-      let moduleWithStable: typeof import('../src/version-checker.js')
+      let moduleWithStable: typeof import('@/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('../src/config.js', () => ({
+        vi.doMock('@/config.js', () => ({
           default: {
             versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
             telemetryEnabled: false,
           },
         }))
-        moduleWithStable = await import('../src/version-checker.js')
+        moduleWithStable = await import('@/version-checker.js')
       })
 
       it('should skip an rc release and return null when that is the only release', async () => {
@@ -994,17 +994,17 @@ describe('version-checker', () => {
     })
 
     describe('beta channel — includes rc releases', () => {
-      let moduleWithBeta: typeof import('../src/version-checker.js')
+      let moduleWithBeta: typeof import('@/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('../src/config.js', () => ({
+        vi.doMock('@/config.js', () => ({
           default: {
             versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
             telemetryEnabled: false,
           },
         }))
-        moduleWithBeta = await import('../src/version-checker.js')
+        moduleWithBeta = await import('@/version-checker.js')
       })
 
       it('should return rc release when it is the most recently created', async () => {

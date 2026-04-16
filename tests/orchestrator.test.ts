@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BaseAppliance } from '../src/appliances/base.js'
-import type { ElectroluxClient } from '../src/electrolux.js'
-import type { IMqtt } from '../src/mqtt.js'
-import { Orchestrator, type OrchestratorConfig } from '../src/orchestrator.js'
-import type { ApplianceInfo, ApplianceStub } from '../src/types.js'
+import type { BaseAppliance } from '@/appliances/base.js'
+import type { ElectroluxClient } from '@/electrolux.js'
+import type { IMqtt } from '@/mqtt.js'
+import { Orchestrator, type OrchestratorConfig } from '@/orchestrator.js'
+import type { ApplianceInfo, ApplianceStub } from '@/types.js'
 
 // Mock dependencies
-vi.mock('../src/logger.js', () => ({
+vi.mock('@/logger.js', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: vi.fn(),
@@ -15,11 +15,11 @@ vi.mock('../src/logger.js', () => ({
   })),
 }))
 
-vi.mock('../src/health.js', () => ({
+vi.mock('@/health.js', () => ({
   writeHealthFile: vi.fn(),
 }))
 
-vi.mock('../src/cache.js', () => ({
+vi.mock('@/cache.js', () => ({
   cache: {
     cacheKey: vi.fn((id: string) => ({
       state: `${id}:state`,
@@ -29,23 +29,21 @@ vi.mock('../src/cache.js', () => ({
   },
 }))
 
-vi.mock('../src/appliances/factory.js', () => ({
-  ApplianceFactory: {
-    create: vi.fn(
-      (stub: ApplianceStub, _info: ApplianceInfo): BaseAppliance =>
-        ({
-          getApplianceId: () => stub.applianceId,
-          getApplianceName: () => stub.applianceName,
-          getModelName: () => 'COMFORT600',
-          getApplianceType: () => stub.applianceType,
-          normalizeState: vi.fn(),
-          transformMqttCommandToApi: vi.fn(),
-          generateAutoDiscoveryConfig: vi.fn(() => ({ test: 'config' })),
-          validateCommand: vi.fn(() => ({ valid: true })),
-          deriveImmediateStateFromCommand: vi.fn(() => null),
-        }) as unknown as BaseAppliance,
-    ),
-  },
+vi.mock('@/appliances/factory.js', () => ({
+  createAppliance: vi.fn(
+    (stub: ApplianceStub, _info: ApplianceInfo): BaseAppliance =>
+      ({
+        getApplianceId: () => stub.applianceId,
+        getApplianceName: () => stub.applianceName,
+        getModelName: () => 'COMFORT600',
+        getApplianceType: () => stub.applianceType,
+        normalizeState: vi.fn(),
+        transformMqttCommandToApi: vi.fn(),
+        generateAutoDiscoveryConfig: vi.fn(() => ({ test: 'config' })),
+        validateCommand: vi.fn(() => ({ valid: true })),
+        deriveImmediateStateFromCommand: vi.fn(() => null),
+      }) as unknown as BaseAppliance,
+  ),
 }))
 
 function createMockClient(): ElectroluxClient {
@@ -254,7 +252,7 @@ describe('Orchestrator', () => {
     })
 
     it('should republish auto-discovery config when it changes', async () => {
-      const { cache } = await import('../src/cache.js')
+      const { cache } = await import('@/cache.js')
 
       // Mock getApplianceState to invoke its callback
       vi.mocked(client.getApplianceState).mockImplementation(async (_appliance, callback) => {
@@ -273,7 +271,7 @@ describe('Orchestrator', () => {
     })
 
     it('should skip auto-discovery republish when config unchanged', async () => {
-      const { cache } = await import('../src/cache.js')
+      const { cache } = await import('@/cache.js')
 
       // Mock getApplianceState to invoke its callback
       vi.mocked(client.getApplianceState).mockImplementation(async (_appliance, callback) => {

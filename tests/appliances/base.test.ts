@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { BaseAppliance } from '../../src/appliances/base.js'
-import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '../../src/types/homeassistant.js'
-import type { NormalizedState } from '../../src/types/normalized.js'
-import type { Appliance, ApplianceInfo, ApplianceStub } from '../../src/types.js'
+import { BaseAppliance } from '@/appliances/base.js'
+import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '@/types/homeassistant.js'
+import type { NormalizedState } from '@/types/normalized.js'
+import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
 
 // Create a concrete test implementation of BaseAppliance
 class TestAppliance extends BaseAppliance {

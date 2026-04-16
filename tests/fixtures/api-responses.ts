@@ -3,7 +3,7 @@
  * These are used for mocking in tests and can be compared against real API responses
  */
 
-import type { Appliance, ApplianceInfo, ApplianceStub } from '../../src/types.js'
+import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
 
 export const mockAppliancesResponse: ApplianceStub[] = [
   {

@@ -11,8 +11,8 @@ import type {
   OnOffState,
   TemperatureUnit,
   UpgradeState,
-} from '../types/normalized.js'
-import type { Appliance } from '../types.js'
+} from '@/types/normalized.js'
+import type { Appliance } from '@/types.js'
 
 /**
  * Utility functions for normalizing Electrolux API data to standard format

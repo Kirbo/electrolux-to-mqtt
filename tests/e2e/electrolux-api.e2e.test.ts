@@ -25,11 +25,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { ApplianceFactory } from '../../src/appliances/factory.js'
-import { ElectroluxClient } from '../../src/electrolux.js'
-import createLogger from '../../src/logger.js'
-import type { IMqtt } from '../../src/mqtt.js'
-import type { ApplianceInfo, ApplianceStub } from '../../src/types.js'
+import { createAppliance } from '@/appliances/factory.js'
+import { ElectroluxClient } from '@/electrolux.js'
+import createLogger from '@/logger.js'
+import type { IMqtt } from '@/mqtt.js'
+import type { ApplianceInfo, ApplianceStub } from '@/types.js'
 
 const log = createLogger('e2e')
 
@@ -159,7 +159,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
         const info = applianceInfoMap.get(stub.applianceId)
         if (!info) continue
 
-        const appliance = ApplianceFactory.create(stub, info)
+        const appliance = createAppliance(stub, info)
         const state = await client.getApplianceState(appliance)
 
         expect(state).toBeDefined()
@@ -201,7 +201,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
         writeSnapshot(path.join(modelPath, 'appliance-info.json'), info)
 
-        const appliance = ApplianceFactory.create(stub, info)
+        const appliance = createAppliance(stub, info)
         const state = await client.getApplianceState(appliance)
         if (state) {
           writeSnapshot(path.join(modelPath, 'appliance-state.json'), state)

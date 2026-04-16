@@ -23,7 +23,7 @@ vi.mock('mqtt', () => {
 })
 
 // Mock config
-vi.mock('../src/config.js', () => ({
+vi.mock('@/config.js', () => ({
   default: {
     mqtt: {
       host: 'test-broker',
@@ -36,7 +36,7 @@ vi.mock('../src/config.js', () => ({
 }))
 
 // Mock logger
-vi.mock('../src/logger.js', () => ({
+vi.mock('@/logger.js', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: vi.fn(),
@@ -46,14 +46,14 @@ vi.mock('../src/logger.js', () => ({
 }))
 
 describe('Mqtt', () => {
-  let Mqtt: typeof import('../src/mqtt.js').default
-  let mqttInstance: InstanceType<typeof import('../src/mqtt.js').default>
+  let Mqtt: typeof import('@/mqtt.js').default
+  let mqttInstance: InstanceType<typeof import('@/mqtt.js').default>
 
   beforeEach(async () => {
     vi.clearAllMocks()
 
     // Dynamically import the actual module after mocks are set up
-    const module = await import('../src/mqtt.js')
+    const module = await import('@/mqtt.js')
     Mqtt = module.default
     mqttInstance = new Mqtt()
   })

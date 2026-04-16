@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Cache } from '../src/cache'
+import { Cache } from '@/cache.js'
 
 describe('Cache', () => {
   it('should store and retrieve values', () => {
@@ -142,14 +142,14 @@ describe('Cache', () => {
 
     it('should log debug messages when skipCacheLogging is false', async () => {
       vi.resetModules()
-      vi.doMock('../src/config.js', () => ({
+      vi.doMock('@/config.js', () => ({
         default: { logging: { skipCacheLogging: false } },
       }))
-      vi.doMock('../src/logger.js', () => ({
+      vi.doMock('@/logger.js', () => ({
         default: () => ({ debug: loggerDebugSpy, info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
       }))
 
-      const { cache } = await import('../src/cache.js')
+      const { cache } = await import('@/cache.js')
 
       cache.set('test-key', { name: 'value' })
       expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('Set "test-key"'), expect.anything())

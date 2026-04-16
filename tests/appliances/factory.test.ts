@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { Comfort600Appliance } from '../../src/appliances/comfort600.js'
-import { ApplianceFactory } from '../../src/appliances/factory.js'
-import type { ApplianceInfo, ApplianceStub } from '../../src/types.js'
+import { Comfort600Appliance } from '@/appliances/comfort600.js'
+import { createAppliance, getSupportedModels } from '@/appliances/factory.js'
+import type { ApplianceInfo, ApplianceStub } from '@/types.js'
 
 const mockStub: ApplianceStub = {
   applianceId: 'test-123',
@@ -294,7 +294,7 @@ const mockInfo: ApplianceInfo = {
 describe('ApplianceFactory', () => {
   describe('create', () => {
     it('should create Comfort600Appliance for COMFORT600 model', () => {
-      const appliance = ApplianceFactory.create(mockStub, mockInfo)
+      const appliance = createAppliance(mockStub, mockInfo)
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
 
@@ -305,7 +305,7 @@ describe('ApplianceFactory', () => {
         applianceInfo: { ...mockInfo.applianceInfo, deviceType: 'UNKNOWN_TYPE' },
       } as ApplianceInfo
 
-      const appliance = ApplianceFactory.create(unknownStub, unknownInfo)
+      const appliance = createAppliance(unknownStub, unknownInfo)
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
 
@@ -315,7 +315,7 @@ describe('ApplianceFactory', () => {
         applianceInfo: { ...mockInfo.applianceInfo, model: 'UNKNOWN_MODEL' },
       } as ApplianceInfo
 
-      const appliance = ApplianceFactory.create(mockStub, unknownModelInfo)
+      const appliance = createAppliance(mockStub, unknownModelInfo)
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
 
@@ -330,7 +330,7 @@ describe('ApplianceFactory', () => {
         },
       } as ApplianceInfo
 
-      const appliance = ApplianceFactory.create(mockStub, azulInfo)
+      const appliance = createAppliance(mockStub, azulInfo)
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
 
@@ -345,7 +345,7 @@ describe('ApplianceFactory', () => {
         },
       } as ApplianceInfo
 
-      const appliance = ApplianceFactory.create(mockStub, nonAzulInfo)
+      const appliance = createAppliance(mockStub, nonAzulInfo)
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
 
@@ -359,14 +359,14 @@ describe('ApplianceFactory', () => {
         },
       } as ApplianceInfo
 
-      const appliance = ApplianceFactory.create(mockStub, noVariantInfo)
+      const appliance = createAppliance(mockStub, noVariantInfo)
       expect(appliance).toBeInstanceOf(Comfort600Appliance)
     })
   })
 
   describe('getSupportedModels', () => {
     it('should return list of supported models', () => {
-      const models = ApplianceFactory.getSupportedModels()
+      const models = getSupportedModels()
       expect(models).toEqual(['COMFORT600'])
     })
   })
