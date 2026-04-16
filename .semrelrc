@@ -15,6 +15,5 @@
       "name": "gitlab"
     }
   },
-  "branch": "next",
-  "preRelease": "rc"
+  "maintainedVersion": "next"
 }
