@@ -5,11 +5,16 @@ import type { IMqtt } from '@/mqtt.js'
 import { Orchestrator, type OrchestratorConfig } from '@/orchestrator.js'
 import type { ApplianceInfo, ApplianceStub } from '@/types.js'
 
+// Hoisted spy so we can assert on logger.error in m11 tests without recreating
+// the module. The orchestrator module captures its logger reference at import
+// time; using vi.hoisted ensures the same spy instance is returned by the mock.
+const loggerErrorSpy = vi.hoisted(() => vi.fn())
+
 // Mock dependencies
 vi.mock('@/logger.js', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
-    error: vi.fn(),
+    error: loggerErrorSpy,
     warn: vi.fn(),
     debug: vi.fn(),
   })),
@@ -21,11 +26,12 @@ vi.mock('@/health.js', () => ({
 
 vi.mock('@/cache.js', () => ({
   cache: {
-    cacheKey: vi.fn((id: string) => ({
+    cacheKey: vi.fn((id: string, capabilitiesHash?: string) => ({
       state: `${id}:state`,
-      autoDiscovery: `${id}:auto-discovery`,
+      autoDiscovery: capabilitiesHash ? `${id}:auto-discovery:${capabilitiesHash}` : `${id}:auto-discovery`,
     })),
     matchByValue: vi.fn(() => false),
+    get: vi.fn(() => undefined),
   },
 }))
 
@@ -37,6 +43,7 @@ vi.mock('@/appliances/factory.js', () => ({
         getApplianceName: () => stub.applianceName,
         getModelName: () => 'COMFORT600',
         getApplianceType: () => stub.applianceType,
+        getCapabilitiesHash: () => 'mockhash000',
         normalizeState: vi.fn(),
         transformMqttCommandToApi: vi.fn(),
         generateAutoDiscoveryConfig: vi.fn(() => ({ test: 'config' })),
@@ -81,6 +88,7 @@ function createMockMqtt(): IMqtt {
     subscribe: vi.fn(() => Promise.resolve()),
     unsubscribe: vi.fn(),
     disconnect: vi.fn(),
+    onReconnect: vi.fn(),
   }
 }
 
@@ -641,6 +649,144 @@ describe('Orchestrator', () => {
       await vi.advanceTimersByTimeAsync(100)
 
       expect(exitSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('MQTT reconnect republish (M9)', () => {
+    it('should register a reconnect callback on the mqtt layer during initialization', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+
+      expect(mqtt.onReconnect).toHaveBeenCalledWith(expect.any(Function))
+    })
+
+    it('should register the reconnect callback only once even with multiple appliances', async () => {
+      const anotherStub: ApplianceStub = {
+        applianceId: 'appliance-2',
+        applianceName: 'Another AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+
+      await orchestrator.initializeAppliance(mockStub)
+      await orchestrator.initializeAppliance(anotherStub)
+
+      expect(mqtt.onReconnect).toHaveBeenCalledTimes(1)
+    })
+
+    it('should republish cached state for each appliance on reconnect', async () => {
+      const { cache } = await import('@/cache.js')
+      const cachedState = { mode: 'cool', targetTemperature: 22 }
+      vi.mocked(cache.get).mockReturnValue(cachedState)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Capture the reconnect callback
+      const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
+      expect(reconnectCb).toBeDefined()
+
+      // Simulate the FIRST connect event (should be skipped)
+      vi.mocked(mqtt.publish).mockClear()
+      reconnectCb?.()
+      expect(mqtt.publish).not.toHaveBeenCalled()
+
+      // Simulate a SUBSEQUENT reconnect — should republish cached state
+      reconnectCb?.()
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
+    })
+
+    it('should skip republish for an appliance with no cached state', async () => {
+      const { cache } = await import('@/cache.js')
+      // cache.get returns undefined = no state cached yet
+      vi.mocked(cache.get).mockReturnValue(undefined)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
+
+      // Skip first call (initial connect)
+      reconnectCb?.()
+      vi.mocked(mqtt.publish).mockClear()
+
+      // Reconnect fires — no cached state means no publish
+      reconnectCb?.()
+      expect(mqtt.publish).not.toHaveBeenCalled()
+    })
+
+    it('should republish cached state for all initialized appliances on reconnect', async () => {
+      const { cache } = await import('@/cache.js')
+      const cachedState1 = { mode: 'cool' }
+      const cachedState2 = { mode: 'heat' }
+
+      const anotherStub: ApplianceStub = {
+        applianceId: 'appliance-2',
+        applianceName: 'Another AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+
+      vi.mocked(cache.get).mockImplementation((key: string) => {
+        if (key === 'appliance-1:state') return cachedState1
+        if (key === 'appliance-2:state') return cachedState2
+        return undefined
+      })
+
+      await orchestrator.initializeAppliance(mockStub)
+      await orchestrator.initializeAppliance(anotherStub)
+
+      const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
+
+      // Skip first call
+      reconnectCb?.()
+      vi.mocked(mqtt.publish).mockClear()
+
+      // Reconnect fires — both appliances get republished
+      reconnectCb?.()
+
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState1))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify(cachedState2))
+      expect(mqtt.publish).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('polling loop rejection guard (m11)', () => {
+    it('should not cause unhandled rejection and should log error when getApplianceState rejects on initial poll', async () => {
+      loggerErrorSpy.mockClear()
+
+      vi.mocked(client.getApplianceState).mockRejectedValue(new Error('Network timeout'))
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+
+      // Advance past delay to fire the setTimeout callback
+      await vi.advanceTimersByTimeAsync(0)
+
+      // The orchestrator must not have crashed
+      expect(orchestrator.isShuttingDown).toBe(false)
+
+      // Error should have been logged
+      expect(loggerErrorSpy).toHaveBeenCalled()
+    })
+
+    it('should not cause unhandled rejection and should log error when getApplianceState rejects in interval', async () => {
+      loggerErrorSpy.mockClear()
+
+      // First call succeeds, subsequent calls reject
+      vi.mocked(client.getApplianceState)
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValue(new Error('MQTT broker went away'))
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+
+      // Fire initial poll
+      await vi.advanceTimersByTimeAsync(0)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
+
+      // Fire one interval — rejection should be caught, not crash
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+
+      // Orchestrator must still be running
+      expect(orchestrator.isShuttingDown).toBe(false)
+      expect(loggerErrorSpy).toHaveBeenCalled()
     })
   })
 

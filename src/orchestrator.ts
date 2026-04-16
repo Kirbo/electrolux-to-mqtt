@@ -26,6 +26,7 @@ export class Orchestrator {
   private readonly applianceInstances = new Map<string, BaseAppliance>()
   private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
   private lastSuccessfulApiCall = Date.now()
+  private _reconnectRegistered = false
   public isShuttingDown = false
 
   constructor(client: ElectroluxClient, mqtt: IMqtt, config: OrchestratorConfig) {
@@ -54,6 +55,88 @@ export class Orchestrator {
     const now = Date.now()
     const apiConnected = now - this.lastSuccessfulApiCall < 3 * this.config.refreshInterval
     writeHealthFile({ mqttConnected: this.mqtt.client.connected, apiConnected })
+  }
+
+  /**
+   * Register a single reconnect callback on the MQTT layer that republishes
+   * cached state for all active appliances. Guarded so it runs at most once
+   * per Orchestrator instance regardless of how many appliances are initialized.
+   *
+   * The first 'connect' event (initial broker connection) is intentionally
+   * skipped — the normal init flow handles the first publish. Only subsequent
+   * 'connect' events (reconnects after a drop) need the catch-up republish.
+   */
+  private _registerReconnectHandler(): void {
+    if (this._reconnectRegistered) return
+    this._reconnectRegistered = true
+
+    let initialConnectSeen = false
+
+    this.mqtt.onReconnect(() => {
+      if (!initialConnectSeen) {
+        initialConnectSeen = true
+        return
+      }
+
+      logger.info('MQTT reconnected — republishing cached state for all appliances')
+      for (const [applianceId] of this.applianceInstances) {
+        const stateKey = cache.cacheKey(applianceId).state
+        const state = cache.get(stateKey)
+        if (state === undefined || state === null) {
+          logger.debug(`No cached state for appliance ${applianceId} — skipping reconnect republish`)
+          continue
+        }
+        this.mqtt.publish(`${applianceId}/state`, JSON.stringify(state))
+      }
+    })
+  }
+
+  /**
+   * Start the state polling loop for a single appliance: fires once after
+   * delayMs then repeats every refreshInterval. Uses .then().catch() chains
+   * so a rejection in getApplianceState (or any downstream call) is caught
+   * and logged rather than escaping as an unhandled rejection.
+   */
+  private _startPolling(
+    applianceId: string,
+    appliance: BaseAppliance,
+    applianceDiscoveryCallback: (() => void) | undefined,
+    delayMs: number,
+  ): void {
+    const timeoutId = setTimeout(() => {
+      this.activeTimeouts.delete(timeoutId)
+      if (this.isShuttingDown) return
+
+      this.client
+        .getApplianceState(appliance, applianceDiscoveryCallback)
+        .then((state) => {
+          this.trackApiResult(state, Date.now())
+          this.writeHealthStatus()
+
+          const intervalId = setInterval(() => {
+            if (this.isShuttingDown) {
+              clearInterval(intervalId)
+              return
+            }
+            this.client
+              .getApplianceState(appliance, applianceDiscoveryCallback)
+              .then((intervalState) => {
+                this.trackApiResult(intervalState, Date.now())
+                this.writeHealthStatus()
+              })
+              .catch((err: unknown) => {
+                logger.error(`Error polling state for appliance ${applianceId}:`, err)
+              })
+          }, this.config.refreshInterval)
+
+          this.activeIntervals.add(intervalId)
+          this.applianceStateIntervals.set(applianceId, intervalId)
+        })
+        .catch((err: unknown) => {
+          logger.error(`Error on initial state poll for appliance ${applianceId}:`, err)
+        })
+    }, delayMs)
+    this.activeTimeouts.add(timeoutId)
   }
 
   /**
@@ -107,29 +190,11 @@ export class Orchestrator {
         })
       }
 
+      // Register the MQTT reconnect handler (once per orchestrator instance)
+      this._registerReconnectHandler()
+
       // Start state polling after optional delay
-      const timeoutId = setTimeout(async () => {
-        this.activeTimeouts.delete(timeoutId)
-        if (this.isShuttingDown) return
-
-        const state = await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
-        this.trackApiResult(state, Date.now())
-        this.writeHealthStatus()
-
-        const intervalId = setInterval(async () => {
-          if (this.isShuttingDown) {
-            clearInterval(intervalId)
-            return
-          }
-          const intervalState = await this.client.getApplianceState(appliance, applianceDiscoveryCallback)
-          this.trackApiResult(intervalState, Date.now())
-          this.writeHealthStatus()
-        }, this.config.refreshInterval)
-
-        this.activeIntervals.add(intervalId)
-        this.applianceStateIntervals.set(applianceId, intervalId)
-      }, delayMs)
-      this.activeTimeouts.add(timeoutId)
+      this._startPolling(applianceId, appliance, applianceDiscoveryCallback, delayMs)
 
       // Subscribe to MQTT commands for this appliance
       await this.mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
