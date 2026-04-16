@@ -31,6 +31,7 @@ services:
       # - ELECTROLUX_REFRESH_INTERVAL=30                                      # Electrolux refresh interval in seconds (how often to poll appliance state)
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300                         # Appliance discovery interval in seconds (how often to check for added/removed appliances)
       # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60                             # Refresh token when this many minutes remain before expiration (default: 60, min: 5, max: 715)
+      # - ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30                           # Seconds to wait after a command before re-polling state (default: 30, min: 5, max: 300)
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                                  # Enable Home Assistant auto discovery
       # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false                      # Revert HA state immediately on rejected commands (default: false)
       # - LOGGING_SHOW_CHANGES=true                                           # Log appliance state changes

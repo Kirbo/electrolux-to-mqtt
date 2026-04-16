@@ -79,6 +79,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `ELECTROLUX_REFRESH_INTERVAL`              | State polling interval in seconds (10–3600)            | `30`                   | No       |
 | `ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL`  | Appliance discovery interval in seconds (60–3600)      | `300`                  | No       |
 | `ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY`     | Minutes before token expiry to refresh (5–715)         | `60`                   | No       |
+| `ELECTROLUX_COMMAND_STATE_DELAY_SECONDS`   | Seconds to wait after a command before re-polling state (5–300) | `30`          | No       |
 | `HOME_ASSISTANT_AUTO_DISCOVERY`            | Enable HA MQTT auto-discovery                          | `true`                 | No       |
 | `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION` | Immediately revert HA state on rejected commands       | `false`                | No       |
 | `LOG_LEVEL`                                | Log level (fatal/error/warn/info/debug/trace/silent)   | `info`                 | No       |
@@ -144,6 +145,7 @@ docker run --rm \
   # -e ELECTROLUX_REFRESH_INTERVAL=30 \
   # -e ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300 \
   # -e ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60 \
+  # -e ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false \
   # -e LOG_LEVEL=info \
@@ -217,6 +219,7 @@ services:
       # - ELECTROLUX_REFRESH_INTERVAL=30
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300
       # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60
+      # - ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false
       # - LOG_LEVEL=info

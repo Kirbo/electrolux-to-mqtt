@@ -56,7 +56,7 @@ function isApplianceStubArray(value: unknown): value is ApplianceStub[] {
 
 // Configuration constants
 const RENEW_TOKEN_BEFORE_EXPIRY_MS = (config.electrolux.renewTokenBeforeExpiry ?? 60) * 60 * 1000
-const COMMAND_STATE_DELAY_MS = 30_000 // Wait 30s after command before fetching state
+const COMMAND_STATE_DELAY_MS = (config.electrolux.commandStateDelaySeconds ?? 30) * 1000
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (doubles each attempt)
 const LOGIN_RETRY_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes

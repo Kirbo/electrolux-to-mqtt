@@ -31,6 +31,9 @@ electrolux:
   # E.g. 60 means: refresh the token when it has 60 minutes or less until it expires.
   # API tokens have a 12-hour (720 min) lifetime. Default: 60, Min: 5, Max: 715.
   renewTokenBeforeExpiry: 60
+  # (Optional) Seconds to wait after sending a command before re-polling appliance state to verify it took effect.
+  # Increase if your appliance is slow to apply commands. Default: 30, Min: 5, Max: 300.
+  commandStateDelaySeconds: 30
 
 homeAssistant:
   # (Optional) Automatically discover the device in Home Assistant. Default: true

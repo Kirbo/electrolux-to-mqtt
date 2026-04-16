@@ -43,6 +43,12 @@ const configSchema = z.object({
         .min(5, 'must be at least 5 minutes')
         .max(715, 'should not exceed 715 minutes (API tokens last 720 minutes)')
         .default(60),
+      commandStateDelaySeconds: z
+        .number()
+        .int()
+        .min(5, 'must be at least 5 seconds (API needs time to register the command)')
+        .max(300, 'should not exceed 300 seconds (5 minutes)')
+        .default(30),
     })
     .check((ctx) => {
       const renewMinutes = ctx.value.renewTokenBeforeExpiry
@@ -138,6 +144,7 @@ const envSchema = z.object({
   ELECTROLUX_REFRESH_INTERVAL: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: z.coerce.number().optional(),
   ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
+  ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: z.coerce.number().optional(),
   HOME_ASSISTANT_AUTO_DISCOVERY: z
     .string()
     .optional()
@@ -198,6 +205,7 @@ const configPathToEnvVar: Record<string, string> = {
   'electrolux.refreshInterval': 'ELECTROLUX_REFRESH_INTERVAL',
   'electrolux.applianceDiscoveryInterval': 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL',
   'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
+  'electrolux.commandStateDelaySeconds': 'ELECTROLUX_COMMAND_STATE_DELAY_SECONDS',
   'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
   'homeAssistant.revertStateOnRejection': 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
   'logging.logLevel': 'LOG_LEVEL',
@@ -291,6 +299,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       refreshInterval: envConfig.ELECTROLUX_REFRESH_INTERVAL,
       applianceDiscoveryInterval: envConfig.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL,
       renewTokenBeforeExpiry: envConfig.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY,
+      commandStateDelaySeconds: envConfig.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS,
     }),
     homeAssistant: stripUndefined({
       autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,
