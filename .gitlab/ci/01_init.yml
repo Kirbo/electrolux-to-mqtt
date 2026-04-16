@@ -36,7 +36,7 @@ bump version:
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --prerelease
+        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --prerelease --maintained-version 1-rc
       else
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       fi
