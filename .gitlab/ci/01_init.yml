@@ -36,28 +36,7 @@ bump version:
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --prerelease --dry
-        BASE_VERSION=$(cat .version-unreleased)
-        LAST_N=$(git tag --list "v${BASE_VERSION}-rc.*" | sed 's/.*-rc\.//' | sort -n | tail -1)
-        N=$(( ${LAST_N:-0} + 1 ))
-        RC_VERSION="${BASE_VERSION}-rc.${N}"
-        echo "${RC_VERSION}" > .version-unreleased
-        if [ "${LAST_N:-0}" -gt 0 ]; then
-          # rc.2+: strip entries already released in a previous RC.
-          # Get short SHAs of commits between last stable tag and previous RC tag,
-          # then remove any changelog lines that reference those commits.
-          PREV_RC_TAG="v${BASE_VERSION}-rc.${LAST_N}"
-          STABLE_TAG=$(git tag --list "v[0-9]*.[0-9]*.[0-9]*" | grep -v -- '-' | sort -V | tail -1)
-          OLD_SHAS=$(git log "${STABLE_TAG}..${PREV_RC_TAG}" --no-merges --pretty=format:"%h")
-          if [ -n "${OLD_SHAS}" ]; then
-            SHA_PATTERN=$(printf '%s\n' "${OLD_SHAS}" | tr '\n' '|' | sed 's/|$//')
-            grep -vE "\b(${SHA_PATTERN})\b" UNRELEASED-CHANGELOG.md \
-              | awk '/^### /{h=$0;next} /^\* /{if(h){print h};h="";print;next} /^$/{if(h=="")print;next} {h="";print}' \
-              > /tmp/changelog.tmp
-            mv /tmp/changelog.tmp UNRELEASED-CHANGELOG.md
-          fi
-        fi
-        sed -i "s/## ${BASE_VERSION}/## ${RC_VERSION}/" UNRELEASED-CHANGELOG.md
+        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       else
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       fi
