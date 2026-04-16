@@ -21,6 +21,9 @@ Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This f
     engineer.md                  # TDD implementation work + file checklists (src/, tests/, docker/, telemetry-backend/)
     auditor.md                   # /audit work
     maintainer.md                # /maintain work
+  agent-memory/
+    auditor/                     # Persistent cross-session memory for the auditor agent
+    maintainer/                  # Persistent cross-session memory for the maintainer agent
 ```
 
 ### Skills (slash commands)

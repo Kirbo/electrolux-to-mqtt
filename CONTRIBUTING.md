@@ -46,8 +46,8 @@ Please be respectful and considerate in all interactions. We're here to build gr
 # Use correct Node.js version
 fnm use  # or: nvm use
 
-# Install pnpm if needed
-npm install -g $(node -p "require('./package.json').packageManager")
+# Enable corepack (ships with Node.js 24 — reads packageManager field from package.json)
+corepack enable
 
 # Install dependencies
 pnpm install
@@ -318,9 +318,9 @@ This project supports AI-assisted development with [Claude Code](https://docs.an
 
 ### Before Submitting
 
-1. **Run tests**: `pnpm test`
-2. **Run linter**: `pnpm check`
-3. **Build project**: `pnpm build`
+1. **Run linter**: `pnpm check`
+2. **Typecheck**: `pnpm typecheck`
+3. **Run tests**: `pnpm test`
 4. **Test locally**: `pnpm dev` (verify your changes work)
 
 ### Pull/Merge Request Process
@@ -367,4 +367,4 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ---
 
-Thank you for contributing! 🎉
+Thank you for contributing!
