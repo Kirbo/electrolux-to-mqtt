@@ -1,4 +1,4 @@
-import mqtt, { IClientPublishOptions } from 'mqtt'
+import mqtt, { type IClientPublishOptions } from 'mqtt'
 import config from './config.js'
 import createLogger from './logger.js'
 
