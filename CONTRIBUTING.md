@@ -84,7 +84,6 @@ src/
 ├── electrolux.ts        # Electrolux API client
 ├── health.ts            # Health check file writer
 ├── index.ts             # Main application entry point
-├── init.ts              # Startup logging
 ├── logger.ts            # Logging utilities
 ├── mqtt.ts              # MQTT client wrapper
 ├── orchestrator.ts      # Application lifecycle orchestration
