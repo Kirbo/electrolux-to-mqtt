@@ -354,8 +354,7 @@ export class Comfort600Appliance extends BaseAppliance {
       temperature_state_template: '{{ value_json.targetTemperatureC }}',
       fan_modes: this.getSupportedFanModes(),
       fan_mode_state_topic: stateTopic,
-      fan_mode_state_template:
-        '{{ value_json.fanSpeedSetting if value_json.fanSpeedSetting != "middle" else "medium" }}',
+      fan_mode_state_template: '{{ value_json.fanSpeedSetting }}',
       fan_mode_command_topic: commandTopic,
       fan_mode_command_template: '{ "fanSpeedSetting": "{{ value }}" }',
       swing_modes: this.getSupportedSwingModes(),
