@@ -21,6 +21,7 @@ Run all commands regardless of failures — collect all output. No fixes this ph
 3. `pnpm test` — Vitest full suite
 4. `pnpm sonar` — SonarQube Cloud analysis (bugs, vulnerabilities, security hotspots, cognitive complexity ≤ 15)
 5. If `telemetry-backend/` changed or in scope: `cd telemetry-backend && pnpm typecheck && pnpm test`
+6. If `pnpm-lock.yaml` or `telemetry-backend/pnpm-lock.yaml` changed: `pnpm osv-scan all`
 
 Capture exact output for failures. No paraphrase.
 

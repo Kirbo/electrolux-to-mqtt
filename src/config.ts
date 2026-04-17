@@ -320,13 +320,7 @@ export function createConfigFromEnv(): string | undefined {
   return yaml.stringify(validatedConfig)
 }
 
-// Create config from environment variables if it doesn't exist
-let generatedConfig: string | undefined
-if (!fs.existsSync(configPath)) {
-  generatedConfig = createConfigFromEnv()
-}
-
-const file = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : generatedConfig
+const file = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : createConfigFromEnv()
 
 if (!file) {
   console.error('No config file found and could not generate from environment variables.')

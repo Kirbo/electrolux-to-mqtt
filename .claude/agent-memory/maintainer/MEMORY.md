@@ -1,1 +1,3 @@
 - [follow-redirects vuln GHSA-r4q5-vmmm-2653](vuln_follow_redirects.md) — axios ^1.15.11 has fix; lockfile update resolves
+- [@types/node must stay pinned to ^24](dep_atypes_node_pin.md) — pnpm update --latest drifts to ^25; re-pin after every deps:update run
+- [Local machine on Node 25, use fnm v24 path](node_version_fnm.md) — engine-strict=true; prefix commands with fnm v24.14.1 bin path
