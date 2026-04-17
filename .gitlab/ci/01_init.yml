@@ -39,18 +39,23 @@ bump version:
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        # First run: compute base version (e.g. 1.16.3) and changelog since last stable.
+        echo "[bump-version] branch=next — computing RC version"
+        # First run: compute base version (e.g. 1.17.0) and changelog since last stable.
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
         BASE_VERSION=$(cat .version-unreleased)
         MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+        echo "[bump-version] base_version=${BASE_VERSION} major=${MAJOR}"
         # Find the highest existing RC tag for this base version and increment, or start at rc.1.
-        LATEST_RC=$(git tag -l "v${BASE_VERSION}-rc.*" --sort=-v:refname | head -1)
+        LATEST_RC=$(git tag -l "v${BASE_VERSION}-rc.*" --sort=-v:refname | head -1 || true)
+        echo "[bump-version] latest_rc_tag=${LATEST_RC:-<none>}"
         if [ -z "$LATEST_RC" ]; then
           RC_NUM=1
+          echo "[bump-version] no prior RC tags — starting at rc.1"
           # rc.1: changelog from first run (since last stable) is correct — just fix the header.
         else
           RC_NUM=$(echo "$LATEST_RC" | sed 's/.*-rc\.//')
           RC_NUM=$((RC_NUM + 1))
+          echo "[bump-version] prior RC found — incrementing to rc.${RC_NUM}"
           # rc.2+: second run scopes changelog to commits since the previous RC.
           # --maintained-version finds v${BASE_VERSION}-rc.N as the latest release
           # (it sorts above the last stable because the patch version is higher).
@@ -62,6 +67,13 @@ bump version:
         if ! grep -q "## ${BASE_VERSION}-rc\." UNRELEASED-CHANGELOG.md; then
           sed -i "s/## ${BASE_VERSION}/## ${BASE_VERSION}-rc.${RC_NUM}/g" UNRELEASED-CHANGELOG.md
         fi
+        FINAL_VERSION=$(cat .version-unreleased)
+        echo "[bump-version] final_version=${FINAL_VERSION}"
+        # Safeguard: next branch must never produce a bare production version.
+        case "$FINAL_VERSION" in
+          *-rc.*) ;;
+          *) echo "[bump-version] ERROR: version '${FINAL_VERSION}' has no -rc.N suffix on next branch" ; exit 1 ;;
+        esac
       else
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
       fi
