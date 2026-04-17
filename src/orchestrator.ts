@@ -62,23 +62,16 @@ export class Orchestrator {
    * cached state for all active appliances. Guarded so it runs at most once
    * per Orchestrator instance regardless of how many appliances are initialized.
    *
-   * The first 'connect' event (initial broker connection) is intentionally
-   * skipped — the normal init flow handles the first publish. Only subsequent
-   * 'connect' events (reconnects after a drop) need the catch-up republish.
+   * Fires on every 'connect' event (initial connect + reconnects). Republishing
+   * on initial connect is idempotent and ensures state is always current after
+   * any broker connection, including the first one.
    */
   private _registerReconnectHandler(): void {
     if (this._reconnectRegistered) return
     this._reconnectRegistered = true
 
-    let initialConnectSeen = false
-
     this.mqtt.onReconnect(() => {
-      if (!initialConnectSeen) {
-        initialConnectSeen = true
-        return
-      }
-
-      logger.info('MQTT reconnected — republishing cached state for all appliances')
+      logger.info('MQTT connected — republishing cached state for all appliances')
       for (const [applianceId] of this.applianceInstances) {
         const stateKey = cache.cacheKey(applianceId).state
         const state = cache.get(stateKey)
@@ -106,6 +99,7 @@ export class Orchestrator {
     const timeoutId = setTimeout(() => {
       this.activeTimeouts.delete(timeoutId)
       if (this.isShuttingDown) return
+      if (!this.applianceInstances.has(applianceId)) return
 
       this.client
         .getApplianceState(appliance, applianceDiscoveryCallback)

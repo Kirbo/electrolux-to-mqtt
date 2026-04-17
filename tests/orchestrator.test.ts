@@ -339,6 +339,24 @@ describe('Orchestrator', () => {
       expect(mqtt.unsubscribe).toHaveBeenCalledWith('non-existent/command')
       expect(client.removeAppliance).toHaveBeenCalledWith('non-existent')
     })
+
+    it('should not start polling if appliance was removed while stagger timeout was pending', async () => {
+      // Initialize with a stagger delay so the timeout is pending
+      await orchestrator.initializeAppliance(mockStub, 1000)
+
+      // Remove the appliance before the stagger timeout fires
+      orchestrator.cleanupAppliance('appliance-1')
+
+      // Advance past the stagger delay — timeout fires but appliance is gone
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // No polling should have started
+      expect(client.getApplianceState).not.toHaveBeenCalled()
+
+      // Advance a full refresh interval to confirm no interval was created
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(client.getApplianceState).not.toHaveBeenCalled()
+    })
   })
 
   describe('discoverAppliances', () => {
@@ -673,7 +691,7 @@ describe('Orchestrator', () => {
       expect(mqtt.onReconnect).toHaveBeenCalledTimes(1)
     })
 
-    it('should republish cached state for each appliance on reconnect', async () => {
+    it('should republish cached state for each appliance on every connect event', async () => {
       const { cache } = await import('@/cache.js')
       const cachedState = { mode: 'cool', targetTemperature: 22 }
       vi.mocked(cache.get).mockReturnValue(cachedState)
@@ -684,12 +702,13 @@ describe('Orchestrator', () => {
       const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
       expect(reconnectCb).toBeDefined()
 
-      // Simulate the FIRST connect event (should be skipped)
+      // First connect event (initial connect) should now also republish cached state
       vi.mocked(mqtt.publish).mockClear()
       reconnectCb?.()
-      expect(mqtt.publish).not.toHaveBeenCalled()
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
 
-      // Simulate a SUBSEQUENT reconnect — should republish cached state
+      // Subsequent reconnect should also republish
+      vi.mocked(mqtt.publish).mockClear()
       reconnectCb?.()
       expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
     })
@@ -703,11 +722,9 @@ describe('Orchestrator', () => {
 
       const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
 
-      // Skip first call (initial connect)
-      reconnectCb?.()
       vi.mocked(mqtt.publish).mockClear()
 
-      // Reconnect fires — no cached state means no publish
+      // Connect fires — no cached state means no publish
       reconnectCb?.()
       expect(mqtt.publish).not.toHaveBeenCalled()
     })
@@ -735,11 +752,9 @@ describe('Orchestrator', () => {
 
       const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
 
-      // Skip first call
-      reconnectCb?.()
       vi.mocked(mqtt.publish).mockClear()
 
-      // Reconnect fires — both appliances get republished
+      // Any connect event — both appliances get republished
       reconnectCb?.()
 
       expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState1))
