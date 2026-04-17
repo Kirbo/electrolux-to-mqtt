@@ -55,4 +55,11 @@ generate changelog:
     paths:
       - CHANGELOG.md
   script:
-    - combine-changelogs -include UNRELEASED-CHANGELOG.md
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        # Production release: drop RC entries so the public changelog is clean.
+        combine-changelogs -include UNRELEASED-CHANGELOG.md -ignore-regex '-rc\.'
+      else
+        # next branch: include everything (RC entries are useful for pre-release history).
+        combine-changelogs -include UNRELEASED-CHANGELOG.md
+      fi
