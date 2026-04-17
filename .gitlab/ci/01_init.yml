@@ -40,32 +40,23 @@ bump version:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
         echo "[bump-version] branch=next — computing RC version"
-        # First run: compute base version (e.g. 1.17.0) and changelog since last stable.
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
+        # Step 1: compute base version (e.g. 1.17.0) and full changelog since last stable.
+        semantic-release --version-file --allow-no-changes --dry
         BASE_VERSION=$(cat .version-unreleased)
         MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
         echo "[bump-version] base_version=${BASE_VERSION} major=${MAJOR}"
-        # Find the highest existing RC tag for this base version and increment, or start at rc.1.
-        LATEST_RC=$(git tag -l "v${BASE_VERSION}-rc.*" --sort=-v:refname | head -1 || true)
-        echo "[bump-version] latest_rc_tag=${LATEST_RC:-<none>}"
-        if [ -z "$LATEST_RC" ]; then
-          RC_NUM=1
-          echo "[bump-version] no prior RC tags — starting at rc.1"
-          # rc.1: changelog from first run (since last stable) is correct — just fix the header.
+        # Step 2: try --maintained-version to find the last RC and increment.
+        # Exits 0 with new RC version when releasable commits exist since last RC.
+        # Exits non-zero (65 = no change, other = no prior RC found) — fall back to rc.1.
+        SEMREL_EXIT=0
+        semantic-release --version-file --changelog UNRELEASED-CHANGELOG.md --dry --maintained-version "${MAJOR}-rc" || SEMREL_EXIT=$?
+        echo "[bump-version] maintained-version exit=${SEMREL_EXIT}"
+        if [ "$SEMREL_EXIT" -eq 0 ]; then
+          echo "[bump-version] prior RC found with new commits — using computed RC"
         else
-          RC_NUM=$(echo "$LATEST_RC" | sed 's/.*-rc\.//')
-          RC_NUM=$((RC_NUM + 1))
-          echo "[bump-version] prior RC found — incrementing to rc.${RC_NUM}"
-          # rc.2+: second run scopes changelog to commits since the previous RC.
-          # --maintained-version finds v${BASE_VERSION}-rc.N as the latest release
-          # (it sorts above the last stable because the patch version is higher).
-          semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --maintained-version "${MAJOR}-rc"
-        fi
-        echo "${BASE_VERSION}-rc.${RC_NUM}" > .version-unreleased
-        # For rc.2+, semantic-release (--maintained-version) already writes the correct
-        # "## X.Y.Z-rc.N" header. Only patch it when the bare base version is present.
-        if ! grep -q "## ${BASE_VERSION}-rc\." UNRELEASED-CHANGELOG.md; then
-          sed -i "s/## ${BASE_VERSION}/## ${BASE_VERSION}-rc.${RC_NUM}/g" UNRELEASED-CHANGELOG.md
+          echo "[bump-version] maintained-version failed (exit ${SEMREL_EXIT}) — falling back to rc.1"
+          echo "${BASE_VERSION}-rc.1" > .version-unreleased
+          sed -i "s/## ${BASE_VERSION}/## ${BASE_VERSION}-rc.1/g" UNRELEASED-CHANGELOG.md
         fi
         FINAL_VERSION=$(cat .version-unreleased)
         echo "[bump-version] final_version=${FINAL_VERSION}"
