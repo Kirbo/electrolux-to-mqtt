@@ -22,7 +22,7 @@
     "test:watch": "vitest",
     "sonar": "sh scripts/sonar.sh",
     "osv-scan": "sh scripts/osv-scan.sh",
-    "deps:check": "pnpm outdated ; pnpm osv-scan",
+    "deps:check": "pnpm outdated ; pnpm audit ; pnpm osv-scan",
     "deps:update": "pnpm update --latest && pnpm install"
   },
   "keywords": [
