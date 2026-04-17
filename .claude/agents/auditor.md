@@ -160,6 +160,10 @@ Concise notes: pattern + where to look next time.
 - **One delegation cycle**: per `/audit`, engineer called at most once. Re-verification after delegation — failure → stop + report, not re-delegate.
 - **Evidence-based**: every finding cites file path + line or specific command output. No vague claims.
 - **Documented conventions**: check findings vs CLAUDE.md rules before flagging — documented patterns intentional, not violations.
+- **Version-gated migration cleanup** — `src/migrate.ts:removeLegacyTokensFile()` is a one-time migration for pre-v1.17.0 upgrades. Before suggesting or flagging this code for removal:
+  1. Fetch `https://e2m.devaus.eu/telemetry` and check the `versions` array.
+  2. If any active version is below `1.17.0`: do NOT suggest removal, do NOT flag as dead code.
+  3. Only suggest removal (never remove autonomously) once all reported versions are `>= 1.17.0`.
 - **Cognitive complexity**: flag any function suspected > 15, even if SonarQube missed (e.g., new code not yet analyzed).
 - **Self-verification**: before finalizing, re-scan findings, drop any without concrete evidence.
 - **Escalation**: ambiguous rule or finding conflicts w/ CLAUDE.md → surface in report, no silent judgment.
