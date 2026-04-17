@@ -184,7 +184,7 @@ fi
 econ_parts=()
 [[ -n "$caveman_text" ]] && econ_parts+=("$caveman_text")
 [[ -n "$model" ]]   && econ_parts+=("${MAGENTA}${model}${RESET}")
-# [[ -n "$session" ]] && econ_parts+=("${DIM}[${session}]${RESET}")
+[[ -n "${session_id}" && "${session_id}" != "nosession" ]] && econ_parts+=("${DIM}[${session_id}]${RESET}")
 
 cost_eur=$(awk -v u="$cost_usd" -v r="$EUR_RATE" 'BEGIN{printf "%.3f", u*r}')
 econ_parts+=("${GREEN}💰 €${cost_eur}${RESET}")
@@ -268,7 +268,7 @@ case "$LAYOUT" in
     fi
     ;;
   3lines)
-    printf '%s%s%s\n%s\n' "$line1" " ${DIM}|${RESET} " "$line2" "$line3" 
+    printf '%s%s%s\n%s\n' "$line1" " ${DIM}|${RESET} " "$line2" "$line3"
     [[ -n "$line4" ]] && printf '%s\n' "$line4"
     ;;
   4lines|*)
