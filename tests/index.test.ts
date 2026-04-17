@@ -213,8 +213,11 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
       await indexModule.main()
 
-      // No appliances → error logged; retry scheduled but not yet fired
-      // (isShuttingDown=false so the setTimeout branch is taken)
+      // getAppliances called exactly once during this pass
+      expect(mockClientInstance.getAppliances).toHaveBeenCalledTimes(1)
+      // retry setTimeout is now pending (isShuttingDown=false)
+      expect(vi.getTimerCount()).toBe(1)
+
       vi.useRealTimers()
     })
 
@@ -224,6 +227,9 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       mockClientInstance.getAppliances = vi.fn().mockResolvedValue([])
 
       await indexModule.main()
+
+      expect(mockClientInstance.getAppliances).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(1)
 
       vi.useRealTimers()
     })
@@ -337,8 +343,10 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       vi.useRealTimers()
 
       // .catch() at line 75 should have been invoked — logger.error should have been called
-      // (we can't easily assert on the exact logger spy from within the module,
-      //  but the important thing is this branch executes without an unhandled rejection)
+      const createLoggerMod = await import('@/logger.js')
+      const createLoggerMock = vi.mocked(createLoggerMod.default)
+      const loggerInstance = createLoggerMock.mock.results[0]?.value as { error: ReturnType<typeof vi.fn> }
+      expect(loggerInstance?.error).toHaveBeenCalled()
     })
 
     it('should log error from the retry catch when empty-appliances main() retry throws', async () => {
@@ -354,6 +362,11 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       await vi.runAllTimersAsync()
 
       vi.useRealTimers()
+
+      const createLoggerMod = await import('@/logger.js')
+      const createLoggerMock = vi.mocked(createLoggerMod.default)
+      const loggerInstance = createLoggerMock.mock.results[0]?.value as { error: ReturnType<typeof vi.fn> }
+      expect(loggerInstance?.error).toHaveBeenCalled()
     })
   })
 
