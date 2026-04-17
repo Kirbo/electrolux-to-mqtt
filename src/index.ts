@@ -3,6 +3,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import config from './config.js'
 import { ElectroluxClient } from './electrolux.js'
 import createLogger from './logger.js'
+import { runStartupMigrations } from './migrate.js'
 import Mqtt from './mqtt.js'
 import { Orchestrator } from './orchestrator.js'
 import { startVersionChecker } from './version-checker.js'
@@ -58,6 +59,7 @@ const waitForLogin = async () => {
 }
 
 export const main = async () => {
+  await runStartupMigrations()
   logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
 
   // Initialize the client
