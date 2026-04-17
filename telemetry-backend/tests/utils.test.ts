@@ -63,12 +63,12 @@ describe('validateTelemetryPayload', () => {
     expect(validateTelemetryPayload(validHash, 123)).toMatch(/must be strings/)
   })
 
-  it('rejects userHash shorter than 32 chars', () => {
-    expect(validateTelemetryPayload('a'.repeat(31), validVersion)).toMatch(/length is invalid/)
+  it('rejects userHash shorter than 64 chars', () => {
+    expect(validateTelemetryPayload('a'.repeat(63), validVersion)).toMatch(/length is invalid/)
   })
 
-  it('rejects userHash longer than 128 chars', () => {
-    expect(validateTelemetryPayload('a'.repeat(129), validVersion)).toMatch(/length is invalid/)
+  it('rejects userHash longer than 64 chars', () => {
+    expect(validateTelemetryPayload('a'.repeat(65), validVersion)).toMatch(/length is invalid/)
   })
 
   it('rejects non-hex userHash', () => {
