@@ -3,11 +3,16 @@ services:
     image: redis:7-alpine
     container_name: telemetry-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --appendfsync everysec
     volumes:
       - redis-data:/data
     networks:
       - telemetry-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
 
   telemetry-backend:
     build:
@@ -26,12 +31,21 @@ services:
       # - RATE_LIMIT_IP_MAX=10
       # - RATE_LIMIT_HASH_MAX=1
       # - RATE_LIMIT_SALT=your-secret-salt
+      # - RATE_LIMIT_BREAKER_THRESHOLD=5
+      # - RATE_LIMIT_BREAKER_WINDOW_MS=60000
+      # - RATE_LIMIT_BREAKER_COOLDOWN_MS=30000
+      # - ALLOW_TEST_TELEMETRY=false
     depends_on:
       - redis
     networks:
       - telemetry-network
     volumes:
       - ./badge:/app/badge
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "512M"
 
 networks:
   telemetry-network:

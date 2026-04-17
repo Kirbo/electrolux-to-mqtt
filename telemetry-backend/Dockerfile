@@ -4,7 +4,10 @@
 ARG NODE_VERSION=24
 
 # ── Stage 1: build ──────────────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine AS builder
+# Pinned to a known-good digest for reproducible builds.
+# To update: docker manifest inspect node:${NODE_VERSION}-alpine
+# and replace the digest below with the amd64/linux entry.
+FROM node:${NODE_VERSION}-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749 AS builder
 
 WORKDIR /app
 
@@ -28,7 +31,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
     pnpm run build
 
 # ── Stage 2: production ────────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine
+FROM node:${NODE_VERSION}-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749
 
 WORKDIR /app
 
@@ -64,6 +67,7 @@ EXPOSE 3001
 # Liveness probe — hits the dedicated /health endpoint which has no rate limit
 # and no Redis dependency, so it reflects Express event loop health only.
 # PORT defaults to 3001 if not overridden at runtime.
+# wget is available in node:alpine; no curl fallback needed.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- "http://localhost:${PORT:-3001}/health" || exit 1
 
