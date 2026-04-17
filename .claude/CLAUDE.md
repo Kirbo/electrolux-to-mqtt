@@ -99,6 +99,7 @@ Run after every change. **Verification must pass before commit** — never commi
 2. If `src/`, `tests/`, `package.json`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`, or `biome.jsonc` changed: run `pnpm typecheck`, `pnpm test`, `pnpm sonar` — fix all.
 3. If `telemetry-backend/` changed: run `cd telemetry-backend && pnpm typecheck && pnpm test`.
 4. Skip steps 2–3 for doc/config-only changes (`.md`, `.claude/`, `.gitlab-ci.yml`, `.gitignore`, `LICENSE`).
+5. If `package.json`, `pnpm-lock.yaml`, `telemetry-backend/package.json`, or `telemetry-backend/pnpm-lock.yaml` changed: run `pnpm osv-scan all` locally — CI runs it too but catching CVEs pre-commit avoids roundtrips.
 
 ## Commits
 

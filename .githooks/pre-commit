@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-exit 0
 
 # Pre-commit hook to run format and lint on staged files only
 

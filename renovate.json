@@ -32,6 +32,13 @@
       "description": "Docker base images (incl. dhi.io) — separate MRs so security-relevant changes are reviewed individually.",
       "matchManagers": ["dockerfile", "docker-compose"],
       "groupName": null
+    },
+    {
+      "description": "Node.js engine + @types/node grouped; manual merge to coordinate with Docker base + .nvmrc + package.json engines.",
+      "matchPackageNames": ["node", "@types/node"],
+      "groupName": "node runtime",
+      "automerge": false,
+      "labels": ["dependencies", "node-runtime"]
     }
   ],
   "vulnerabilityAlerts": {

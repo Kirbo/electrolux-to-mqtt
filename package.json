@@ -2,6 +2,7 @@
   "name": "electrolux-to-mqtt",
   "version": "development",
   "description": "TypeScript bridge from the Electrolux appliance API to MQTT, with Home Assistant auto-discovery.",
+  "private": true,
   "main": "dist/index.js",
   "type": "module",
   "scripts": {

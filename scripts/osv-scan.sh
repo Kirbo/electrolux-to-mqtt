@@ -1,5 +1,7 @@
 #!/bin/sh
-set -e
+# POSIX sh lacks `pipefail`; use -eu (unset vars + error exit). Each command
+# below is a single tool invocation with no pipes, so pipefail isn't needed.
+set -eu
 
 HELP="Usage: $0 [root|backend|all]
 
@@ -25,10 +27,13 @@ if command -v osv-scanner >/dev/null 2>&1; then
     backend) osv-scanner scan -L telemetry-backend/pnpm-lock.yaml ;;
     all)     osv-scanner scan -L pnpm-lock.yaml -L telemetry-backend/pnpm-lock.yaml ;;
   esac
-else
+elif command -v docker >/dev/null 2>&1; then
   case "$TARGET" in
     root)    docker run --rm -v "$(pwd):/src" ghcr.io/google/osv-scanner:v2.3.5 scan -L /src/pnpm-lock.yaml ;;
     backend) docker run --rm -v "$(pwd):/src" ghcr.io/google/osv-scanner:v2.3.5 scan -L /src/telemetry-backend/pnpm-lock.yaml ;;
     all)     docker run --rm -v "$(pwd):/src" ghcr.io/google/osv-scanner:v2.3.5 scan -L /src/pnpm-lock.yaml -L /src/telemetry-backend/pnpm-lock.yaml ;;
   esac
+else
+  echo "Error: neither osv-scanner nor docker is installed. Install one: brew install osv-scanner" >&2
+  exit 1
 fi
