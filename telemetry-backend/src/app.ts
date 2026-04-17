@@ -7,8 +7,12 @@ import { getClientIp, hashIp, validateTelemetryPayload } from './utils.js'
 // Minimal Redis surface used by the telemetry backend. Defining it as an
 // interface keeps the app testable with a lightweight in-memory fake.
 export interface RedisLike {
-  incr(key: string): Promise<number>
-  expire(key: string, seconds: number): Promise<number>
+  /**
+   * Atomically increment a counter and set its TTL on first creation.
+   * Semantics: INCR key; if new value === 1 then PEXPIRE key ttlMs.
+   * Returns the new counter value.
+   */
+  incrWithTtl(key: string, ttlMs: number): Promise<number>
   get(key: string): Promise<string | null>
   set(key: string, value: string): Promise<unknown>
   setEx(key: string, seconds: number, value: string): Promise<unknown>
@@ -28,6 +32,20 @@ export interface AppConfig {
    * so that clients cannot bypass the per-IP limit by rotating proxy headers.
    */
   behindProxy: boolean
+  /**
+   * Circuit-breaker threshold: consecutive Redis rate-limit failures before the
+   * breaker opens. Default: 5.
+   */
+  rateLimitBreakerThreshold: number
+  /**
+   * Rolling window for counting consecutive failures (ms). Default: 60 000.
+   */
+  rateLimitBreakerWindowMs: number
+  /**
+   * How long the breaker stays open before transitioning to half-open (ms).
+   * Default: 30 000.
+   */
+  rateLimitBreakerCooldownMs: number
 }
 
 export interface AppDependencies {
@@ -138,9 +156,15 @@ export async function generateBadge({ redis, config }: AppDependencies): Promise
         },
         {} as Record<string, number>,
       )
+      // Cap to top 100 entries: sort by count desc, then by version desc for ties.
       const versionsList = Object.entries(versionCounts)
         .map(([version, count]) => ({ version, count }))
-        .sort((a, b) => compareVersionsDescending(a.version, b.version))
+        .sort((a, b) => {
+          const countDiff = b.count - a.count
+          if (countDiff !== 0) return countDiff
+          return compareVersionsDescending(a.version, b.version)
+        })
+        .slice(0, 100)
       await redis.set(CACHED_TELEMETRY_KEY, JSON.stringify({ total, versions: versionsList }))
     }
 
@@ -160,13 +184,60 @@ export async function generateBadge({ redis, config }: AppDependencies): Promise
   }
 }
 
+// ── Circuit-breaker state (per createApp instance, not global) ───────────────
+type BreakerState = 'closed' | 'open' | 'half-open'
+
+interface BreakerStatus {
+  state: BreakerState
+  failures: number
+}
+
 export function createApp(deps: AppDependencies): Express {
   const { redis, config } = deps
-  const rateLimitWindowSeconds = Math.ceil(config.rateLimitWindowMs / 1000)
   const app = express()
 
+  // ── Circuit-breaker state (scoped to this app instance) ────────────────────
+  let breakerState: BreakerState = 'closed'
+  let breakerFailures = 0
+  let breakerWindowStart = Date.now()
+  let breakerOpenedAt = 0
+
+  function recordBreakerSuccess(): void {
+    breakerState = 'closed'
+    breakerFailures = 0
+    breakerWindowStart = Date.now()
+  }
+
+  function recordBreakerFailure(): void {
+    const now = Date.now()
+    // Reset count if rolling window has elapsed
+    if (now - breakerWindowStart > config.rateLimitBreakerWindowMs) {
+      breakerFailures = 0
+      breakerWindowStart = now
+    }
+    breakerFailures += 1
+    if (breakerFailures >= config.rateLimitBreakerThreshold) {
+      breakerState = 'open'
+      breakerOpenedAt = now
+    }
+  }
+
+  function getBreakerStatus(): BreakerStatus {
+    if (breakerState === 'open') {
+      const now = Date.now()
+      if (now - breakerOpenedAt >= config.rateLimitBreakerCooldownMs) {
+        breakerState = 'half-open'
+      }
+    }
+    return { state: breakerState, failures: breakerFailures }
+  }
+
   // Security headers — applied first so every response, including health endpoints, carries them
-  app.use(helmet())
+  app.use(
+    helmet({
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
+    }),
+  )
 
   // Only trust proxy headers when explicitly configured. When false (default),
   // Express will not populate req.ip from X-Forwarded-For, and getClientIp
@@ -174,6 +245,21 @@ export function createApp(deps: AppDependencies): Express {
   if (config.behindProxy) {
     app.set('trust proxy', 1)
   }
+
+  // Strict Content-Type enforcement for POST requests.
+  // Reject early (415) before body parsing, so that malformed content-type
+  // requests don't reach the rate-limit middleware for POST /telemetry.
+  app.use((req: Request, res: Response, next: () => void) => {
+    if (req.method === 'POST') {
+      const ct = req.get('Content-Type') ?? ''
+      if (!ct.includes('application/json')) {
+        res.status(415).json({ error: 'Content-Type must be application/json' })
+        return
+      }
+    }
+    next()
+  })
+
   app.use(express.json({ limit: '10kb' }))
 
   // Health endpoints — placed before rate-limit middleware so they are never
@@ -192,25 +278,58 @@ export function createApp(deps: AppDependencies): Express {
     }
   })
 
+  // Rate-limit circuit-breaker status — for observability
+  app.get('/health/rate-limit', (_req: Request, res: Response) => {
+    res.json(getBreakerStatus())
+  })
+
   async function enforceRateLimitRedis(key: string, max: number, res: Response): Promise<boolean> {
+    const status = getBreakerStatus()
+
+    // Breaker open: Redis circuit is broken, fail closed (503)
+    if (status.state === 'open') {
+      res.status(503).json({ error: 'Service temporarily unavailable' })
+      return false
+    }
+
     try {
       const redisKey = `ratelimit:${key}`
-      const count = await redis.incr(redisKey)
-
-      if (count === 1) {
-        await redis.expire(redisKey, rateLimitWindowSeconds)
-      }
+      // Atomic increment-with-TTL: INCR then PEXPIRE on first creation.
+      // Ensures TTL is always set even under concurrent requests.
+      const count = await redis.incrWithTtl(redisKey, config.rateLimitWindowMs)
 
       if (count > max) {
-        res.set('Retry-After', String(rateLimitWindowSeconds))
+        res.set('Retry-After', String(Math.ceil(config.rateLimitWindowMs / 1000)))
         res.status(429).json({ error: 'Too many requests' })
         return false
       }
 
+      // Probe succeeded — reset breaker if in half-open
+      if (status.state === 'half-open') {
+        recordBreakerSuccess()
+      }
+
       return true
     } catch (error) {
-      // Fail open — if Redis is unavailable, allow the request
+      // Redis failure — record for circuit breaker
       console.error('Rate limit check failed:', error)
+      recordBreakerFailure()
+
+      const newStatus = getBreakerStatus()
+      if (newStatus.state === 'open' || newStatus.state === 'half-open') {
+        // Breaker just tripped (or probe failed) — fail closed
+        if (newStatus.state === 'open') {
+          res.status(503).json({ error: 'Service temporarily unavailable' })
+          return false
+        }
+        // half-open probe failed: re-open
+        breakerState = 'open'
+        breakerOpenedAt = Date.now()
+        res.status(503).json({ error: 'Service temporarily unavailable' })
+        return false
+      }
+
+      // Not yet at threshold — fail open (allow the request)
       return true
     }
   }
@@ -230,21 +349,23 @@ export function createApp(deps: AppDependencies): Express {
     try {
       const { userHash, version } = req.body as { userHash?: unknown; version?: unknown }
 
-      // Hash rate limit before any validation (use IP-based fallback when userHash is not a string)
-      const hashKey =
-        typeof userHash === 'string' && userHash
-          ? `hash:${userHash}`
-          : `hash:unknown-${hashIp(getClientIp(req, config.behindProxy), config.rateLimitSalt)}`
-      if (!(await enforceRateLimitRedis(hashKey, config.rateLimitHashMax, res))) {
-        return
+      // Hash rate limit before any validation.
+      // When userHash is not a valid string, skip the hash rate-limit
+      // (rely on per-IP rate-limit only) — avoids the hash:unknown-<ip>
+      // duplication where every invalid payload burns the same IP-derived key.
+      if (typeof userHash === 'string' && userHash) {
+        const hashKey = `hash:${userHash}`
+        if (!(await enforceRateLimitRedis(hashKey, config.rateLimitHashMax, res))) {
+          return
+        }
       }
 
       if (typeof userHash !== 'string' || !userHash || typeof version !== 'string' || !version) {
         return res.status(400).json({ error: 'userHash and version are required' })
       }
 
-      // Ignore test data
-      if (userHash.includes('test-hash')) {
+      // Ignore test data — only enabled when ALLOW_TEST_TELEMETRY=true
+      if (process.env.ALLOW_TEST_TELEMETRY === 'true' && userHash.includes('test-hash')) {
         return res.json({ success: true, message: 'Test data ignored' })
       }
 
@@ -257,8 +378,10 @@ export function createApp(deps: AppDependencies): Express {
       const key = `user:${userHash}`
       await redis.setEx(key, USER_TTL_SECONDS, version)
 
-      // Regenerate badge with updated count
-      await generateBadge(deps)
+      // Fire-and-forget badge regeneration — don't block the response path
+      generateBadge(deps).catch((err: unknown) => {
+        console.error('Badge generation failed:', err)
+      })
 
       res.json({ success: true })
     } catch (error) {

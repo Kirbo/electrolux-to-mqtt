@@ -37,14 +37,20 @@ describe('validateTelemetryPayload', () => {
     expect(validateTelemetryPayload(validHash, validVersion)).toBeNull()
   })
 
-  it('accepts mixed-case hex userHash', () => {
-    expect(validateTelemetryPayload('AbCdEf0123456789'.repeat(4), validVersion)).toBeNull()
+  it('rejects mixed-case hex userHash (Node digest("hex") is always lowercase)', () => {
+    expect(validateTelemetryPayload('AbCdEf0123456789'.repeat(4), validVersion)).toMatch(/must be hex/)
   })
 
   it('accepts common semver-ish version forms', () => {
-    for (const v of ['1.0.0', 'v1.2.3', '1.0.0-rc.1', '2.3.4_beta', '0.1']) {
+    for (const v of ['1.0.0', 'v1.2.3', '1.0.0-rc.1', '2.3.4-beta.1', '0.1.0']) {
       expect(validateTelemetryPayload(validHash, v)).toBeNull()
     }
+  })
+
+  it('rejects non-semver version forms', () => {
+    // Underscore separators, dot-only, missing patch segment
+    expect(validateTelemetryPayload(validHash, '2.3.4_beta')).toMatch(/invalid characters/)
+    expect(validateTelemetryPayload(validHash, '0.1')).toMatch(/invalid characters/)
   })
 
   it('rejects non-string userHash', () => {
@@ -66,7 +72,8 @@ describe('validateTelemetryPayload', () => {
   })
 
   it('rejects non-hex userHash', () => {
-    expect(validateTelemetryPayload(`${'a'.repeat(31)}z`, validVersion)).toMatch(/must be hex/)
+    // Exactly 64 chars but with a non-hex character — must hit hex check, not length check
+    expect(validateTelemetryPayload(`${'a'.repeat(63)}z`, validVersion)).toMatch(/must be hex/)
   })
 
   it('rejects empty version', () => {

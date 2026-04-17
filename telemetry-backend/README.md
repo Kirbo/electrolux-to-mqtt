@@ -9,6 +9,8 @@ Simple telemetry backend for collecting anonymous usage statistics.
 - Auto-generated usage badge
 - Redis-backed storage with 24-hour TTL
 - Docker Compose deployment
+- Atomic rate-limiting via Redis Lua scripts
+- Circuit-breaker protection around Redis rate-limit checks
 
 ## API Endpoints
 
@@ -23,6 +25,10 @@ Store telemetry data for a user.
 }
 ```
 
+`Content-Type: application/json` is required. Requests without it receive `415 Unsupported Media Type`.
+
+`userHash` must be exactly 64 lowercase hex characters (SHA-256 hex output). `version` must match `vX.Y.Z` or `X.Y.Z` with an optional pre-release suffix (e.g. `-rc.1`).
+
 **Response:**
 ```json
 {
@@ -31,7 +37,7 @@ Store telemetry data for a user.
 ```
 
 ### GET /telemetry
-Get aggregated telemetry statistics.
+Get aggregated telemetry statistics. Versions are sorted by user count descending, then by version descending for ties. The list is capped at 100 entries.
 
 **Response:**
 ```json
@@ -72,10 +78,11 @@ docker-compose up -d
 
 ## Health endpoints
 
-Both endpoints are exempt from rate limiting and exempt from authentication.
+All health endpoints are exempt from rate limiting and authentication.
 
 - `GET /health` — liveness probe. Returns `200 {"status":"ok"}` when the Express event loop is responsive. Used by the Docker `HEALTHCHECK` directive.
 - `GET /health/redis` — readiness probe for the Redis dependency. Returns `200 {"redis":"ok"}` if Redis responds; `503 {"redis":"down"}` otherwise. Use this in your reverse proxy / load balancer to fail traffic over before users hit a 500.
+- `GET /health/rate-limit` — circuit-breaker state. Returns `{"state":"closed"|"open"|"half-open","failures":N}`. Useful for observability dashboards and alerting on sustained Redis rate-limit check failures.
 
 ## Environment Variables
 
@@ -84,8 +91,32 @@ Both endpoints are exempt from rate limiting and exempt from authentication.
 - `RATE_LIMIT_WINDOW_MS` - Rate limit window in ms (default: 60000)
 - `RATE_LIMIT_IP_MAX` - Max requests per IP per window (default: 10)
 - `RATE_LIMIT_HASH_MAX` - Max requests per userHash per window (default: 1)
-- `RATE_LIMIT_SALT` - Optional secret salt used to hash IPs for rate limiting (defaults to `/etc/machine-id` if available, otherwise hostname)
+- `RATE_LIMIT_SALT` - **Recommended in production.** Secret salt used to hash IPs for rate limiting. Defaults to `/etc/machine-id` if available, otherwise hostname. In production, the server refuses to start if this is unset and `/etc/machine-id` is not readable — set an explicit random secret.
 - `TELEMETRY_BEHIND_PROXY` - Set to `true`/`1`/`yes` ONLY when deployed behind a trusted reverse proxy that overwrites client-supplied IP headers (Caddy, nginx, Traefik with `trustForwardHeader`, etc.). Default `false`. **Security-critical**: when `false`, the per-IP rate limiter uses the raw TCP source address (impossible to spoof). When `true`, it trusts `req.ip` (Express, populated from `X-Forwarded-For`) with `X-Real-IP` as a legacy fallback. Setting `true` without a header-rewriting proxy in front allows attackers to bypass the rate limit by rotating client headers.
+- `RATE_LIMIT_BREAKER_THRESHOLD` - Number of consecutive Redis rate-limit failures before the circuit breaker opens. Default: 5. When open, `/telemetry` returns 503 until the breaker resets.
+- `RATE_LIMIT_BREAKER_WINDOW_MS` - Rolling window (ms) for counting consecutive failures. Default: 60000.
+- `RATE_LIMIT_BREAKER_COOLDOWN_MS` - How long the breaker stays open before transitioning to half-open for a probe request (ms). Default: 30000.
+- `ALLOW_TEST_TELEMETRY` - Set to `true` to enable the `test-hash` filter (accepts payloads containing `test-hash` in `userHash` without storing). Default `false` (disabled in production). Used by integration tests.
+
+## Security considerations
+
+### HSTS
+HTTPS Strict Transport Security is enabled (`max-age=31536000; includeSubDomains`) via Helmet. Ensure TLS is terminated at the reverse proxy before enabling HSTS.
+
+### Atomic rate-limiting
+Rate-limit counters use a Redis Lua script (`INCR` + conditional `PEXPIRE`) evaluated atomically. This eliminates the TOCTOU race in the previous non-atomic `INCR`-then-`EXPIRE` approach where concurrent requests could miss the TTL assignment.
+
+### Circuit breaker
+If Redis becomes unavailable, the rate-limit check fails open (allows requests through) until the failure count reaches `RATE_LIMIT_BREAKER_THRESHOLD` within `RATE_LIMIT_BREAKER_WINDOW_MS`. After that, the breaker opens and `/telemetry` returns `503` to protect downstream systems. After `RATE_LIMIT_BREAKER_COOLDOWN_MS`, the breaker moves to half-open and allows one probe request through to test Redis recovery. Monitor breaker state via `GET /health/rate-limit`.
+
+### Content-Type enforcement
+All `POST` requests must carry `Content-Type: application/json`. Requests without it receive `415 Unsupported Media Type` before body parsing — limiting the attack surface for content sniffing and JSON injection attacks.
+
+### Hash validation
+`userHash` must be exactly 64 hexadecimal characters (the length of a SHA-256 hex digest). Shorter, longer, or non-hex values are rejected with `400`.
+
+### Version validation
+`version` must match semver-ish format: `vX.Y.Z` or `X.Y.Z` with an optional pre-release suffix (`-alpha.1`, `-rc.2`, etc.). Arbitrary free-form strings are rejected.
 
 ## Deployment behind a reverse proxy (recommended)
 
@@ -136,7 +167,7 @@ This service uses `console.*` directly rather than a structured logger like pino
 ## Data Persistence
 
 ### Redis Data
-Redis data is persisted using AOF (Append Only File) mode and stored in a Docker volume, ensuring data survives container restarts.
+Redis data is persisted using AOF (Append Only File) mode with `appendfsync everysec` (flush to disk at most once per second — the recommended durability/performance balance) and stored in a Docker volume, ensuring data survives container restarts.
 
 ### Badge Persistence
 The user count badge (`badge/users.svg`) is persisted outside the Docker container in the `./badge` directory. This allows:
@@ -152,3 +183,22 @@ location /badge {
     add_header Cache-Control "no-cache, no-store, must-revalidate";
 }
 ```
+
+## Integration tests (real Redis)
+
+The unit tests use an in-memory `FakeRedis` that is single-threaded and cannot reproduce Redis atomicity bugs. To run integration tests against a real Redis instance:
+
+```bash
+# Start a Redis instance
+docker run --rm -d -p 6379:6379 redis:7-alpine
+
+# Run integration tests
+REAL_REDIS_TEST=true pnpm test tests/integration/rate-limit.test.ts
+```
+
+The integration tests verify:
+- The Lua `INCR + PEXPIRE` script sets TTL on first increment
+- TTL is not reset on subsequent increments
+- Concurrent increments produce a contiguous sequence with TTL always set
+
+Integration tests are skipped automatically when `REAL_REDIS_TEST` is not set, so normal `pnpm test` runs are unaffected.

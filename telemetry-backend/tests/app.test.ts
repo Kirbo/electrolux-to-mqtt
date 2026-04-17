@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type AppConfig, createApp, generateBadge, getUserKeys } from '../src/app.js'
+import { type AppConfig, createApp, generateBadge, getUserKeys, type RedisLike } from '../src/app.js'
 import { readMachineId } from '../src/utils.js'
 import { FakeRedis } from './fake-redis.js'
 
@@ -24,6 +24,9 @@ function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     // Production default in index.ts is false (no proxy assumed).
     behindProxy: true,
     badgeDir: path.join(os.tmpdir(), `telemetry-test-${Math.random().toString(36).slice(2)}`),
+    rateLimitBreakerThreshold: 5,
+    rateLimitBreakerWindowMs: 60_000,
+    rateLimitBreakerCooldownMs: 30_000,
     ...overrides,
   }
 }
@@ -93,7 +96,7 @@ describe('generateBadge', () => {
     expect(await readJson(redis, 'cached:telemetry')).toEqual({ total: 0, versions: [] })
   })
 
-  it('aggregates user versions and sorts them descending', async () => {
+  it('aggregates user versions and sorts them by count desc, then version desc for ties', async () => {
     const redis = new FakeRedis()
     await redis.set(`user:${HASH_A}`, '1.0.0')
     await redis.set(`user:${HASH_B}`, '2.3.1')
@@ -102,11 +105,12 @@ describe('generateBadge', () => {
 
     await generateBadge({ redis, config })
 
+    // Count desc: 1.0.0 (count 2) before 2.3.1 (count 1)
     expect(await readJson(redis, 'cached:telemetry')).toEqual({
       total: 3,
       versions: [
-        { version: '2.3.1', count: 1 },
         { version: '1.0.0', count: 2 },
+        { version: '2.3.1', count: 1 },
       ],
     })
   })
@@ -224,17 +228,20 @@ describe('POST /telemetry', () => {
     })
   })
 
-  it('returns 400 when userHash is missing (after consuming hash quota)', async () => {
+  it('returns 400 when userHash is missing', async () => {
     const app = createApp({ redis, config })
 
     const res = await request(app).post('/telemetry').set('X-Real-IP', '203.0.113.2').send({ version: '1.2.3' })
 
     expect(res.status).toBe(400)
     expect(res.body.error).toMatch(/required/)
-    // Rate limit key for missing hash should have been created (rate limit
-    // runs before validation so malformed requests still consume quota)
-    const hashKey = [...redis.store.keys()].find((k) => k.startsWith('ratelimit:hash:unknown-'))
-    expect(hashKey).toBeDefined()
+    // When userHash is absent, the per-hash rate-limit is skipped entirely.
+    // Only the per-IP rate-limit key should exist (no hash:unknown- duplication).
+    const hashKey = [...redis.store.keys()].find((k) => k.startsWith('ratelimit:hash:'))
+    expect(hashKey).toBeUndefined()
+    // But the IP rate-limit key must have been created
+    const ipKey = [...redis.store.keys()].find((k) => k.startsWith('ratelimit:ip:'))
+    expect(ipKey).toBeDefined()
   })
 
   it('returns 400 when version is missing', async () => {
@@ -282,18 +289,42 @@ describe('POST /telemetry', () => {
     expect(res.body.error).toMatch(/invalid characters/)
   })
 
-  it('ignores payloads whose userHash contains "test-hash" without storing', async () => {
+  it('ignores test-hash payloads when ALLOW_TEST_TELEMETRY=true', async () => {
+    process.env.ALLOW_TEST_TELEMETRY = 'true'
     const app = createApp({ redis, config })
 
+    // Use a 64-char string that contains 'test-hash' — validated before hash rule
+    // when ALLOW_TEST_TELEMETRY=true (filter runs before validation).
+    // "test-hash-" = 10 chars; 54 more = 64 total, contains non-hex 't','s','h' chars.
+    const testUserHash = `test-hash-${'a'.repeat(54)}` // 64 chars with 'test-hash' prefix
     const res = await request(app)
       .post('/telemetry')
       .set('X-Real-IP', '203.0.113.7')
-      .send({ userHash: 'test-hash-abc', version: '1.2.3' })
+      .send({ userHash: testUserHash, version: '1.2.3' })
 
+    // ALLOW_TEST_TELEMETRY=true: the test-hash filter runs and returns success+ignored
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ success: true, message: 'Test data ignored' })
     // Ensure no user:* key was written
     expect(await getUserKeys(redis)).toEqual([])
+
+    delete process.env.ALLOW_TEST_TELEMETRY
+  })
+
+  it('does not apply test-hash filter when ALLOW_TEST_TELEMETRY is unset (production default)', async () => {
+    delete process.env.ALLOW_TEST_TELEMETRY
+    const app = createApp({ redis, config })
+
+    // "test-hash-" = 10 chars + 54 = 64 total; non-hex chars ensure validation rejects it
+    const testUserHash = `test-hash-${'a'.repeat(54)}`
+    const res = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.7')
+      .send({ userHash: testUserHash, version: '1.2.3' })
+
+    // Without the flag, falls through to validation — hash contains non-hex 't','s','h' etc.
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/hex/)
   })
 
   it('rejects a second POST for the same userHash within the window (hash rate limit)', async () => {
@@ -450,8 +481,7 @@ describe('GET /telemetry', () => {
         throw new Error('redis down')
       },
       scanIterator: redis.scanIterator.bind(redis),
-      incr: redis.incr.bind(redis),
-      expire: redis.expire.bind(redis),
+      incrWithTtl: redis.incrWithTtl.bind(redis),
       set: redis.set.bind(redis),
       setEx: redis.setEx.bind(redis),
     }
@@ -551,8 +581,7 @@ describe('GET /health/redis', () => {
         throw new Error('connection refused')
       },
       scanIterator: brokenRedis.scanIterator.bind(brokenRedis),
-      incr: brokenRedis.incr.bind(brokenRedis),
-      expire: brokenRedis.expire.bind(brokenRedis),
+      incrWithTtl: brokenRedis.incrWithTtl.bind(brokenRedis),
       set: brokenRedis.set.bind(brokenRedis),
       setEx: brokenRedis.setEx.bind(brokenRedis),
     }
@@ -591,5 +620,274 @@ describe('security headers (helmet)', () => {
     const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
     const res = await request(app).get('/health')
     expect(res.headers['x-content-type-options']).toBe('nosniff')
+  })
+
+  it('sets Strict-Transport-Security (HSTS) header on responses', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/health')
+    const sts = res.headers['strict-transport-security']
+    expect(sts).toBeDefined()
+    expect(sts).toContain('max-age=31536000')
+    expect(sts).toContain('includeSubDomains')
+    // preload must NOT be set (configured as false)
+    expect(sts).not.toContain('preload')
+  })
+})
+
+// ── Strict Content-Type enforcement ─────────────────────────────────────────
+describe('POST /telemetry Content-Type enforcement', () => {
+  it('returns 415 when Content-Type is text/plain', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app)
+      .post('/telemetry')
+      .set('Content-Type', 'text/plain')
+      .set('X-Real-IP', '203.0.113.1')
+      .send('not json')
+    expect(res.status).toBe(415)
+    expect(res.body.error).toMatch(/application\/json/)
+  })
+
+  it('returns 415 when Content-Type is missing on POST', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).post('/telemetry').set('X-Real-IP', '203.0.113.1').send()
+    expect(res.status).toBe(415)
+  })
+
+  it('does not reject GET /telemetry (no Content-Type required)', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/telemetry')
+    expect(res.status).toBe(200)
+  })
+})
+
+// ── P0-2: Atomic incrWithTtl — TTL always set ────────────────────────────────
+describe('incrWithTtl atomic semantics (FakeRedis)', () => {
+  it('sets TTL on first increment', async () => {
+    const redis = new FakeRedis()
+    await redis.incrWithTtl('ratelimit:test', 60_000)
+    expect(redis.ttls.get('ratelimit:test')).toBe(60_000)
+  })
+
+  it('does not overwrite TTL on subsequent increments', async () => {
+    const redis = new FakeRedis()
+    await redis.incrWithTtl('ratelimit:test', 60_000)
+    // Manually change TTL to simulate partial expiry
+    redis.ttls.set('ratelimit:test', 30_000)
+    await redis.incrWithTtl('ratelimit:test', 60_000)
+    // TTL must not be reset to 60_000 on the second call
+    expect(redis.ttls.get('ratelimit:test')).toBe(30_000)
+  })
+
+  it('increments counter correctly across multiple calls', async () => {
+    const redis = new FakeRedis()
+    const r1 = await redis.incrWithTtl('ratelimit:test', 60_000)
+    const r2 = await redis.incrWithTtl('ratelimit:test', 60_000)
+    const r3 = await redis.incrWithTtl('ratelimit:test', 60_000)
+    expect(r1).toBe(1)
+    expect(r2).toBe(2)
+    expect(r3).toBe(3)
+  })
+})
+
+// ── P0-3: Circuit breaker ─────────────────────────────────────────────────────
+describe('rate-limit circuit breaker', () => {
+  function buildFailing(threshold = 5): {
+    redis: FakeRedis
+    failingRedis: RedisLike
+    app: ReturnType<typeof createApp>
+    config: AppConfig
+  } {
+    const redis = new FakeRedis()
+    const failingRedis: RedisLike = {
+      ...redis,
+      incrWithTtl: async () => {
+        throw new Error('redis down')
+      },
+      get: redis.get.bind(redis),
+      set: redis.set.bind(redis),
+      setEx: redis.setEx.bind(redis),
+      scanIterator: redis.scanIterator.bind(redis),
+    }
+    const config = buildConfig({
+      rateLimitBreakerThreshold: threshold,
+      rateLimitBreakerWindowMs: 60_000,
+      rateLimitBreakerCooldownMs: 30_000,
+    })
+    const app = createApp({ redis: failingRedis, config })
+    return { redis, failingRedis, app, config }
+  }
+
+  it('returns 503 once the breaker opens after threshold failures', async () => {
+    const { app } = buildFailing(3)
+
+    // First 3 failures: Redis down but below threshold — each request still fails open (no 503 from breaker)
+    for (let i = 0; i < 3; i++) {
+      await request(app)
+        .post('/telemetry')
+        .set('Content-Type', 'application/json')
+        .set('X-Real-IP', `203.0.113.${i + 1}`)
+        .send({ userHash: HASH_A, version: '1.2.3' })
+      // Requests before breaker trips fail open (allow through, then fail at hash rate-limit or proceed)
+      // We only care that after threshold, next request is 503
+    }
+
+    // After threshold: breaker is open, next request gets 503
+    const blocked = await request(app)
+      .post('/telemetry')
+      .set('Content-Type', 'application/json')
+      .set('X-Real-IP', '203.0.113.99')
+      .send({ userHash: HASH_A, version: '1.2.3' })
+    expect(blocked.status).toBe(503)
+  })
+
+  it('GET /health/rate-limit returns closed state initially', async () => {
+    const app = createApp({ redis: new FakeRedis(), config: buildConfig() })
+    const res = await request(app).get('/health/rate-limit')
+    expect(res.status).toBe(200)
+    expect(res.body.state).toBe('closed')
+    expect(typeof res.body.failures).toBe('number')
+  })
+
+  it('GET /health/rate-limit reflects open state after threshold failures', async () => {
+    const { app } = buildFailing(2)
+
+    // Trigger failures to open the breaker
+    for (let i = 0; i < 2; i++) {
+      await request(app)
+        .post('/telemetry')
+        .set('Content-Type', 'application/json')
+        .set('X-Real-IP', `203.0.113.${i + 1}`)
+        .send({ userHash: HASH_A, version: '1.2.3' })
+    }
+
+    const res = await request(app).get('/health/rate-limit')
+    expect(res.status).toBe(200)
+    expect(res.body.state).toBe('open')
+    expect(res.body.failures).toBeGreaterThanOrEqual(2)
+  })
+
+  it('breaker transitions to half-open after cooldown and resets on probe success', async () => {
+    vi.useFakeTimers()
+    const redis = new FakeRedis()
+    let shouldFail = true
+    const conditionalRedis: RedisLike = {
+      ...redis,
+      incrWithTtl: async (key, ttl) => {
+        if (shouldFail) throw new Error('redis down')
+        return redis.incrWithTtl(key, ttl)
+      },
+      get: redis.get.bind(redis),
+      set: redis.set.bind(redis),
+      setEx: redis.setEx.bind(redis),
+      scanIterator: redis.scanIterator.bind(redis),
+    }
+    const config = buildConfig({
+      rateLimitBreakerThreshold: 2,
+      rateLimitBreakerWindowMs: 60_000,
+      rateLimitBreakerCooldownMs: 30_000,
+    })
+    const app = createApp({ redis: conditionalRedis, config })
+
+    // Trip the breaker
+    for (let i = 0; i < 2; i++) {
+      await request(app)
+        .post('/telemetry')
+        .set('Content-Type', 'application/json')
+        .set('X-Real-IP', `203.0.113.${i + 1}`)
+        .send({ userHash: HASH_A, version: '1.2.3' })
+    }
+
+    // Advance time past the cooldown
+    vi.advanceTimersByTime(31_000)
+
+    // Redis recovers
+    shouldFail = false
+
+    // Next request: breaker is in half-open; probe succeeds → closed
+    const recovered = await request(app)
+      .post('/telemetry')
+      .set('Content-Type', 'application/json')
+      .set('X-Real-IP', '203.0.113.100')
+      .send({ userHash: HASH_A, version: '1.0.0' })
+    // Should not be 503 (breaker closed after successful probe)
+    expect(recovered.status).not.toBe(503)
+
+    const status = await request(app).get('/health/rate-limit')
+    expect(status.body.state).toBe('closed')
+
+    vi.useRealTimers()
+  })
+
+  it('breaker re-opens when half-open probe fails', async () => {
+    vi.useFakeTimers()
+    const redis = new FakeRedis()
+    const failingRedis: RedisLike = {
+      ...redis,
+      incrWithTtl: async () => {
+        throw new Error('redis still down')
+      },
+      get: redis.get.bind(redis),
+      set: redis.set.bind(redis),
+      setEx: redis.setEx.bind(redis),
+      scanIterator: redis.scanIterator.bind(redis),
+    }
+    const config = buildConfig({
+      rateLimitBreakerThreshold: 2,
+      rateLimitBreakerWindowMs: 60_000,
+      rateLimitBreakerCooldownMs: 30_000,
+    })
+    const app = createApp({ redis: failingRedis, config })
+
+    // Trip the breaker
+    for (let i = 0; i < 2; i++) {
+      await request(app)
+        .post('/telemetry')
+        .set('Content-Type', 'application/json')
+        .set('X-Real-IP', `203.0.113.${i + 1}`)
+        .send({ userHash: HASH_A, version: '1.2.3' })
+    }
+
+    // Advance time past cooldown to trigger half-open
+    vi.advanceTimersByTime(31_000)
+
+    // Half-open probe fails — should return 503 and re-open
+    const probe = await request(app)
+      .post('/telemetry')
+      .set('Content-Type', 'application/json')
+      .set('X-Real-IP', '203.0.113.200')
+      .send({ userHash: HASH_A, version: '1.2.3' })
+    expect(probe.status).toBe(503)
+
+    // Breaker must be open again
+    const status = await request(app).get('/health/rate-limit')
+    expect(status.body.state).toBe('open')
+
+    vi.useRealTimers()
+  })
+})
+
+// ── P1-4: versionsList capped at 100 entries ─────────────────────────────────
+describe('generateBadge versions cap', () => {
+  it('caps the versions list to 100 entries', async () => {
+    const redis = new FakeRedis()
+    const badgeDir = path.join(os.tmpdir(), `telemetry-cap-${Math.random().toString(36).slice(2)}`)
+    const config = buildConfig({ badgeDir })
+
+    // Insert 110 distinct versions, each with 1 user
+    for (let i = 0; i < 110; i++) {
+      const hash = String(i).padStart(64, '0')
+      await redis.set(`user:${hash}`, `1.${i}.0`)
+    }
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as {
+      total: number
+      versions: Array<{ version: string; count: number }>
+    }
+    expect(cached.total).toBe(110)
+    expect(cached.versions).toHaveLength(100)
+
+    await fsp.rm(badgeDir, { recursive: true, force: true })
   })
 })

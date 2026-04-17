@@ -45,20 +45,25 @@ export function validateTelemetryPayload(userHash: unknown, version: unknown): s
     return 'userHash and version must be strings'
   }
 
-  if (userHash.length < 32 || userHash.length > 128) {
-    return 'userHash length is invalid'
+  // Exactly 64 lowercase hex characters — matches SHA-256 hex output from the
+  // client-side hash in the root project (src/index.ts, Node's digest('hex')).
+  if (!/^[a-f0-9]{64}$/.test(userHash)) {
+    if (userHash.length !== 64) {
+      return 'userHash length is invalid'
+    }
+    return 'userHash must be hex'
   }
 
-  if (!/^[a-f0-9]+$/i.test(userHash)) {
-    return 'userHash must be hex'
+  // Semver-ish: vX.Y.Z or X.Y.Z with optional pre-release suffix (-alpha.1, etc.)
+  if (!/^v?\d+\.\d+\.\d+(-[a-z0-9.-]+)?$/i.test(version)) {
+    if (version.length < 1 || version.length > 32) {
+      return 'version length is invalid'
+    }
+    return 'version contains invalid characters'
   }
 
   if (version.length < 1 || version.length > 32) {
     return 'version length is invalid'
-  }
-
-  if (!/^[a-z0-9._-]+$/i.test(version)) {
-    return 'version contains invalid characters'
   }
 
   return null

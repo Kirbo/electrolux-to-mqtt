@@ -1,3 +1,15 @@
+// FakeRedis — lightweight in-memory implementation of RedisLike for unit tests.
+//
+// IMPORTANT: FakeRedis runs in Node.js's single-threaded event loop.
+// It cannot catch concurrency bugs that real Redis exhibits (atomicity,
+// pipelining race conditions, WATCH/MULTI/EXEC CAS failures). The incrWithTtl
+// implementation below correctly simulates the atomic "INCR; if count===1 then
+// PEXPIRE" semantic for sequential test scenarios, but concurrent callers in a
+// real Redis deployment may still expose races if the Lua script is wrong.
+//
+// TODO: See tests/integration/rate-limit.test.ts for integration tests that
+// exercise incrWithTtl under real Redis to verify true atomicity.
+
 import type { RedisLike } from '../src/app.js'
 
 // Lightweight in-memory Redis fake that implements only the surface used by
@@ -16,16 +28,19 @@ export class FakeRedis implements RedisLike {
     this.scanBatchSize = options.scanBatchSize ?? 1000
   }
 
-  async incr(key: string): Promise<number> {
+  /**
+   * Atomic increment with TTL set on first creation.
+   * Simulates Lua: INCR key; if count == 1 then PEXPIRE key ttlMs
+   *
+   * Single-threaded simulation only — see file-level comment.
+   */
+  async incrWithTtl(key: string, ttlMs: number): Promise<number> {
     const next = Number(this.store.get(key) ?? '0') + 1
     this.store.set(key, String(next))
+    if (next === 1) {
+      this.ttls.set(key, ttlMs)
+    }
     return next
-  }
-
-  async expire(key: string, seconds: number): Promise<0 | 1> {
-    if (!this.store.has(key)) return 0
-    this.ttls.set(key, seconds)
-    return 1
   }
 
   async get(key: string): Promise<string | null> {
