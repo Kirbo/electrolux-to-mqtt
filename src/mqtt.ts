@@ -4,19 +4,11 @@ import createLogger from './logger.js'
 
 type QoS = 0 | 1 | 2
 
-const VALID_QOS = new Set<number>([0, 1, 2])
-
-function validateQoS(value: number): QoS {
-  if (!VALID_QOS.has(value)) {
-    throw new Error(`Invalid QoS value: ${value}. Must be 0, 1, or 2.`)
-  }
-  return value as QoS
-}
-
 const logger = createLogger('mqtt')
 
 const retain = config.mqtt.retain ?? false
-const qos = validateQoS(config.mqtt.qos ?? 2)
+// configSchema enforces int().min(0).max(2) — cast is safe after schema validation.
+const qos = (config.mqtt.qos ?? 2) as QoS
 
 const defaultOptions: IClientPublishOptions = {
   retain,
@@ -134,13 +126,13 @@ class Mqtt implements IMqtt {
 
   public autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {
     logger.info(`Publishing auto-discovery config for appliance: ${applianceId}`)
-    const config = JSON.parse(message)
+    const parsed = JSON.parse(message)
     logger.debug(`Auto-discovery config topics:`, {
-      availability_topic: config.availability_topic,
-      mode_state_topic: config.mode_state_topic,
-      mode_command_topic: config.mode_command_topic,
-      temperature_state_topic: config.current_temperature_topic,
-      temperature_command_topic: config.temperature_command_topic,
+      availability_topic: parsed.availability_topic,
+      mode_state_topic: parsed.mode_state_topic,
+      mode_command_topic: parsed.mode_command_topic,
+      temperature_state_topic: parsed.current_temperature_topic,
+      temperature_command_topic: parsed.temperature_command_topic,
     })
     this._publish(`homeassistant/climate/${applianceId}/config`, message, {
       ...options,
