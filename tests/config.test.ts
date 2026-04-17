@@ -80,21 +80,15 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      expect(writeSpy).toHaveBeenCalled()
-      expect(infoSpy).toHaveBeenCalledWith('Config file not found. Creating from environment variables...')
-      expect(infoSpy).toHaveBeenCalledWith('Config file created successfully.')
-
-      const [, content] = writeSpy.mock.calls[0]
+      expect(infoSpy).toHaveBeenCalledWith('Config file not found. Loading config from environment variables.')
       expect(content).toContain('mqtt:')
       expect(content).toContain('url: mqtt://test-broker')
       expect(content).toContain('username: test-user')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -112,7 +106,7 @@ homeAssistant:
       createConfigFromEnv()
 
       expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(infoSpy).toHaveBeenCalledWith('Config file not found. Creating from environment variables...')
+      expect(infoSpy).toHaveBeenCalledWith('Config file not found. Loading config from environment variables.')
 
       errorSpy.mockRestore()
       infoSpy.mockRestore()
@@ -131,19 +125,15 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      expect(writeSpy).toHaveBeenCalled()
-      const [, content] = writeSpy.mock.calls[0]
       expect(content).toContain('clientId: electrolux-comfort600')
       expect(content).toContain('topicPrefix: electrolux_')
       expect(content).toContain('qos: 2')
       expect(content).toContain('retain: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -349,15 +339,12 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0]
       expect(content).toContain('retain: true')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -374,17 +361,14 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0]
       expect(content).toContain('- key1')
       expect(content).toContain('- key2')
       expect(content).toContain('- key3')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -401,19 +385,16 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0]
       expect(content).toContain('ignoredKeys:')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
-    it('should return config content and warn when writeFileSync fails (read-only filesystem)', async () => {
+    it('returns config content from env vars without writing to disk', async () => {
       process.env.MQTT_URL = 'mqtt://test-broker'
       process.env.MQTT_USERNAME = 'test-user'
       process.env.MQTT_PASSWORD = 'test-pass'
@@ -425,23 +406,14 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
-        throw new Error('EACCES: permission denied')
-      })
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
       const result = createConfigFromEnv()
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Could not write config file to disk (read-only filesystem). Using in-memory config.',
-      )
       expect(result).toBeDefined()
       expect(result).toContain('mqtt:')
       expect(result).toContain('url: mqtt://test-broker')
 
-      writeSpy.mockRestore()
-      warnSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -478,17 +450,14 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0]
       expect(content).toContain('clientId: my-client')
       expect(content).toContain('topicPrefix: my_prefix_')
       expect(content).toContain('qos: 1')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -506,7 +475,6 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
       const result = createConfigFromEnv()
@@ -514,7 +482,6 @@ homeAssistant:
       expect(result).toContain('checkInterval: 7200')
       expect(result).toContain('ntfyWebhookUrl: https://ntfy.sh/test-topic')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -556,14 +523,12 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
       const result = createConfigFromEnv()
 
       expect(result).toContain('updateChannel: beta')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -607,14 +572,12 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
       const result = createConfigFromEnv()
 
       expect(result).toContain('logLevel: debug')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -631,14 +594,12 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
       const result = createConfigFromEnv()
 
       expect(result).toContain('logLevel: info')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -680,14 +641,12 @@ homeAssistant:
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
       const result = createConfigFromEnv()
 
       expect(result).toContain('showTimestamp: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -702,16 +661,13 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('enabled: true')
       expect(content).toContain('filePath: /tmp/e2m-health')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -727,15 +683,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('enabled: true')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -751,15 +704,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('filePath: /custom/health')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -775,15 +725,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('unHealthyRestartMinutes: 30')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -798,15 +745,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('revertStateOnRejection: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -822,15 +766,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('revertStateOnRejection: true')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -846,15 +787,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('autoDiscovery: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -870,15 +808,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('showChanges: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -894,15 +829,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('showVersionNumber: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -918,15 +850,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('skipCacheLogging: true')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -941,15 +870,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('telemetryEnabled: true')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
     })
 
@@ -965,15 +891,12 @@ homeAssistant:
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
-      createConfigFromEnv()
+      const content = createConfigFromEnv()
 
-      const [, content] = writeSpy.mock.calls[0] as [string, string]
       expect(content).toContain('telemetryEnabled: false')
 
-      writeSpy.mockRestore()
       infoSpy.mockRestore()
 
       delete process.env.E2M_TELEMETRY_ENABLED

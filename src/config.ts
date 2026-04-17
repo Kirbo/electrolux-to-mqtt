@@ -301,7 +301,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
 }
 
 export function createConfigFromEnv(): string | undefined {
-  console.info('Config file not found. Creating from environment variables...')
+  console.info('Config file not found. Loading config from environment variables.')
 
   let envConfig: z.infer<typeof envSchema>
   try {
@@ -317,16 +317,7 @@ export function createConfigFromEnv(): string | undefined {
     return handleValidationError(error, true)
   }
 
-  const configContent = yaml.stringify(validatedConfig)
-
-  try {
-    fs.writeFileSync(configPath, configContent, 'utf8')
-    console.info('Config file created successfully.')
-  } catch {
-    console.warn('Could not write config file to disk (read-only filesystem). Using in-memory config.')
-  }
-
-  return configContent
+  return yaml.stringify(validatedConfig)
 }
 
 // Create config from environment variables if it doesn't exist
