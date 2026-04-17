@@ -84,20 +84,18 @@ describe('createShutdownHandler', () => {
   })
 
   it('calls exit(1) when server.close times out', async () => {
-    // Server whose close callback never fires — simulates hanging keep-alive connections
     const neverCloseServer = {
-      close: (_cb?: (err?: Error) => void) => {
-        // Never call the callback
-      },
+      close: (_cb?: (err?: Error) => void) => {},
     } as unknown as http.Server
 
     const quitMock = vi.fn().mockResolvedValue(undefined)
     const exitMock = vi.fn()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const shutdown = createShutdownHandler(neverCloseServer, { quit: quitMock }, { timeoutMs: 10, exit: exitMock })
     await shutdown()
 
-    // Timed out — exit(1), not exit(0)
+    errorSpy.mockRestore()
     expect(exitMock).toHaveBeenCalledWith(1)
   })
 
@@ -108,10 +106,12 @@ describe('createShutdownHandler', () => {
 
     const quitMock = vi.fn().mockRejectedValue(new Error('redis quit failed'))
     const exitMock = vi.fn()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const shutdown = createShutdownHandler(mockServer, { quit: quitMock }, { exit: exitMock })
     await shutdown()
 
+    errorSpy.mockRestore()
     expect(exitMock).toHaveBeenCalledWith(1)
   })
 
