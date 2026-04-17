@@ -20,7 +20,7 @@ const configSchema = z.object({
       apiKey: z.string(),
       username: z.string(),
       password: z.string(),
-      countryCode: z.string(),
+      countryCode: z.string().regex(/^[A-Z]{2}$/i, 'must be a two-letter country code (e.g. FI, SE)'),
       accessToken: z.string().optional(),
       refreshToken: z.string().optional(),
       eat: z.date().optional(),

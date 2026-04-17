@@ -1263,6 +1263,60 @@ homeAssistant:
       delete process.env.CONFIG_FILE_OVERRIDE
     })
 
+    it('should reject a countryCode that is not exactly two letters', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FIN
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.countryCode'))).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
+    it('should accept a valid two-letter countryCode', async () => {
+      const validConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: SE
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, validConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const config = await import('../src/config.js')
+
+      expect(errorSpy).not.toHaveBeenCalledWith('Configuration validation failed:')
+      expect(config.default.electrolux.countryCode).toBe('SE')
+
+      errorSpy.mockRestore()
+    })
+
     it('should validate config file and catch invalid QoS', async () => {
       const invalidConfig = `mqtt:
   url: mqtt://localhost
