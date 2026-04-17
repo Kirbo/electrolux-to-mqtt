@@ -4,6 +4,20 @@
     "command": "bash .claude/statusline.sh"
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "PATH=\"/Users/kimmo.saari/.local/share/fnm/node-versions/v24.14.1/installation/bin:$PATH\" pnpm check",
+            "timeout": 60,
+            "statusMessage": "Running pnpm check before commit..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

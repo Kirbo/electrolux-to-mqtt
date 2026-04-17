@@ -2,6 +2,9 @@
 name: audit-fix
 description: Full audit-fix-commit pipeline — audit → save report → fix approved findings → verify → commit batches
 disable-model-invocation: true
+agent: auditor
+model: claude-opus-4-7
+effort: xhigh
 ---
 
 Orchestrator for full audit-fix-commit pipeline. Execute steps in order. No skipping. No commit without explicit user approval.
