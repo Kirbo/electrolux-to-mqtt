@@ -12,7 +12,8 @@ Conventions:
 
 ## Unreleased
 
-No breaking changes pending.
+### Removed
+- **Token persistence** — OAuth tokens are now memory-only; the service re-authenticates on every startup. Action: delete any existing `tokens.json` from disk (it will be ignored); ensure the Electrolux API is reachable on container start. Any `accessToken`, `refreshToken`, `eat`, or `iat` entries under `electrolux:` in your `config.yml` are silently ignored — remove them.
 
 <!--
 When adding a breaking change to this file, follow this template:
