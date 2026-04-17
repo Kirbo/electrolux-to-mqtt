@@ -82,7 +82,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `ELECTROLUX_COMMAND_STATE_DELAY_SECONDS`   | Seconds to wait after a command before re-polling state (5–300) | `30`          | No       |
 | `HOME_ASSISTANT_AUTO_DISCOVERY`            | Enable HA MQTT auto-discovery                          | `true`                 | No       |
 | `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION` | Immediately revert HA state on rejected commands       | `false`                | No       |
-| `LOG_LEVEL`                                | Log level (fatal/error/warn/info/debug/trace/silent)   | `info`                 | No       |
+| `LOG_LEVEL`                                | Log level (silent/fatal/error/warn/info/debug/trace)   | `info`                 | No       |
 | `LOGGING_SHOW_CHANGES`                     | Log state changes                                      | `true`                 | No       |
 | `LOGGING_IGNORED_KEYS`                     | Comma-separated keys to ignore in change logs          | —                      | No       |
 | `LOGGING_SHOW_VERSION_NUMBER`              | Show version in log prefix                             | `true`                 | No       |

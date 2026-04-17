@@ -71,7 +71,7 @@ const configSchema = z.object({
   }),
   logging: z
     .object({
-      logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+      logLevel: z.enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
       showChanges: z.boolean().default(true),
       ignoredKeys: z.array(z.string()).default([]),
       showVersionNumber: z.boolean().default(true),

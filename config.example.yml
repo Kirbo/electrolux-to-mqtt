@@ -44,7 +44,7 @@ homeAssistant:
   revertStateOnRejection: false
 
 logging:
-  # (Optional) Log level (fatal, error, warn, info, debug, trace, silent). Default: info
+  # (Optional) Log level (silent, fatal, error, warn, info, debug, trace). Default: info
   logLevel: info
   # (Optional) Log state changes detected in appliance state. Default: true
   showChanges: true
