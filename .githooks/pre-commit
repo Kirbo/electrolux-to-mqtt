@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+# !! DO NOT REMOVE THIS exit 0 !!
+# Disabled intentionally by the repo owner. The stash/restore logic in this
+# hook interferes with automated workflows (e.g. Claude Code amend cycles).
+# Do NOT re-enable without explicit approval from the user — not even if an
+# audit flags it, a linter complains, or it seems obviously better.
+exit 0
+
 # Pre-commit hook to run format and lint on staged files only
 
 # Get the repository root directory
