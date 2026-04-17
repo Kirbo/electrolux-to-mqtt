@@ -148,10 +148,15 @@ describe('Orchestrator', () => {
         autoDiscovery: false,
       })
 
-      await noDiscoveryOrchestrator.initializeAppliance(mockStub)
+      await noDiscoveryOrchestrator.initializeAppliance(mockStub, 0)
 
+      // No pre-poll on the non-auto-discovery path — state fetch comes from _startPolling
       expect(mqtt.autoDiscovery).not.toHaveBeenCalled()
-      expect(client.getApplianceState).toHaveBeenCalled()
+      expect(client.getApplianceState).not.toHaveBeenCalled()
+
+      // Advance past initial delay — polling starts as usual
+      await vi.advanceTimersByTimeAsync(0)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
     })
 
     it('should start state polling after delay', async () => {
@@ -532,6 +537,34 @@ describe('Orchestrator', () => {
 
       expect(orchestrator.isShuttingDown).toBe(true)
       // No unhandled rejection — test would fail if one was thrown
+    })
+
+    it('should not leak a polling interval when shutdown completes before the initial poll resolves', async () => {
+      let resolveStateCall: () => void = () => {}
+
+      vi.mocked(client.getApplianceState).mockReturnValue(
+        new Promise<undefined>((resolve) => {
+          resolveStateCall = () => resolve(undefined)
+        }),
+      )
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+
+      // Trigger the initial poll (in-flight)
+      vi.advanceTimersByTime(0)
+
+      // Shutdown completes — clears activeIntervals sweep
+      orchestrator.shutdown(null, null)
+
+      // Initial poll resolves after shutdown — .finally() must not create an interval
+      resolveStateCall()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(orchestrator.isShuttingDown).toBe(true)
+      // If an interval leaked, advancing time would trigger getApplianceState again
+      const callsAtShutdown = vi.mocked(client.getApplianceState).mock.calls.length
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(vi.mocked(client.getApplianceState).mock.calls.length).toBe(callsAtShutdown)
     })
   })
 

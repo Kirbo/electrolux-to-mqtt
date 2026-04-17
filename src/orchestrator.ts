@@ -106,6 +106,13 @@ export class Orchestrator {
         .then((state) => {
           this.trackApiResult(state, Date.now())
           this.writeHealthStatus()
+        })
+        .catch((err: unknown) => {
+          logger.error(`Error on initial state poll for appliance ${applianceId}:`, err)
+        })
+        .finally(() => {
+          if (this.isShuttingDown) return
+          if (!this.applianceInstances.has(applianceId)) return
 
           const intervalId = setInterval(() => {
             if (this.isShuttingDown) {
@@ -125,9 +132,6 @@ export class Orchestrator {
 
           this.activeIntervals.add(intervalId)
           this.applianceStateIntervals.set(applianceId, intervalId)
-        })
-        .catch((err: unknown) => {
-          logger.error(`Error on initial state poll for appliance ${applianceId}:`, err)
         })
     }, delayMs)
     this.activeTimeouts.add(timeoutId)
@@ -179,10 +183,6 @@ export class Orchestrator {
             qos: 2,
           })
         }
-      } else {
-        await this.client.getApplianceState(appliance, () => {
-          logger.info('Appliance initialized successfully')
-        })
       }
 
       // Register the MQTT reconnect handler (once per orchestrator instance)

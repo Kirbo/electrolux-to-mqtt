@@ -22,7 +22,7 @@ const telemetrySalt = crypto
   .digest('hex')
 const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
 
-const refreshInterval = (client.refreshInterval ?? 60) * 1000
+const refreshInterval = client.refreshInterval * 1000
 const applianceDiscoveryInterval = (config.electrolux.applianceDiscoveryInterval ?? 300) * 1000
 
 const orchestrator = new Orchestrator(client, mqtt, {
