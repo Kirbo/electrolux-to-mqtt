@@ -31,7 +31,11 @@ electrolux:
   # E.g. 60 means: refresh the token when it has 60 minutes or less until it expires.
   # API tokens have a 12-hour (720 min) lifetime. Default: 60, Min: 5, Max: 715.
   renewTokenBeforeExpiry: 60
-  # (Optional) Seconds to wait after sending a command before re-polling appliance state to verify it took effect.
+  # (Optional) Seconds to wait after sending a command before re-polling appliance state.
+  # The Electrolux API caches appliance state server-side; without this delay, the first
+  # poll after a command returns the pre-command state (cache not yet invalidated), which
+  # would overwrite the correct HA state with stale data and then self-correct only on the
+  # next full poll cycle. 30 s gives the API cache time to reflect the new state.
   # Increase if your appliance is slow to apply commands. Default: 30, Min: 5, Max: 300.
   commandStateDelaySeconds: 30
 
