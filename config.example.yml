@@ -21,7 +21,7 @@ electrolux:
   username: your_email_here
   # (Required) Electrolux account password
   password: your_password_here
-  # (Required) Two-letter country code (e.g. FI, SE, NO, DK)
+  # (Required) Two-letter uppercase country code (e.g. FI, SE, NO, DK)
   countryCode: your_country_code_here
   # (Optional) Appliance state polling interval in seconds. Default: 30, Min: 10, Max: 3600
   refreshInterval: 30

@@ -10,7 +10,7 @@ services:
       - "/etc/timezone:/etc/timezone:ro"
       - ../config.yml:/app/config.yml
     environment:
-      - LOG_LEVEL=info                                                      # Log level (debug, info, warn, error)
+      - LOG_LEVEL=info                                                      # Log level (silent, fatal, error, warn, info, debug, trace)
       # ## Mandatory variables
       # - MQTT_URL=mqtt://192.168.1.1:1883                                  # MQTT broker URL
       # - MQTT_USERNAME=mqtt-user                                           # MQTT broker username
