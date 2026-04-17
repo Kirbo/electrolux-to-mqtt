@@ -21,10 +21,6 @@ const configSchema = z.object({
       username: z.string(),
       password: z.string(),
       countryCode: z.string().regex(/^[A-Z]{2}$/i, 'must be a two-letter country code (e.g. FI, SE)'),
-      accessToken: z.string().optional(),
-      refreshToken: z.string().optional(),
-      eat: z.date().optional(),
-      iat: z.date().optional(),
       refreshInterval: z
         .number()
         .int()
@@ -115,15 +111,6 @@ const configSchema = z.object({
 })
 
 type AppConfig = z.infer<typeof configSchema>
-
-const tokensSchema = z.object({
-  accessToken: z.string(),
-  refreshToken: z.string(),
-  eat: z.number(),
-  iat: z.number(),
-})
-
-export type Tokens = z.infer<typeof tokensSchema>
 
 // envSchema handles coercion only — constraints and defaults are in configSchema.
 const envSchema = z.object({
@@ -266,20 +253,6 @@ const getConfigFilename = (): string => {
 const configFilename = getConfigFilename()
 const configPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), `../${configFilename}`)
 
-// Determine which tokens file to use based on environment
-const getTokensFilename = (): string => {
-  if (process.env.TOKENS_FILE_OVERRIDE) {
-    return process.env.TOKENS_FILE_OVERRIDE
-  }
-  if (process.env.E2E_TEST === 'true') {
-    return 'tokens.json'
-  }
-  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
-    return 'tests/tokens.json'
-  }
-  return 'tokens.json'
-}
-
 function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
   return {
     mqtt: stripUndefined({
@@ -380,26 +353,4 @@ try {
   throw error
 }
 
-let tokens: Partial<Tokens> = {}
-try {
-  const tokensFilename = getTokensFilename()
-  const tokensPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), `../${tokensFilename}`)
-  if (fs.existsSync(tokensPath)) {
-    const rawTokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'))
-    tokens = tokensSchema.partial().parse(rawTokens)
-    console.debug(`${tokensFilename} loaded`)
-  }
-} catch (error) {
-  const tokensFilename = getTokensFilename()
-  console.error(`Error reading ${tokensFilename}:`, error)
-}
-
-export default {
-  ...config,
-  electrolux: {
-    ...config.electrolux,
-    ...tokens,
-    eat: tokens.eat ? new Date(tokens.eat * 1000) : undefined,
-    iat: tokens.iat ? new Date(tokens.iat * 1000) : undefined,
-  },
-}
+export default config

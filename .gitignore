@@ -1,7 +1,5 @@
 node_modules
 .pnpm-store
-**/tokens.json*
-!tests/tokens.json
 
 docker-compose.yml
 docker-compose.local.yml

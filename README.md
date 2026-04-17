@@ -348,10 +348,6 @@ docker cp <container-name>:/app/CHANGELOG.md ./CHANGELOG.md
 cat CHANGELOG.md
 ```
 
-## Token persistence
-
-The application automatically creates and updates a `tokens.json` file to cache OAuth tokens between restarts, avoiding unnecessary re-authentication.
-
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines on:

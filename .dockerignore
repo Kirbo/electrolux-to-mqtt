@@ -4,8 +4,6 @@ node_modules
 .pnpm-store
 
 # Sensitive files
-**/tokens.json
-tokens.json*
 config.yml
 *.pem
 *.key

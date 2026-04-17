@@ -27,7 +27,7 @@ Telemetry backend separate pnpm package — `cd telemetry-backend && pnpm test` 
 Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `Orchestrator`, delegates to orchestrator main loop.
 
 - **`Orchestrator`** — polls appliances, periodic discovery, subscribes command topics, clean shutdown. Holds mutable runtime state (with `Cache`).
-- **`ElectroluxClient`** — Electrolux API client. OAuth (persisted to `tokens.json`), exponential-backoff retries, normalizers for model-agnostic state.
+- **`ElectroluxClient`** — Electrolux API client. OAuth (memory-only tokens, re-authenticates on startup), exponential-backoff retries, normalizers for model-agnostic state.
 - **`Mqtt`** — thin broker wrapper behind `IMqtt` interface (testable). Discovery payloads from appliance instance, not MQTT layer.
 - **`appliances/`** — `BaseAppliance` abstract → `createAppliance()` factory function. Each owns discovery config, normalization, command denormalization.
 - **`config.ts`** — Zod schemas. YAML or env vars, never mixed. `envSchema` coerces/defaults; `configSchema` validates.

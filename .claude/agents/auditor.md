@@ -85,7 +85,7 @@ Extra robustness checks beyond checklist:
 
 #### 8. Security
 - [ ] Credentials never logged
-- [ ] `config.yml` in `.gitignore` (`tokens.json` auto-generated at runtime)
+- [ ] `config.yml` in `.gitignore`
 - [ ] Docker images exclude dev deps (`--prod`)
 - [ ] `.dockerignore` excludes secrets
 - [ ] Production uses `dhi.io/node` hardened images

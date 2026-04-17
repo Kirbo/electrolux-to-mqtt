@@ -1,11 +1,9 @@
 import { Buffer } from 'node:buffer'
-import fs from 'node:fs'
-import path from 'node:path'
 import axios, { type AxiosInstance } from 'axios'
 import type { BaseAppliance } from './appliances/base.js'
 import { normalizeClimateMode, normalizeFanSpeed, normalizeOnOffState } from './appliances/normalizers.js'
 import { cache } from './cache.js'
-import config, { type Tokens } from './config.js'
+import config from './config.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
 import type { NormalizedClimateMode, NormalizedState } from './types/normalized.js'
@@ -219,10 +217,10 @@ function formatAxiosError(error: unknown): string {
 
 export class ElectroluxClient {
   private client?: AxiosInstance
-  accessToken?: string = config.electrolux.accessToken
-  refreshToken?: string = config.electrolux.refreshToken
-  eat?: Date = config.electrolux.eat
-  iat?: Date = config.electrolux.iat
+  accessToken?: string
+  refreshToken?: string
+  eat?: Date
+  iat?: Date
   private readonly mqtt: IMqtt
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
@@ -297,10 +295,6 @@ export class ElectroluxClient {
       'Content-Type': 'application/json',
       'x-api-key': config.electrolux.apiKey,
       ...(this.accessToken && this.eat && this.refreshToken && { Authorization: `Bearer ${this.accessToken}` }),
-    }
-
-    if (headers.Authorization) {
-      this.isLoggedIn = true
     }
 
     this.client = axios.create({
@@ -444,10 +438,7 @@ export class ElectroluxClient {
         throw new Error('Failed to retrieve access or refresh token')
       }
 
-      const tokens = this.buildTokensObject()
       logger.info('Logged in successfully')
-      logger.debug('Tokens', this.retainTokensForOutput(tokens))
-      this.saveTokens(tokens)
 
       this.createApiClient()
 
@@ -502,47 +493,6 @@ export class ElectroluxClient {
     }
   }
 
-  private buildTokensObject(): Partial<Tokens> {
-    return {
-      accessToken: this.accessToken,
-      refreshToken: this.refreshToken,
-      eat: this.eat ? this.eat.getTime() / 1000 : undefined,
-      iat: this.iat ? this.iat.getTime() / 1000 : undefined,
-    }
-  }
-
-  private saveTokens(tokens: Partial<Tokens>): void {
-    const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../tokens.json')
-    const tmpPath = `${filePath}.tmp`
-    try {
-      // Atomic write: write to .tmp then rename — rename(2) is POSIX-atomic on the same filesystem,
-      // so a crash mid-write cannot leave tokens.json in a truncated/corrupt state.
-      fs.writeFileSync(tmpPath, JSON.stringify(tokens, null, 2), 'utf-8')
-      try {
-        fs.renameSync(tmpPath, filePath)
-      } catch (renameError) {
-        // Rename failed — clean up the orphaned tmp file so we don't litter the filesystem.
-        try {
-          fs.unlinkSync(tmpPath)
-        } catch {
-          /* best-effort cleanup; primary error preserved */
-        }
-        throw renameError
-      }
-      logger.debug('Tokens saved to', filePath)
-    } catch (writeError) {
-      logger.warn(`Failed to persist tokens to ${filePath}: ${formatAxiosError(writeError)}`)
-    }
-  }
-
-  private readonly retainTokensForOutput = (tokens: Partial<Tokens>) => {
-    return {
-      ...tokens,
-      accessToken: `${this.accessToken?.slice(0, 10)}...token length ${this.accessToken?.length}...${this.accessToken?.slice(-10)}`,
-      refreshToken: `${this.refreshToken?.slice(0, 10)}...token length ${this.refreshToken?.length}...${this.refreshToken?.slice(-10)}`,
-    }
-  }
-
   public async ensureValidToken() {
     try {
       if (!this.accessToken || !this.eat) {
@@ -588,10 +538,7 @@ export class ElectroluxClient {
       this.eat = eat
       this.iat = iat
 
-      const tokens = this.buildTokensObject()
       logger.info('Tokens refreshed successfully')
-      logger.debug('Tokens', this.retainTokensForOutput(tokens))
-      this.saveTokens(tokens)
 
       // Recreate API client with new access token
       await this.createApiClient()

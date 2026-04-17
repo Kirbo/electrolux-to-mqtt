@@ -7,7 +7,6 @@ describe('config', () => {
   const originalEnv = process.env
   // Use config.test.yml specifically for config.test.ts manipulation
   const configPath = path.resolve(process.cwd(), 'config.test.yml')
-  const tokensPath = path.resolve(process.cwd(), 'tokens.test.json')
   const defaultValidConfig = `mqtt:
   url: mqtt://localhost
   username: test
@@ -21,27 +20,17 @@ homeAssistant:
   autoDiscovery: true`
 
   beforeAll(() => {
-    // Clean up any existing config.test.yml and tokens.test.json
+    // Clean up any existing config.test.yml
     if (fs.existsSync(configPath)) {
       fs.unlinkSync(configPath)
-    }
-    if (fs.existsSync(tokensPath)) {
-      fs.unlinkSync(tokensPath)
     }
   })
 
   afterAll(() => {
-    // Clean up config.test.yml and tokens.test.json after all tests
+    // Clean up config.test.yml after all tests
     if (fs.existsSync(configPath)) {
       try {
         fs.unlinkSync(configPath)
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-    if (fs.existsSync(tokensPath)) {
-      try {
-        fs.unlinkSync(tokensPath)
       } catch {
         // Ignore cleanup errors
       }
@@ -55,7 +44,6 @@ homeAssistant:
       NODE_ENV: 'test',
       VITEST: 'true',
       CONFIG_FILE_OVERRIDE: 'config.test.yml',
-      TOKENS_FILE_OVERRIDE: 'tokens.test.json',
     }
     // Ensure a valid config exists before each test
     if (!fs.existsSync(configPath)) {
@@ -1721,192 +1709,6 @@ homeAssistant:
       expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.commandStateDelaySeconds'))).toBe(true)
 
       errorSpy.mockRestore()
-    })
-  })
-
-  describe('Tokens file handling', () => {
-    beforeEach(() => {
-      // Set config file override to use config.test.yml for these tests
-      process.env.CONFIG_FILE_OVERRIDE = 'config.test.yml'
-    })
-
-    afterEach(() => {
-      delete process.env.CONFIG_FILE_OVERRIDE
-    })
-
-    it('should handle missing tokens.json file gracefully', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test-key
-  username: test@example.com
-  password: test-pass
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-
-      const tokensPath = path.resolve(process.cwd(), 'tokens.test.json')
-      if (fs.existsSync(tokensPath)) {
-        fs.unlinkSync(tokensPath)
-      }
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      const config = await import('../src/config.js')
-
-      expect(config.default).toBeDefined()
-      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Error reading tokens.test.json'))
-
-      errorSpy.mockRestore()
-    })
-
-    it('should load and validate tokens.json when present', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test-key
-  username: test@example.com
-  password: test-pass
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      const tokensData = {
-        accessToken: 'test-token',
-        refreshToken: 'refresh-token',
-        expiresIn: 3600,
-        tokenType: 'Bearer',
-        scope: 'test-scope',
-        eat: Math.floor(Date.now() / 1000) + 3600,
-        iat: Math.floor(Date.now() / 1000),
-      }
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-      const tokensPath = path.resolve(process.cwd(), 'tokens.test.json')
-      // Remove any existing tokens first
-      if (fs.existsSync(tokensPath)) {
-        fs.unlinkSync(tokensPath)
-      }
-      fs.writeFileSync(tokensPath, JSON.stringify(tokensData), 'utf8')
-
-      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
-
-      const config = await import('../src/config.js')
-
-      // Check that tokens were loaded (accessToken may be from config or test tokens)
-      expect(config.default.electrolux.accessToken).toBeDefined()
-      expect(config.default.electrolux.eat).toBeInstanceOf(Date)
-      expect(config.default.electrolux.iat).toBeInstanceOf(Date)
-      expect(debugSpy).toHaveBeenCalledWith('tokens.test.json loaded')
-
-      debugSpy.mockRestore()
-      fs.unlinkSync(tokensPath)
-    })
-
-    it('should handle corrupt tokens.json file', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test-key
-  username: test@example.com
-  password: test-pass
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-      const tokensPath = path.resolve(process.cwd(), 'tokens.test.json')
-      fs.writeFileSync(tokensPath, 'invalid json{{{', 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      await import('../src/config.js')
-
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Error reading tokens\.test\.json/),
-        expect.anything(),
-      )
-
-      errorSpy.mockRestore()
-      fs.unlinkSync(tokensPath)
-    })
-
-    it('should handle partial tokens data', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test-key
-  username: test@example.com
-  password: test-pass
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      const partialTokens = {
-        accessToken: 'test-token',
-        // Missing other fields
-      }
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-      const tokensPath = path.resolve(process.cwd(), 'tokens.test.json')
-      fs.writeFileSync(tokensPath, JSON.stringify(partialTokens), 'utf8')
-
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.accessToken).toBe('test-token')
-      // Should handle missing fields gracefully
-      expect(config.default.electrolux.eat).toBeUndefined()
-      expect(config.default.electrolux.iat).toBeUndefined()
-
-      fs.unlinkSync(tokensPath)
-    })
-
-    it('should convert Unix timestamps to Date objects correctly', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test-key
-  username: test@example.com
-  password: test-pass
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      const now = Math.floor(Date.now() / 1000)
-      const tokensData = {
-        accessToken: 'test-token',
-        refreshToken: 'refresh-token',
-        expiresIn: 3600,
-        tokenType: 'Bearer',
-        scope: 'test-scope',
-        eat: now + 3600,
-        iat: now,
-      }
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-      const tokensPath = path.resolve(process.cwd(), 'tokens.test.json')
-      fs.writeFileSync(tokensPath, JSON.stringify(tokensData), 'utf8')
-
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.eat).toBeInstanceOf(Date)
-      expect(config.default.electrolux.iat).toBeInstanceOf(Date)
-      expect(config.default.electrolux.eat?.getTime()).toBe((now + 3600) * 1000)
-      expect(config.default.electrolux.iat?.getTime()).toBe(now * 1000)
-
-      fs.unlinkSync(tokensPath)
     })
   })
 })

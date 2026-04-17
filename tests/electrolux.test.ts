@@ -980,21 +980,6 @@ describe('electrolux', () => {
       expect(axiosCreateSpy).toHaveBeenCalled()
     })
 
-    it('should set isLoggedIn to true when accessToken exists', async () => {
-      vi.spyOn(axios, 'create').mockReturnValue({
-        interceptors: {
-          request: { use: vi.fn() },
-          response: { use: vi.fn() },
-        },
-      } as unknown as ReturnType<typeof axios.create>)
-
-      // Client already has config.electrolux.accessToken loaded
-      await client.initialize()
-
-      // This depends on config having tokens, so just verify the property exists
-      expect(client.isLoggedIn).toBeDefined()
-    })
-
     it('should handle API client not initialized error', () => {
       // The client initializes lazily, so we just verify it doesn't throw during construction
       const uninitializedClient = new ElectroluxClient(mockMqtt)
@@ -2005,20 +1990,6 @@ describe('electrolux', () => {
           vi.restoreAllMocks()
         }
       })
-
-      it('should write tokens to file on successful login', async () => {
-        const fsMock = await import('node:fs')
-        const writeFileSyncSpy = vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {})
-
-        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
-        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
-
-        await client.initialize()
-        await client.login()
-
-        expect(writeFileSyncSpy).toHaveBeenCalled()
-        writeFileSyncSpy.mockRestore()
-      })
     })
 
     describe('Helper functions', () => {
@@ -2476,95 +2447,6 @@ describe('electrolux', () => {
     })
 
     describe('Token error branches', () => {
-      it('should warn when token persistence fails', async () => {
-        const fsMock = await import('node:fs')
-        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {
-          throw new Error('EROFS: read-only file system')
-        })
-
-        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
-        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
-
-        await client.initialize()
-        loggerWarnSpy.mockClear()
-        await client.login()
-
-        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist tokens'))
-        vi.restoreAllMocks()
-      })
-
-      it('should write to .tmp file before renaming to final path (atomic write)', async () => {
-        const fsMock = await import('node:fs')
-        const writeOrder: string[] = []
-        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation((filePath) => {
-          writeOrder.push(String(filePath))
-        })
-        const renameSyncSpy = vi.spyOn(fsMock.default, 'renameSync').mockImplementation((src, dest) => {
-          writeOrder.push(`rename:${String(src)}->${String(dest)}`)
-        })
-
-        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
-        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
-
-        await client.initialize()
-        await client.login()
-
-        // tmp write must precede the rename
-        const tmpWriteIdx = writeOrder.findIndex((s) => s.endsWith('.tmp'))
-        const renameIdx = writeOrder.findIndex((s) => s.startsWith('rename:'))
-        expect(tmpWriteIdx).toBeGreaterThanOrEqual(0)
-        expect(renameIdx).toBeGreaterThan(tmpWriteIdx)
-
-        // rename must move .tmp → final tokens.json
-        const renameEntry = writeOrder[renameIdx] ?? ''
-        expect(renameEntry).toContain('.tmp')
-        expect(renameEntry).toContain('tokens.json')
-        expect(renameSyncSpy).toHaveBeenCalledTimes(1)
-        vi.restoreAllMocks()
-      })
-
-      it('should clean up .tmp file when rename fails', async () => {
-        const fsMock = await import('node:fs')
-        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {})
-        vi.spyOn(fsMock.default, 'renameSync').mockImplementation(() => {
-          throw new Error('EXDEV: cross-device link not permitted')
-        })
-        const unlinkSyncSpy = vi.spyOn(fsMock.default, 'unlinkSync').mockImplementation(() => {})
-
-        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
-        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
-
-        await client.initialize()
-        loggerWarnSpy.mockClear()
-        await client.login()
-
-        // unlink must be called on the .tmp path to clean up the partial file
-        expect(unlinkSyncSpy).toHaveBeenCalledTimes(1)
-        const [unlinkedPath] = unlinkSyncSpy.mock.calls[0] ?? []
-        expect(String(unlinkedPath)).toMatch(/\.tmp$/)
-        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist tokens'))
-        vi.restoreAllMocks()
-      })
-
-      it('should not crash when both rename and unlink fail (double read-only fault)', async () => {
-        const fsMock = await import('node:fs')
-        vi.spyOn(fsMock.default, 'writeFileSync').mockImplementation(() => {})
-        vi.spyOn(fsMock.default, 'renameSync').mockImplementation(() => {
-          throw new Error('EXDEV: cross-device link not permitted')
-        })
-        vi.spyOn(fsMock.default, 'unlinkSync').mockImplementation(() => {
-          throw new Error('ENOENT: no such file or directory')
-        })
-
-        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
-        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
-
-        await client.initialize()
-        // Must not throw even if both rename and unlink fail
-        await expect(client.login()).resolves.toBe(true)
-        vi.restoreAllMocks()
-      })
-
       it('should handle 401 during token refresh by clearing tokens and re-logging in', async () => {
         const error401 = new Error('Unauthorized') as AxiosError
         error401.response = { status: 401 } as AxiosResponse
@@ -2939,18 +2821,16 @@ describe('electrolux', () => {
         await client.initialize()
         expect(interceptorCallback).toBeDefined()
 
-        // Simulate being in login state
+        // Interceptor calls waitForLogin() — mock it to verify the call
+        const waitSpy = vi.spyOn(client, 'waitForLogin').mockResolvedValue(undefined)
+
         client.isLoggingIn = true
-
         const requestConfig = { url: '/api/v1/appliances' }
-
-        // Start the interceptor and resolve it by clearing isLoggingIn
-        setTimeout(() => {
-          client.isLoggingIn = false
-        }, 50)
-
         const result = await interceptorCallback?.(requestConfig)
+
+        expect(waitSpy).toHaveBeenCalled()
         expect(result).toEqual(requestConfig)
+        waitSpy.mockRestore()
       })
 
       it('should not wait for token refresh requests', async () => {
