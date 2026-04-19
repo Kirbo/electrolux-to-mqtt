@@ -1855,22 +1855,45 @@ describe('electrolux', () => {
         vi.useRealTimers()
       })
 
-      it('should reject waitForLogin waiters when login fails', async () => {
-        // Simulate a waiter waiting for login
+      it('should keep waitForLogin waiters pending (not rejected) when login fails and retries', async () => {
+        // Bug: previously login() called finishLogin(false) on failure which rejected all waiters,
+        // killing the main init path even though the retry loop would eventually succeed.
+        // Fix: login() catch branch only sets isLoggedIn=false, keeps isLoggingIn=true so waiters
+        // remain queued until the retry resolves them via finishLogin(true).
+
+        // Failure on first attempt (CSRF fetch throws), success on second
+        vi.mocked(axios.get)
+          .mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND account.electrolux.one'))
+          .mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+
+        // Queue a waiter before triggering login
+        let rejected = false
         const waitPromise = client.waitForLogin()
+        waitPromise.catch(() => {
+          rejected = true
+        })
 
-        // Trigger finishLogin(false) by accessing the private method via login failure path
-        // finishLogin(false) should reject all pending waiters
-        client.isLoggedIn = false
-        client.isLoggingIn = true
+        vi.useFakeTimers()
+        // Kick off the first (failing) login attempt — returns false, schedules retry
+        const loginPromise = client.login()
 
-        // Access finishLogin indirectly: simulate the failure path
-        // We use Object.getPrototypeOf trick to call finishLogin
-        const proto = Object.getPrototypeOf(client) as Record<string, unknown>
-        const finishLogin = proto.finishLogin as (success: boolean) => void
-        finishLogin.call(client, false)
+        // After the first failure fires, waiter must still be pending — not rejected
+        await loginPromise
+        expect(rejected).toBe(false)
+        expect(client.isLoggedIn).toBe(false)
+        expect(client.isLoggingIn).toBe(true) // Still in-progress: retry is scheduled
 
-        await expect(waitPromise).rejects.toThrow('Login failed')
+        // Advance timers to fire the scheduled retry
+        await vi.runAllTimersAsync()
+        vi.useRealTimers()
+
+        // Wait for the waiter promise to settle — it should resolve, not reject
+        await expect(waitPromise).resolves.toBeUndefined()
+        expect(client.isLoggedIn).toBe(true)
+        expect(rejected).toBe(false)
       })
 
       it('should resolve waitForLogin waiters when login succeeds', async () => {
@@ -1927,6 +1950,51 @@ describe('electrolux', () => {
 
         await refreshPromise
         expect(mockAxiosInstance.post).toHaveBeenCalled()
+      })
+
+      it('should keep waitForLogin waiters pending (not rejected) on refresh 401 → re-login transition', async () => {
+        // Bug: refreshTokens() 401 branch called finishLogin(false) before calling login(),
+        // which rejected all pending waiters prematurely. The subsequent login() call would
+        // succeed but have no waiters left to resolve.
+        // Fix: replace finishLogin(false) with isLoggedIn=false; login() resolves waiters.
+
+        const unauthorizedError = {
+          isAxiosError: true,
+          response: { status: 401 },
+          message: 'Unauthorized',
+        }
+        vi.mocked(axios.isAxiosError).mockReturnValue(true)
+
+        // Refresh → 401; then login succeeds
+        mockAxiosInstance.post.mockRejectedValueOnce(unauthorizedError)
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        // Mark as logged in so startLogin() in refreshTokens() doesn't skip the waiter path
+        client.isLoggedIn = true
+
+        // Queue a waiter — this simulates a request interceptor awaiting auth
+        let rejected = false
+        const waitPromise = client.waitForLogin()
+        waitPromise.catch(() => {
+          rejected = true
+        })
+
+        // Force isLoggedIn=false so waitForLogin doesn't short-circuit above waiter
+        client.isLoggedIn = false
+        client.isLoggingIn = true
+
+        // Trigger the refresh which will 401 and fall back to login()
+        await client.refreshTokens()
+
+        // Flush any remaining microtasks
+        await new Promise((r) => setTimeout(r, 0))
+
+        // Waiter must have been resolved by the successful re-login, not rejected
+        await expect(waitPromise).resolves.toBeUndefined()
+        expect(rejected).toBe(false)
+        expect(client.isLoggedIn).toBe(true)
       })
 
       it('should apply jitter to login retry delay — Math.random=0 gives base/2', async () => {

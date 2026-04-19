@@ -447,7 +447,11 @@ export class ElectroluxClient {
 
       return true
     } catch (error) {
-      this.finishLogin(false)
+      // Keep isLoggingIn=true so waiters remain queued — the scheduled retry will resolve them.
+      // Do NOT call finishLogin(false) here: login() retries indefinitely, so waiters should
+      // never be rejected from this path. Rejecting them would kill any caller awaiting login
+      // (e.g. main()), even though the retry loop will eventually succeed.
+      this.isLoggedIn = false
       const delay = applyJitter(
         Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** this.loginRetryCount, LOGIN_RETRY_MAX_DELAY_MS),
       )
@@ -552,13 +556,16 @@ export class ElectroluxClient {
       logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
 
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        // Refresh token is rejected by the server — clear stored tokens and re-authenticate from scratch
+        // Refresh token is rejected by the server — clear stored tokens and re-authenticate from scratch.
+        // Keep isLoggingIn=true so any in-flight waiters remain queued; login() will resolve them
+        // via finishLogin(true) when it succeeds. Do NOT call finishLogin(false) here — that would
+        // reject waiters prematurely before the re-login has a chance to run.
         logger.warn('Refresh token is invalid or expired, falling back to full re-authentication...')
         this.accessToken = undefined
         this.refreshToken = undefined
         this.eat = undefined
         this.iat = undefined
-        this.finishLogin(false)
+        this.isLoggedIn = false
         this.refreshRetryCount = 0
         try {
           await this.login()
