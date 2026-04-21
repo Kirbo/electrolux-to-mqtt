@@ -81,7 +81,6 @@ function comparePreRelease(pre1: string, pre2: string): number {
   return 0
 }
 
-
 function compareVersions(v1: string, v2: string): number {
   const clean1 = v1.replace(/^v/, '')
   const clean2 = v2.replace(/^v/, '')
@@ -262,7 +261,11 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
   const comparison = compareVersions(currentVersion, latestVersion)
 
   if (comparison < 0) {
-    // Current version is older
+    const releaseAgeMs = Date.now() - new Date(latest.releasedAt).getTime()
+    if (releaseAgeMs < 60 * 60 * 1000) {
+      logger.debug(`Newer version ${versionTag} found but released recently, skipping notification`)
+      return
+    }
 
     logger.info(
       `A newer version of the application available, please check https://gitlab.com/${GITLAB_REPO}/-/releases/${versionTag}`,

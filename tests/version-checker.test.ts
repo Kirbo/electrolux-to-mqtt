@@ -739,6 +739,40 @@ describe('version-checker', () => {
       stopChecker()
     })
 
+    it('should not notify about a newer version released less than 1 hour ago', async () => {
+      const now = new Date('2026-04-21T12:00:00Z')
+      vi.setSystemTime(now)
+      const recentRelease = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
+
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: recentRelease }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).not.toHaveBeenCalledWith(expect.stringContaining('update-available'))
+      stopChecker()
+    })
+
+    it('should notify about a newer version released more than 1 hour ago', async () => {
+      const now = new Date('2026-04-21T12:00:00Z')
+      vi.setSystemTime(now)
+      const oldRelease = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString()
+
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: oldRelease }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockPublishInfo).toHaveBeenCalledWith(expect.stringContaining('update-available'))
+      stopChecker()
+    })
+
     it('should publish development status and skip version fetch for development builds', async () => {
       const stopChecker = startVersionChecker('development', 'test-hash-123', mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
