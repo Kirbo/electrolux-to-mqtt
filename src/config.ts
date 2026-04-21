@@ -330,12 +330,13 @@ if (!file) {
 const rawConfig = yaml.parse(file)
 
 // Validate configuration with Zod
-let config: AppConfig
-try {
-  config = configSchema.parse(rawConfig)
-} catch (error) {
-  handleValidationError(error, false)
-  throw error
-}
+const config: AppConfig = (() => {
+  try {
+    return configSchema.parse(rawConfig)
+  } catch (error) {
+    handleValidationError(error, false)
+    throw error
+  }
+})()
 
 export default config

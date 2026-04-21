@@ -111,30 +111,38 @@ export class Orchestrator {
           logger.error(`Error on initial state poll for appliance ${applianceId}:`, err)
         })
         .finally(() => {
-          if (this.isShuttingDown) return
-          if (!this.applianceInstances.has(applianceId)) return
-
-          const intervalId = setInterval(() => {
-            if (this.isShuttingDown) {
-              clearInterval(intervalId)
-              return
-            }
-            this.client
-              .getApplianceState(appliance, applianceDiscoveryCallback)
-              .then((intervalState) => {
-                this.trackApiResult(intervalState, Date.now())
-                this.writeHealthStatus()
-              })
-              .catch((err: unknown) => {
-                logger.error(`Error polling state for appliance ${applianceId}:`, err)
-              })
-          }, this.config.refreshInterval)
-
-          this.activeIntervals.add(intervalId)
-          this.applianceStateIntervals.set(applianceId, intervalId)
+          this._startIntervalPolling(applianceId, appliance, applianceDiscoveryCallback)
         })
     }, delayMs)
     this.activeTimeouts.add(timeoutId)
+  }
+
+  private _startIntervalPolling(
+    applianceId: string,
+    appliance: BaseAppliance,
+    applianceDiscoveryCallback: (() => void) | undefined,
+  ): void {
+    if (this.isShuttingDown) return
+    if (!this.applianceInstances.has(applianceId)) return
+
+    const intervalId = setInterval(() => {
+      if (this.isShuttingDown) {
+        clearInterval(intervalId)
+        return
+      }
+      this.client
+        .getApplianceState(appliance, applianceDiscoveryCallback)
+        .then((intervalState) => {
+          this.trackApiResult(intervalState, Date.now())
+          this.writeHealthStatus()
+        })
+        .catch((err: unknown) => {
+          logger.error(`Error polling state for appliance ${applianceId}:`, err)
+        })
+    }, this.config.refreshInterval)
+
+    this.activeIntervals.add(intervalId)
+    this.applianceStateIntervals.set(applianceId, intervalId)
   }
 
   /**

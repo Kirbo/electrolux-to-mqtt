@@ -20,7 +20,11 @@ export function canonicalStringify(value: unknown): string {
     // ordering would defeat that guarantee. Default `.sort()` works for our
     // ASCII-only capability keys but Sonar (S2871) prefers an explicit one.
     const sorted = Object.keys(value)
-      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .sort((a, b) => {
+        if (a < b) return -1
+        if (a > b) return 1
+        return 0
+      })
       .map((k) => `${JSON.stringify(k)}:${canonicalStringify(value[k])}`)
       .join(',')
     return `{${sorted}}`
