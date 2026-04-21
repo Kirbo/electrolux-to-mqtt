@@ -21,6 +21,7 @@ services:
       args:
         - NODE_VERSION=${NODE_VERSION:-24}
     container_name: telemetry-backend
+    env_file: .env
     restart: unless-stopped
     ports:
       - "3001:3001"
