@@ -69,12 +69,19 @@ type GitLabRelease = {
   }
 }
 
-/**
- * Compare two semantic version strings following semver pre-release rules.
- * Returns: -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2
- * Pre-release versions (e.g. 1.17.0-rc.7) are considered lower than the
- * equivalent release (1.17.0), matching semver spec.
- */
+// Pre-release versions (e.g. 1.17.0-rc.7) are lower than their stable counterpart per semver spec.
+function comparePreRelease(pre1: string, pre2: string): number {
+  if (pre1 === pre2) return 0
+  if (!pre1) return 1
+  if (!pre2) return -1
+  const preNum1 = Number.parseInt(pre1.split('.').at(-1) ?? '0', 10)
+  const preNum2 = Number.parseInt(pre2.split('.').at(-1) ?? '0', 10)
+  if (preNum1 < preNum2) return -1
+  if (preNum1 > preNum2) return 1
+  return 0
+}
+
+
 function compareVersions(v1: string, v2: string): number {
   const clean1 = v1.replace(/^v/, '')
   const clean2 = v2.replace(/^v/, '')
@@ -96,19 +103,7 @@ function compareVersions(v1: string, v2: string): number {
     if (num1 > num2) return 1
   }
 
-  // Same core: semver says pre-release < release
-  if (pre1 && !pre2) return -1
-  if (!pre1 && pre2) return 1
-
-  // Both pre-release: compare by trailing numeric segment (rc.7 vs rc.8)
-  if (pre1 && pre2) {
-    const preNum1 = Number.parseInt(pre1.split('.').at(-1) ?? '0', 10)
-    const preNum2 = Number.parseInt(pre2.split('.').at(-1) ?? '0', 10)
-    if (preNum1 < preNum2) return -1
-    if (preNum1 > preNum2) return 1
-  }
-
-  return 0
+  return comparePreRelease(pre1, pre2)
 }
 
 type LatestVersionInfo = {
