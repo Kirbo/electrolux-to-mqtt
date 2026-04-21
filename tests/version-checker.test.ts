@@ -134,6 +134,112 @@ describe('version-checker', () => {
     })
   })
 
+  describe('compareVersions (pre-release semver)', () => {
+    // Uses beta channel so channel filtering never masks the comparison result.
+    // The stable channel would filter out pre-release tags, making publishInfo
+    // return no payload and masking whether compareVersions is correct.
+    let moduleForCmp: typeof import('@/version-checker.js')
+    let mockPublishInfoCmp: ReturnType<typeof vi.fn>
+    let mockMqttCmp: IMqtt
+
+    beforeEach(async () => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+          telemetryEnabled: false,
+        },
+      }))
+      moduleForCmp = await import('@/version-checker.js')
+      mockPublishInfoCmp = vi.fn()
+      mockMqttCmp = { publishInfo: mockPublishInfoCmp } as unknown as IMqtt
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+    })
+
+    const runCheck = async (current: string, latestTag: string) => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: latestTag, released_at: '2026-01-28T12:00:00Z' }],
+      })
+      const stopChecker = moduleForCmp.startVersionChecker(current, 'hash', mockMqttCmp)
+      await vi.advanceTimersByTimeAsync(0)
+      stopChecker()
+      const calls = mockPublishInfoCmp.mock.calls
+      if (calls.length === 0) return null
+      return JSON.parse(calls[0][0] as string) as Record<string, unknown>
+    }
+
+    it('RC is older than stable with same core: 1.17.0-rc.7 < 1.17.0 → update-available', async () => {
+      const payload = await runCheck('1.17.0-rc.7', 'v1.17.0')
+      expect(payload?.status).toBe('update-available')
+    })
+
+    it('stable is newer than RC with same core: 1.17.0 > 1.17.0-rc.7 → up-to-date', async () => {
+      const payload = await runCheck('1.17.0', 'v1.17.0-rc.7')
+      expect(payload?.status).toBe('up-to-date')
+    })
+
+    it('older RC vs newer RC: 1.17.0-rc.7 < 1.17.0-rc.8 → update-available', async () => {
+      const payload = await runCheck('1.17.0-rc.7', 'v1.17.0-rc.8')
+      expect(payload?.status).toBe('update-available')
+    })
+
+    it('newer RC vs older RC: 1.17.0-rc.8 > 1.17.0-rc.7 → up-to-date', async () => {
+      const payload = await runCheck('1.17.0-rc.8', 'v1.17.0-rc.7')
+      expect(payload?.status).toBe('up-to-date')
+    })
+
+    it('same RC versions: 1.17.0-rc.7 === 1.17.0-rc.7 → up-to-date', async () => {
+      const payload = await runCheck('1.17.0-rc.7', 'v1.17.0-rc.7')
+      expect(payload?.status).toBe('up-to-date')
+    })
+
+    it('same stable versions: 1.17.0 === 1.17.0 → up-to-date', async () => {
+      const payload = await runCheck('1.17.0', 'v1.17.0')
+      expect(payload?.status).toBe('up-to-date')
+    })
+
+    it('older stable vs newer RC: 1.16.5 < 1.17.0-rc.1 → update-available (beta channel sees RC as newer)', async () => {
+      const payload = await runCheck('1.16.5', 'v1.17.0-rc.1')
+      expect(payload?.status).toBe('update-available')
+    })
+  })
+
+  describe('checkForUpdates beta channel — RC to stable promotion', () => {
+    let moduleWithBetaRcToStable: typeof import('@/version-checker.js')
+    let mockPublishInfoBeta: ReturnType<typeof vi.fn>
+    let mockMqttBeta: IMqtt
+
+    beforeEach(async () => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+          telemetryEnabled: false,
+        },
+      }))
+      moduleWithBetaRcToStable = await import('@/version-checker.js')
+      mockPublishInfoBeta = vi.fn()
+      mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+    })
+
+    it('running 1.17.0-rc.7 on beta channel + latest release is v1.17.0 → fires update-available', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [
+          { tag_name: 'v1.17.0', released_at: '2026-04-21T12:00:00Z' },
+          { tag_name: 'v1.17.0-rc.7', released_at: '2026-04-15T12:00:00Z' },
+        ],
+      })
+
+      const stopChecker = moduleWithBetaRcToStable.startVersionChecker('1.17.0-rc.7', 'hash', mockMqttBeta)
+      await vi.advanceTimersByTimeAsync(0)
+      stopChecker()
+
+      expect(mockPublishInfoBeta).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+      expect(mockPublishInfoBeta).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v1.17.0"'))
+    })
+  })
+
   describe('version comparison', () => {
     it('should detect when a newer version is available', async () => {
       mockAxiosGet.mockResolvedValueOnce({

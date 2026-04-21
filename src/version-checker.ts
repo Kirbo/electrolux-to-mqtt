@@ -70,29 +70,42 @@ type GitLabRelease = {
 }
 
 /**
- * Compare two semantic version strings
+ * Compare two semantic version strings following semver pre-release rules.
  * Returns: -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2
+ * Pre-release versions (e.g. 1.17.0-rc.7) are considered lower than the
+ * equivalent release (1.17.0), matching semver spec.
  */
-// Compares numeric semver parts only (X.Y.Z). Pre-release suffixes (e.g. -rc.1) are stripped
-// by parseInt stopping at the first non-digit character. This is intentional: on the beta
-// channel an rc tag such as v1.15.1-rc.1 parses as [1,15,1,1] — one extra numeric part
-// appended by the pre-release segment — so it correctly sorts after its stable counterpart
-// v1.15.1 (which parses as [1,15,1]). No code change needed; the behaviour is by design.
 function compareVersions(v1: string, v2: string): number {
-  // Remove 'v' prefix if present
   const clean1 = v1.replace(/^v/, '')
   const clean2 = v2.replace(/^v/, '')
 
-  // Split into parts and convert to numbers
-  const parts1 = clean1.split('.').map((n) => Number.parseInt(n, 10))
-  const parts2 = clean2.split('.').map((n) => Number.parseInt(n, 10))
+  const dashIdx1 = clean1.indexOf('-')
+  const dashIdx2 = clean2.indexOf('-')
+  const core1 = dashIdx1 === -1 ? clean1 : clean1.slice(0, dashIdx1)
+  const core2 = dashIdx2 === -1 ? clean2 : clean2.slice(0, dashIdx2)
+  const pre1 = dashIdx1 === -1 ? '' : clean1.slice(dashIdx1 + 1)
+  const pre2 = dashIdx2 === -1 ? '' : clean2.slice(dashIdx2 + 1)
+
+  const parts1 = core1.split('.').map((n) => Number.parseInt(n, 10))
+  const parts2 = core2.split('.').map((n) => Number.parseInt(n, 10))
 
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const num1 = parts1[i] || 0
-    const num2 = parts2[i] || 0
-
+    const num1 = parts1[i] ?? 0
+    const num2 = parts2[i] ?? 0
     if (num1 < num2) return -1
     if (num1 > num2) return 1
+  }
+
+  // Same core: semver says pre-release < release
+  if (pre1 && !pre2) return -1
+  if (!pre1 && pre2) return 1
+
+  // Both pre-release: compare by trailing numeric segment (rc.7 vs rc.8)
+  if (pre1 && pre2) {
+    const preNum1 = Number.parseInt(pre1.split('.').at(-1) ?? '0', 10)
+    const preNum2 = Number.parseInt(pre2.split('.').at(-1) ?? '0', 10)
+    if (preNum1 < preNum2) return -1
+    if (preNum1 > preNum2) return 1
   }
 
   return 0
