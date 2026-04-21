@@ -41,7 +41,10 @@ bump version:
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
         echo "[bump-version] branch=next — computing RC version"
         # Step 1: compute base version (e.g. 1.17.0) and full changelog since last stable.
-        semantic-release --version-file --allow-no-changes --dry
+        # --changelog here ensures UNRELEASED-CHANGELOG.md exists for the fallback sed below
+        # if Step 2 (--maintained-version) fails (e.g. after stable cuts the prior RC series).
+        # Step 2 overwrites the file when it succeeds, so this is a no-op on the happy path.
+        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
         BASE_VERSION=$(cat .version-unreleased)
         MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
         echo "[bump-version] base_version=${BASE_VERSION} major=${MAJOR}"
