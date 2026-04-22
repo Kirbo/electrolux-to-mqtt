@@ -124,6 +124,38 @@ if eur_rate_stale; then
 fi
 EUR_RATE=$(cat "$RATE_FILE" 2>/dev/null || echo "0.92")
 
+# ---- Sandbox (cached per session) ----
+sandbox_text=""
+SANDBOX_CACHE="/tmp/statusline-sandbox-${session_id}"
+SANDBOX_MAX_AGE=5
+
+sandbox_cache_stale() {
+  [ ! -f "$SANDBOX_CACHE" ] || \
+  [ $(($(date +%s) - $(stat -f %m "$SANDBOX_CACHE" 2>/dev/null || stat -c %Y "$SANDBOX_CACHE" 2>/dev/null || echo 0))) -gt $SANDBOX_MAX_AGE ]
+}
+
+if sandbox_cache_stale; then
+  sb_enabled="false"
+  # Project settings win over user settings
+  for f in "$cwd/.claude/settings.local.json" "$cwd/.claude/settings.json" "$HOME/.claude/settings.json"; do
+    if [ -f "$f" ]; then
+      val=$(jq -r '.sandbox.enabled // empty' "$f" 2>/dev/null)
+      if [ -n "$val" ]; then
+        sb_enabled="$val"
+        break
+      fi
+    fi
+  done
+  echo "$sb_enabled" > "$SANDBOX_CACHE"
+fi
+sb_enabled=$(cat "$SANDBOX_CACHE" 2>/dev/null || echo "false")
+
+if [ "$sb_enabled" = "true" ]; then
+  sandbox_text="${GREEN}[SANDBOX]${RESET}"
+else
+  sandbox_text="${DIM}[no-sandbox]${RESET}"
+fi
+
 # ============================================================
 # Line 1: location — dir, worktree, git, lines changed
 # ============================================================
@@ -220,6 +252,7 @@ done
 # ============================================================
 limit_parts=()
 
+[[ -n "$sandbox_text" ]] && limit_parts+=("$sandbox_text")
 if [[ -n "$rate_5h" ]]; then
   r5=$(printf '%.0f' "$rate_5h")
   if [ "$r5" -ge 90 ]; then c="$RED"; elif [ "$r5" -ge 70 ]; then c="$YELLOW"; else c="$BLUE"; fi
