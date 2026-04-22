@@ -32,6 +32,7 @@ vi.mock('@/cache.js', () => ({
     })),
     matchByValue: vi.fn(() => false),
     get: vi.fn(() => undefined),
+    delete: vi.fn(),
   },
 }))
 
@@ -343,6 +344,21 @@ describe('Orchestrator', () => {
 
       expect(mqtt.unsubscribe).toHaveBeenCalledWith('non-existent/command')
       expect(client.removeAppliance).toHaveBeenCalledWith('non-existent')
+    })
+
+    it('should delete cache entries for both state and autoDiscovery on cleanup', async () => {
+      const { cache } = await import('@/cache.js')
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      vi.mocked(cache.delete).mockClear()
+      orchestrator.cleanupAppliance('appliance-1')
+
+      // Both per-appliance cache keys must be deleted
+      expect(cache.delete).toHaveBeenCalledWith('appliance-1:state')
+      // autoDiscovery key uses the capabilitiesHash from the appliance mock ('mockhash000')
+      expect(cache.delete).toHaveBeenCalledWith('appliance-1:auto-discovery:mockhash000')
+      expect(cache.delete).toHaveBeenCalledTimes(2)
     })
 
     it('should not start polling if appliance was removed while stagger timeout was pending', async () => {

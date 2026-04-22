@@ -235,6 +235,15 @@ export class Orchestrator {
       this.applianceStateIntervals.delete(applianceId)
     }
 
+    // Purge cache entries before removing the instance (capabilitiesHash still reachable here)
+    const appliance = this.applianceInstances.get(applianceId)
+    const { state: stateKey, autoDiscovery: autoDiscoveryKey } = cache.cacheKey(
+      applianceId,
+      appliance?.getCapabilitiesHash(),
+    )
+    cache.delete(stateKey)
+    cache.delete(autoDiscoveryKey)
+
     // Unsubscribe from MQTT commands
     this.mqtt.unsubscribe(`${applianceId}/command`)
 
