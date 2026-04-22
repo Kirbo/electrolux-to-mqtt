@@ -37,7 +37,7 @@ services:
       # - RATE_LIMIT_BREAKER_THRESHOLD=5
       # - RATE_LIMIT_BREAKER_WINDOW_MS=60000
       # - RATE_LIMIT_BREAKER_COOLDOWN_MS=30000
-      - ALLOW_TEST_TELEMETRY=true
+      - ALLOW_TEST_TELEMETRY=${ALLOW_TEST_TELEMETRY:-false}
       - TELEMETRY_BEHIND_PROXY=true   # Set true ONLY when deployed behind a header-rewriting reverse proxy (Caddy, nginx with explicit X-Forwarded-For overwrite). Default false.
     depends_on:
       - redis
