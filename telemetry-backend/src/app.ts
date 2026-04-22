@@ -87,6 +87,17 @@ function parseVersion(raw: string): ParsedVersion {
   }
 }
 
+function comparePreRelease(a: string, b: string): number {
+  // Compare numeric suffix so rc.10 > rc.9 (lexicographic would break)
+  const numA = Number.parseInt(a.split('.').at(-1) ?? '0', 10)
+  const numB = Number.parseInt(b.split('.').at(-1) ?? '0', 10)
+  if (numB !== numA) return numB - numA
+  // Same numeric suffix — fall back to lexicographic prefix comparison
+  if (b > a) return 1
+  if (b < a) return -1
+  return 0
+}
+
 function compareVersionsDescending(a: string, b: string): number {
   const pa = parseVersion(a)
   const pb = parseVersion(b)
@@ -104,13 +115,8 @@ function compareVersionsDescending(a: string, b: string): number {
   if (pa.preRelease === null && pb.preRelease !== null) return -1
   if (pa.preRelease !== null && pb.preRelease === null) return 1
 
-  // Both pre-release — compare numeric suffix so rc.10 > rc.9 (lexicographic would break)
   if (pa.preRelease !== null && pb.preRelease !== null) {
-    const numA = Number.parseInt(pa.preRelease.split('.').at(-1) ?? '0', 10)
-    const numB = Number.parseInt(pb.preRelease.split('.').at(-1) ?? '0', 10)
-    if (numB !== numA) return numB - numA
-    // Same numeric suffix — fall back to lexicographic prefix comparison
-    return pb.preRelease > pa.preRelease ? 1 : pb.preRelease < pa.preRelease ? -1 : 0
+    return comparePreRelease(pa.preRelease, pb.preRelease)
   }
 
   return 0
@@ -190,6 +196,11 @@ type BreakerState = 'closed' | 'open' | 'half-open'
 interface BreakerStatus {
   state: BreakerState
   failures: number
+}
+
+function isTestHashBypass(req: Request): boolean {
+  const { userHash } = req.body as { userHash?: unknown }
+  return process.env.ALLOW_TEST_TELEMETRY === 'true' && typeof userHash === 'string' && userHash.includes('test-hash')
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -335,6 +346,10 @@ export function createApp(deps: AppDependencies): Express {
   }
 
   async function rateLimitByIp(req: Request, res: Response, next: () => void) {
+    // Test-hash bypass skips all rate limiting when ALLOW_TEST_TELEMETRY=true.
+    if (isTestHashBypass(req)) {
+      return next()
+    }
     const ip = getClientIp(req, config.behindProxy)
     const ipKey = `ip:${hashIp(ip, config.rateLimitSalt)}`
     if (!(await enforceRateLimitRedis(ipKey, config.rateLimitIpMax, res))) {
@@ -349,13 +364,8 @@ export function createApp(deps: AppDependencies): Express {
     try {
       const { userHash, version } = req.body as { userHash?: unknown; version?: unknown }
 
-      // Test-hash bypass — runs before rate-limiting so e2e test runs don't consume quota.
-      // Only active when ALLOW_TEST_TELEMETRY=true (never in production by default).
-      if (
-        process.env.ALLOW_TEST_TELEMETRY === 'true' &&
-        typeof userHash === 'string' &&
-        userHash.includes('test-hash')
-      ) {
+      // Test-hash bypass — only active when ALLOW_TEST_TELEMETRY=true (never in production by default).
+      if (isTestHashBypass(req)) {
         return res.json({ success: true, message: 'Test data ignored' })
       }
 
