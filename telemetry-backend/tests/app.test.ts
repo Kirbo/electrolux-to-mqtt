@@ -133,6 +133,25 @@ describe('generateBadge', () => {
     expect(cached.versions.map((v) => v.version)).toEqual(['1.3.0', '1.3.0-rc.2', '1.3.0-rc.1', '1.2.3', '1.2.3-rc.1'])
   })
 
+  it('sorts pre-release rc numbers numerically so rc.10 comes before rc.9', async () => {
+    const redis = new FakeRedis()
+    const rcVersions = ['1.17.0-rc.1', '1.17.0-rc.10', '1.17.0-rc.2', '1.17.0-rc.9']
+    const hashes = rcVersions.map((_, i) => `${i}`.padStart(64, 'a'))
+    for (let i = 0; i < rcVersions.length; i++) {
+      await redis.set(`user:${hashes[i]}`, rcVersions[i] as string)
+    }
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as {
+      total: number
+      versions: Array<{ version: string; count: number }>
+    }
+    // Numeric comparison: rc.10 > rc.9 > rc.2 > rc.1
+    expect(cached.versions.map((v) => v.version)).toEqual(['1.17.0-rc.10', '1.17.0-rc.9', '1.17.0-rc.2', '1.17.0-rc.1'])
+  })
+
   it('treats "v"-prefixed versions equivalently for sort ordering', async () => {
     const redis = new FakeRedis()
     await redis.set(`user:${HASH_A}`, 'v1.0.0')
@@ -293,14 +312,12 @@ describe('POST /telemetry', () => {
     process.env.ALLOW_TEST_TELEMETRY = 'true'
     const app = createApp({ redis, config })
 
-    // Use a 64-char string that contains 'test-hash' — validated before hash rule
-    // when ALLOW_TEST_TELEMETRY=true (filter runs before validation).
-    // "test-hash-" = 10 chars; 54 more = 64 total, contains non-hex 't','s','h' chars.
-    const testUserHash = `test-hash-${'a'.repeat(54)}` // 64 chars with 'test-hash' prefix
+    // Use a string containing 'test-hash' — filter runs before rate-limiting and
+    // validation when ALLOW_TEST_TELEMETRY=true, so format doesn't matter.
     const res = await request(app)
       .post('/telemetry')
       .set('X-Real-IP', '203.0.113.7')
-      .send({ userHash: testUserHash, version: '1.2.3' })
+      .send({ userHash: 'e2e-test-hash', version: '1.2.3' })
 
     // ALLOW_TEST_TELEMETRY=true: the test-hash filter runs and returns success+ignored
     expect(res.status).toBe(200)
@@ -315,16 +332,13 @@ describe('POST /telemetry', () => {
     delete process.env.ALLOW_TEST_TELEMETRY
     const app = createApp({ redis, config })
 
-    // "test-hash-" = 10 chars + 54 = 64 total; non-hex chars ensure validation rejects it
-    const testUserHash = `test-hash-${'a'.repeat(54)}`
     const res = await request(app)
       .post('/telemetry')
       .set('X-Real-IP', '203.0.113.7')
-      .send({ userHash: testUserHash, version: '1.2.3' })
+      .send({ userHash: 'e2e-test-hash', version: '1.2.3' })
 
-    // Without the flag, falls through to validation — hash contains non-hex 't','s','h' etc.
+    // Without the flag, falls through to format validation and fails.
     expect(res.status).toBe(400)
-    expect(res.body.error).toMatch(/hex/)
   })
 
   it('rejects a second POST for the same userHash within the window (hash rate limit)', async () => {

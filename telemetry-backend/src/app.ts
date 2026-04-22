@@ -104,8 +104,12 @@ function compareVersionsDescending(a: string, b: string): number {
   if (pa.preRelease === null && pb.preRelease !== null) return -1
   if (pa.preRelease !== null && pb.preRelease === null) return 1
 
-  // Both pre-release — compare lexicographically (rc.2 > rc.1 works naturally)
+  // Both pre-release — compare numeric suffix so rc.10 > rc.9 (lexicographic would break)
   if (pa.preRelease !== null && pb.preRelease !== null) {
+    const numA = Number.parseInt(pa.preRelease.split('.').at(-1) ?? '0', 10)
+    const numB = Number.parseInt(pb.preRelease.split('.').at(-1) ?? '0', 10)
+    if (numB !== numA) return numB - numA
+    // Same numeric suffix — fall back to lexicographic prefix comparison
     return pb.preRelease > pa.preRelease ? 1 : pb.preRelease < pa.preRelease ? -1 : 0
   }
 
@@ -345,6 +349,16 @@ export function createApp(deps: AppDependencies): Express {
     try {
       const { userHash, version } = req.body as { userHash?: unknown; version?: unknown }
 
+      // Test-hash bypass — runs before rate-limiting so e2e test runs don't consume quota.
+      // Only active when ALLOW_TEST_TELEMETRY=true (never in production by default).
+      if (
+        process.env.ALLOW_TEST_TELEMETRY === 'true' &&
+        typeof userHash === 'string' &&
+        userHash.includes('test-hash')
+      ) {
+        return res.json({ success: true, message: 'Test data ignored' })
+      }
+
       // Hash rate limit before any validation.
       // When userHash is not a valid string, skip the hash rate-limit
       // (rely on per-IP rate-limit only) — avoids the hash:unknown-<ip>
@@ -358,11 +372,6 @@ export function createApp(deps: AppDependencies): Express {
 
       if (typeof userHash !== 'string' || !userHash || typeof version !== 'string' || !version) {
         return res.status(400).json({ error: 'userHash and version are required' })
-      }
-
-      // Ignore test data — only enabled when ALLOW_TEST_TELEMETRY=true
-      if (process.env.ALLOW_TEST_TELEMETRY === 'true' && userHash.includes('test-hash')) {
-        return res.json({ success: true, message: 'Test data ignored' })
       }
 
       const validationError = validateTelemetryPayload(userHash, version)

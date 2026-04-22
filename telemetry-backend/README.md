@@ -37,7 +37,7 @@ Store telemetry data for a user.
 ```
 
 ### GET /telemetry
-Get aggregated telemetry statistics. Versions are sorted by user count descending, then by version descending for ties. The list is capped at 100 entries.
+Get aggregated telemetry statistics. Versions are sorted by version descending, capped at 100 entries.
 
 **Response:**
 ```json
@@ -63,6 +63,8 @@ Get aggregated telemetry statistics. Versions are sorted by user count descendin
 ## Deployment
 
 The telemetry backend uses the Node.js version from the root `.nvmrc` file and package manager from `package.json` to ensure version consistency across the project.
+
+Copy `.env.example` to `.env` and fill in values before starting the stack. `RATE_LIMIT_SALT` is optional — `docker-compose.yml` mounts the host `/etc/machine-id` read-only so the backend can use it as a fallback automatically.
 
 ```bash
 cd telemetry-backend
@@ -91,7 +93,7 @@ All health endpoints are exempt from rate limiting and authentication.
 - `RATE_LIMIT_WINDOW_MS` - Rate limit window in ms (default: 60000)
 - `RATE_LIMIT_IP_MAX` - Max requests per IP per window (default: 10)
 - `RATE_LIMIT_HASH_MAX` - Max requests per userHash per window (default: 1)
-- `RATE_LIMIT_SALT` - **Recommended in production.** Secret salt used to hash IPs for rate limiting. Defaults to `/etc/machine-id` if available, otherwise hostname. In production, the server refuses to start if this is unset and `/etc/machine-id` is not readable — set an explicit random secret.
+- `RATE_LIMIT_SALT` - Secret salt used to hash IPs for rate limiting. Optional when using `docker-compose.yml` — the host `/etc/machine-id` is mounted read-only and used automatically as fallback. Set an explicit random secret for extra security (e.g. `openssl rand -hex 32`).
 - `TELEMETRY_BEHIND_PROXY` - Set to `true`/`1`/`yes` ONLY when deployed behind a trusted reverse proxy that overwrites client-supplied IP headers (Caddy, nginx, Traefik with `trustForwardHeader`, etc.). Default `false`. **Security-critical**: when `false`, the per-IP rate limiter uses the raw TCP source address (impossible to spoof). When `true`, it trusts `req.ip` (Express, populated from `X-Forwarded-For`) with `X-Real-IP` as a legacy fallback. Setting `true` without a header-rewriting proxy in front allows attackers to bypass the rate limit by rotating client headers.
 - `RATE_LIMIT_BREAKER_THRESHOLD` - Number of consecutive Redis rate-limit failures before the circuit breaker opens. Default: 5. When open, `/telemetry` returns 503 until the breaker resets.
 - `RATE_LIMIT_BREAKER_WINDOW_MS` - Rolling window (ms) for counting consecutive failures. Default: 60000.
