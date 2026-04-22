@@ -22,9 +22,27 @@ Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This f
     auditor.md                   # /audit work
     maintainer.md                # /maintain work
   agent-memory/
+    shared/                      # Shared memories for all agents (feedback, user, project)
+      MEMORY.md                  # Index of all shared memories (auto-loaded each session)
+      feedback_*.md              # Workflow preferences and coding rules learned from sessions
+      user_*.md / project_*.md   # User profile and project context
     auditor/                     # Persistent cross-session memory for the auditor agent
     maintainer/                  # Persistent cross-session memory for the maintainer agent
 ```
+
+### Contributor setup: shared agent memory
+
+Agent memories in `.claude/agent-memory/` are committed to the repo so all contributors benefit from the accumulated project knowledge (coding preferences, known pitfalls, workflow rules).
+
+To activate this, add one line to your `.claude/settings.local.json` (create it if it doesn't exist):
+
+```json
+{
+  "autoMemoryDirectory": "/absolute/path/to/electrolux-to-mqtt/.claude/agent-memory/shared"
+}
+```
+
+Replace the path with the absolute path to your local clone. Without this, Claude Code writes memories to a global per-project cache that isn't shared.
 
 ### Skills (slash commands)
 

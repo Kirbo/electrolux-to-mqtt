@@ -1,0 +1,3 @@
+- [E2E snapshots are source of truth](feedback_e2e_snapshot_sync.md) — model-specific dirs; propagate API values to types automatically
+- [Single source of truth](feedback_single_source_of_truth.md) — no duplication across instruction files; cross-reference instead
+- [Run Biome before committing](feedback_biome_before_commit.md) — pnpm check before every commit; stage Biome's formatting changes and include in the same commit
