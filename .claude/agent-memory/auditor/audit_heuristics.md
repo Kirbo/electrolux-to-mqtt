@@ -14,7 +14,7 @@ type: project
 ## Known safe patterns (not findings)
 
 - `normalizers.ts`: all `as OnOffState`, `as NormalizedClimateMode`, etc. preceded by `VALID_*.has()` set checks — intentional, not unsafe casts
-- `mqtt.ts`: `return value as QoS` preceded by `VALID_QOS.has(value)` — safe
+- `mqtt.ts:11`: `(config.mqtt.qos ?? 2) as QoS` — safe because `configSchema` enforces `int().min(0).max(2)` before this executes (comment on prior line documents the guard)
 - `electrolux.ts`: `tokenPayload as { exp: number; iat: number }` preceded by `typeof` checks both fields — safe
 - `normalizers.ts`: `rawState as unknown as Appliance['properties']['reported']` preceded by `'in'` checks three required fields — safe
 - Empty catches in `logger.ts` (timezone fallback), `mqtt.ts` (JSON.parse debug log), `electrolux.ts` (URL parse fallback), `health.ts` (read failure returns false), `config.ts` (write failure uses in-memory config) — all documented
@@ -35,6 +35,10 @@ type: project
 
 ### `noUncheckedIndexedAccess` + index-style loops
 `tsconfig.json` has `noUncheckedIndexedAccess: true`. `arr[i]` types as `T | undefined`; TypeScript does NOT narrow from bounds-check loop condition. Prefer `for...of` + `.entries()` over `for (let i = 0; i < arr.length; i++)`. Exception: `(T|undefined) || 0` coerces to number, accepted (see `version-checker.ts`'s `parts1[i] || 0`).
+
+## E2E test gating vs live backends
+
+`tests/e2e/version-checker.e2e.test.ts` "should send telemetry to backend" uses `ctx.skip()` only on `axios 400 + 'userHash length is invalid'` — signalling `ALLOW_TEST_TELEMETRY=false` on live backend. Any other error (e.g. `429` rate-limit) correctly surfaces as a test failure by design (CLAUDE.md "no silent error swallowing"). When auditing, do NOT flag 429 or similar as a code regression — it's environmental flake on the live telemetry backend, not a gating gap.
 
 ## API type union maintenance
 

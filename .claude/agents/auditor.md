@@ -102,7 +102,9 @@ Extra robustness checks beyond checklist:
 
 #### 10. E2E snapshots
 
-> Check presence with `ls config.yml` or `test -f config.yml` — `config.yml` gitignored, will NOT appear in `git status`, `git ls-files`, or any git-aware tool. Do not infer absence from git output. Skip this section only if direct filesystem check confirms file missing.
+> **Mandatory when `config.yml` exists.** Run `test -f config.yml` — `config.yml` is gitignored and will NOT appear in `git status`, `git ls-files`, or any git-aware tool. Do not infer absence from git output.
+> - File **missing** → skip this section entirely.
+> - File **present** → run ALL items below. No scope-based skipping. Scope reasoning ("changes don't touch normalizers/types/appliances") is NOT a valid reason to skip when the file exists.
 
 - [ ] `pnpm test:e2e` passes
 - [ ] Per model in `tests/e2e/snapshots/{model}/`:
