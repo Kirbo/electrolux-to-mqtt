@@ -96,7 +96,7 @@ describe('generateBadge', () => {
     expect(await readJson(redis, 'cached:telemetry')).toEqual({ total: 0, versions: [] })
   })
 
-  it('aggregates user versions and sorts them by version desc, then count desc for ties', async () => {
+  it('aggregates user versions and sorts them by version desc', async () => {
     const redis = new FakeRedis()
     await redis.set(`user:${HASH_A}`, '1.0.0')
     await redis.set(`user:${HASH_B}`, '2.3.1')
@@ -105,7 +105,7 @@ describe('generateBadge', () => {
 
     await generateBadge({ redis, config })
 
-    // Version desc: 2.3.1 (count 1) before 1.0.0 (count 2)
+    // Version desc: 2.3.1 before 1.0.0
     expect(await readJson(redis, 'cached:telemetry')).toEqual({
       total: 3,
       versions: [

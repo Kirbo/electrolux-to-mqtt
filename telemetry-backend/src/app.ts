@@ -156,14 +156,10 @@ export async function generateBadge({ redis, config }: AppDependencies): Promise
         },
         {} as Record<string, number>,
       )
-      // Cap to top 100 entries: sort by version desc, then by count desc for ties.
+      // Cap to top 100 entries: sort by version desc.
       const versionsList = Object.entries(versionCounts)
         .map(([version, count]) => ({ version, count }))
-        .sort((a, b) => {
-          const versionDiff = compareVersionsDescending(a.version, b.version)
-          if (versionDiff !== 0) return versionDiff
-          return b.count - a.count
-        })
+        .sort((a, b) => compareVersionsDescending(a.version, b.version))
         .slice(0, 100)
       await redis.set(CACHED_TELEMETRY_KEY, JSON.stringify({ total, versions: versionsList }))
     }
