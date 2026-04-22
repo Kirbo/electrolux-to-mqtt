@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { LRU } from 'tiny-lru'
 import { canonicalStringify } from './canonical-stringify.js'
 import config from './config.js'
@@ -16,20 +15,8 @@ type CacheKeys = {
   autoDiscovery: string
 }
 
-/**
- * Hash an arbitrary value for equality comparison.
- * Returns a 16-char hex prefix — sufficient for cache-equality use.
- * Non-cryptographic use: used only to compare two serialised values for
- * equality, not for security purposes. NOSONAR
- */
-function hashOfValue(value: unknown): string {
-  return createHash('sha256').update(canonicalStringify(value)).digest('hex').slice(0, 16) // NOSONAR
-}
-
 export class Cache {
   private readonly lru: LRU<string>
-  /** Stores value hashes keyed by cache key for O(1) equality check. */
-  private readonly hashStore = new Map<string, string>()
 
   constructor(max = maxItems, ttl = defaultTtl, resetTtl = defaultResetTtl) {
     this.lru = new LRU<string>(max, ttl, resetTtl)
@@ -49,17 +36,28 @@ export class Cache {
     }
   }
 
+  /**
+   * Returns true if the stored canonical form of the value matches the
+   * incoming value — i.e. the value has not changed since last stored.
+   *
+   * Uses the LRU as the single store: if the key was evicted, `lru.get`
+   * returns `undefined` and we treat that as a MISS, preventing stale
+   * hashStore entries from causing false positives.
+   */
   matchByValue(key: string, value: unknown): boolean {
-    const incoming = hashOfValue(value)
-    const stored = this.hashStore.get(key)
-    if (stored === incoming) {
+    const incoming = canonicalStringify(value)
+    const stored = this.lru.get(key)
+    if (stored !== undefined && stored === incoming) {
       if (!skipCacheLogging) {
         logger.debug(`Key "${key}" value has not changed.`)
       }
       return true
     }
 
-    this.set(key, value)
+    this.lru.set(key, incoming)
+    if (!skipCacheLogging) {
+      logger.debug(`Set "${key}" value:`, value)
+    }
     return false
   }
 
@@ -72,9 +70,7 @@ export class Cache {
   }
 
   set(key: string, value: unknown): this {
-    const json = JSON.stringify(value)
-    this.lru.set(key, json)
-    this.hashStore.set(key, hashOfValue(value))
+    this.lru.set(key, canonicalStringify(value))
     if (!skipCacheLogging) {
       logger.debug(`Set "${key}" value:`, value)
     }
@@ -87,7 +83,6 @@ export class Cache {
 
   delete(key: string): this {
     this.lru.delete(key)
-    this.hashStore.delete(key)
     return this
   }
 }

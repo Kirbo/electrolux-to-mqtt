@@ -180,6 +180,25 @@ describe('Cache', () => {
     })
   })
 
+  describe('LRU eviction — hashStore drift (NIT fix)', () => {
+    it('should return MISS when LRU has evicted the key, even with the same value', () => {
+      // max=2: only 2 entries fit. After filling 3 keys the first key is evicted.
+      const cache = new Cache(2)
+      const value = { temp: 21 }
+
+      // Prime key-A
+      cache.matchByValue('key-A', value) // MISS — stores key-A
+
+      // Fill the LRU to capacity — key-A gets evicted on the third insert
+      cache.matchByValue('key-B', { temp: 22 })
+      cache.matchByValue('key-C', { temp: 23 })
+
+      // key-A is no longer in the LRU. matchByValue must return false (MISS),
+      // not true — even though the value is unchanged.
+      expect(cache.matchByValue('key-A', value)).toBe(false)
+    })
+  })
+
   describe('m4 — capability-hashed autoDiscovery cache key', () => {
     it('should produce the legacy autoDiscovery key when no hash is provided', () => {
       const cache = new Cache()
