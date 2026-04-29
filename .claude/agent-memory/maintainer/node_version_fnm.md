@@ -1,11 +1,11 @@
 ---
 name: Node version management with fnm
-description: Local machine runs Node 25; engine-strict=true blocks pnpm; use fnm Node 24 path directly
+description: Shell inherits fnm multishell symlink for Node 24; plain pnpm/node work in Claude Code sessions
 type: project
 ---
 
-Local dev machine runs Node v25.9.0 but project `engines` requires `>=24.0.0 <25.0.0` and `.npmrc` has `engine-strict=true`.
+Claude Code sessions inherit fnm's multishell symlink environment. `node --version` resolves to v24.14.1 and `pnpm` works without any PATH prefix — plain `pnpm <cmd>` is sufficient.
 
-fnm has Node 24.14.1 installed at: `/Users/kimmo.saari/.local/share/fnm/node-versions/v24.14.1/installation/bin/`
+The old path `/Users/kimmo.saari/.fnm/node-versions/v24.14.1/installation/bin/` does not exist (fnm stores versions at `/Users/kimmo.saari/.local/share/fnm/node-versions/`), but that path is also unnecessary because the shell multishell symlink already resolves Node 24 correctly.
 
-**How to apply:** Prefix all pnpm commands with `PATH="/Users/kimmo.saari/.local/share/fnm/node-versions/v24.14.1/installation/bin:$PATH"` to run on the correct Node version. `fnm use 24` via `eval "$(fnm env)"` fails in sandbox due to symlink permission restrictions.
+**How to apply:** Use plain `pnpm <cmd>` — no PATH prefix needed. Verify with `node --version` if uncertain.
