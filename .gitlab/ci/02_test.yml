@@ -107,6 +107,10 @@ typecheck:
 audit:
   extends: .osv_scanner
   stage: test
+  image: node:${NODE_VERSION}
+  needs:
+    - job: initialise variables
+      artifacts: true
   rules:
     - if: '$SCHEDULE == "AUDIT"'
       when: on_success
@@ -117,12 +121,22 @@ audit:
       when: on_success
     - when: never
   script:
-    - sh scripts/osv-scan.sh root
+    - corepack enable
+    - corepack install
+    - |
+      EXIT=0
+      pnpm audit || EXIT=$?
+      sh scripts/osv-scan.sh root || EXIT=$?
+      exit $EXIT
   allow_failure: false
 
 audit:backend:
   extends: .osv_scanner
   stage: test
+  image: node:${NODE_VERSION}
+  needs:
+    - job: initialise variables
+      artifacts: true
   rules:
     - if: '$SCHEDULE == "AUDIT"'
       when: on_success
@@ -133,7 +147,13 @@ audit:backend:
       when: on_success
     - when: never
   script:
-    - sh scripts/osv-scan.sh backend
+    - corepack enable
+    - corepack install
+    - |
+      EXIT=0
+      pnpm -C telemetry-backend audit || EXIT=$?
+      sh scripts/osv-scan.sh backend || EXIT=$?
+      exit $EXIT
   allow_failure: false # Internet-facing backend — hard-fail on CVEs so supply-chain issues block the pipeline.
 
 sonarcloud-check:
