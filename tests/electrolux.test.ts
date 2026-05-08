@@ -475,33 +475,6 @@ describe('electrolux', () => {
     })
   })
 
-  describe('API constants', () => {
-    it('should define token refresh threshold', () => {
-      const TOKEN_REFRESH_THRESHOLD_HOURS = 6
-      expect(TOKEN_REFRESH_THRESHOLD_HOURS).toBe(6)
-    })
-
-    it('should define command state delay', () => {
-      const COMMAND_STATE_DELAY_MS = 30_000
-      expect(COMMAND_STATE_DELAY_MS).toBe(30000)
-    })
-
-    it('should define error response max length', () => {
-      const ERROR_RESPONSE_MAX_LENGTH = 200
-      expect(ERROR_RESPONSE_MAX_LENGTH).toBe(200)
-    })
-
-    it('should define login retry delay', () => {
-      const LOGIN_RETRY_DELAY_MS = 5_000
-      expect(LOGIN_RETRY_DELAY_MS).toBe(5000)
-    })
-
-    it('should define token refresh retry delay', () => {
-      const TOKEN_REFRESH_RETRY_DELAY_MS = 5_000
-      expect(TOKEN_REFRESH_RETRY_DELAY_MS).toBe(5000)
-    })
-  })
-
   describe('Base64 encoding', () => {
     it('should encode credentials correctly', () => {
       const username = 'test@example.com'
@@ -548,14 +521,6 @@ describe('electrolux', () => {
 
       const isExpired = now >= tokenExpiresAt
       expect(isExpired).toBe(false)
-    })
-
-    it('should calculate refresh threshold correctly', () => {
-      const TOKEN_REFRESH_THRESHOLD_HOURS = 6
-      const thresholdMs = TOKEN_REFRESH_THRESHOLD_HOURS * 60 * 60 * 1000
-
-      expect(thresholdMs).toBe(6 * 60 * 60 * 1000)
-      expect(thresholdMs).toBe(21600000)
     })
   })
 
@@ -629,26 +594,11 @@ describe('electrolux', () => {
       expect(urlObj.pathname).toBe('/api/v1/appliances')
     })
 
-    it('should handle relative URLs', () => {
-      const url = '/api/v1/appliances'
-      expect(url).toBe('/api/v1/appliances')
-    })
-
     it('should handle URLs with query parameters', () => {
       const url = 'https://api.example.com/api/v1/appliances?limit=10'
       const urlObj = new URL(url)
       expect(urlObj.pathname).toBe('/api/v1/appliances')
       expect(urlObj.search).toBe('?limit=10')
-    })
-
-    it('should handle empty URL', () => {
-      const url = ''
-      expect(url).toBe('')
-    })
-
-    it('should handle undefined URL', () => {
-      const url = undefined
-      expect(url).toBeUndefined()
     })
   })
 
@@ -717,12 +667,6 @@ describe('electrolux', () => {
   })
 
   describe('command state delay', () => {
-    it('should wait correct delay after command', () => {
-      const COMMAND_STATE_DELAY_MS = 30_000
-      expect(COMMAND_STATE_DELAY_MS).toBe(30000)
-      expect(COMMAND_STATE_DELAY_MS).toBe(30 * 1000)
-    })
-
     it('should track command time per appliance', () => {
       const lastCommandTime = new Map<string, number>()
       const applianceId = 'test-123'
@@ -921,16 +865,6 @@ describe('electrolux', () => {
       const state2 = { mode: 'cool', temperature: null }
 
       expect(JSON.stringify(state1)).toBe(JSON.stringify(state2))
-    })
-
-    it('should normalize undefined to null', () => {
-      const value1 = undefined
-      const value2 = null
-
-      const normalized1 = value1 ?? null
-      const normalized2 = value2 ?? null
-
-      expect(normalized1).toBe(normalized2)
     })
   })
 
