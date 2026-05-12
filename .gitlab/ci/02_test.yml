@@ -144,6 +144,7 @@ audit:backend:
       changes:
         - telemetry-backend/package.json
         - telemetry-backend/pnpm-lock.yaml
+        - telemetry-backend/pnpm-workspace.yaml
       when: on_success
     - when: never
   script:

@@ -13,6 +13,7 @@ initialise variables:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - telemetry-backend/**/*
         - tests/**/*

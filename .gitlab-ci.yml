@@ -51,6 +51,7 @@ default:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tests/**/*
         - tsconfig.json
@@ -71,6 +72,7 @@ default:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - telemetry-backend/**/*
         - tests/**/*
@@ -89,6 +91,7 @@ default:
         - biome.jsonc
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tests/**/*
         - tsconfig.json
@@ -109,6 +112,7 @@ default:
         - biome.jsonc
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tests/**/*
         - tsconfig.json

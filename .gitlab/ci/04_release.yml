@@ -11,6 +11,7 @@ build and deploy docker images:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tsconfig.json
       when: on_success
@@ -56,6 +57,7 @@ create gitlab release:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tsconfig.json
       when: on_success
@@ -87,6 +89,7 @@ build and deploy rc docker images:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tsconfig.json
       when: on_success
@@ -130,6 +133,7 @@ create gitlab prerelease:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tsconfig.json
       when: on_success

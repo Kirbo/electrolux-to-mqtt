@@ -36,7 +36,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Copy only dependency manifests first for better layer caching
-COPY package.json pnpm-lock.yaml CHANGELOG.md ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml CHANGELOG.md ./
 
 # Install dependencies (including dev dependencies for building)
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \

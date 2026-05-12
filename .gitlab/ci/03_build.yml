@@ -11,6 +11,7 @@ try to build docker images:
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - src/**/*
         - tsconfig.json
       when: on_success
