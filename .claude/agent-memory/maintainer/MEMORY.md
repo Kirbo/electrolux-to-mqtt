@@ -1,3 +1,4 @@
 - [follow-redirects vuln GHSA-r4q5-vmmm-2653](vuln_follow_redirects.md) — axios ^1.15.11 has fix; lockfile update resolves
 - [@types/node must stay pinned to ^24](dep_atypes_node_pin.md) — pnpm update --latest drifts to ^25; re-pin after every deps:update run
-- [Local machine on Node 25, use fnm v24 path](node_version_fnm.md) — engine-strict=true; prefix commands with fnm v24.14.1 bin path
+- [Node 24 via fnm multishell — plain pnpm works](node_version_fnm.md) — fnm symlink resolves v24.14.1; no PATH prefix needed in Claude Code sessions
+- [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
