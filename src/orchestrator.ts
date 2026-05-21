@@ -15,6 +15,7 @@ export interface OrchestratorConfig {
   autoDiscovery: boolean
   apiFailureRestartThresholdMs: number
   healthCheckEnabled: boolean
+  applianceRemovalGracePeriodMs: number
 }
 
 export class Orchestrator implements AsyncDisposable {
@@ -24,6 +25,7 @@ export class Orchestrator implements AsyncDisposable {
   private readonly activeTimeouts = new Set<NodeJS.Timeout>()
   private readonly applianceInstances = new Map<string, BaseAppliance>()
   private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
+  private readonly applianceMissingSince = new Map<string, number>()
   private lastSuccessfulApiCall = Date.now()
   private _reconnectRegistered = false
   public isShuttingDown = false
@@ -260,32 +262,60 @@ export class Orchestrator implements AsyncDisposable {
   }
 
   /**
-   * Discover and manage appliances dynamically
+   * Discover and manage appliances dynamically.
+   *
+   * Only a successful 200 response (array, including []) advances the
+   * missing-since timer. API failures (undefined return) are "no signal"
+   * and must not touch the timer — they return early without mutation.
+   *
+   * An appliance is cleaned up only after it has been continuously absent
+   * from successful responses for at least applianceRemovalGracePeriodMs.
    */
   public async discoverAppliances() {
     try {
       const appliances = await this.client.getAppliances()
 
       if (!appliances) {
-        // API call failed (network error, DNS failure, etc.) - skip discovery
-        // Don't treat this as "no appliances" to avoid cleaning up existing ones
+        // API call failed (network error, DNS failure, etc.) — skip discovery.
+        // Do not touch the missing-since map: failures are not authoritative.
         logger.debug('Skipping appliance discovery due to API error')
         return
       }
 
       if (appliances.length === 0) {
         logger.warn('No appliances found during discovery check')
-        return
+        // Do NOT return here: an empty authoritative response still advances
+        // the missing-since timer for every managed appliance.
       }
 
       const currentApplianceIds = new Set(appliances.map((a: ApplianceStub) => a.applianceId))
       const knownApplianceIds = new Set(this.applianceInstances.keys())
+      const now = Date.now()
 
-      // Find new appliances
+      // Update missing-since map for managed appliances
+      for (const id of knownApplianceIds) {
+        if (currentApplianceIds.has(id)) {
+          // Appliance is present — reset any prior missing-since entry
+          this.applianceMissingSince.delete(id)
+        } else {
+          // Appliance absent — record first-missed timestamp (preserve original)
+          if (!this.applianceMissingSince.has(id)) {
+            this.applianceMissingSince.set(id, now)
+          }
+        }
+      }
+
+      // Sweep: clean up appliances that have exceeded the grace period
+      for (const [id, missingSince] of this.applianceMissingSince) {
+        if (now - missingSince >= this.config.applianceRemovalGracePeriodMs) {
+          logger.info(`Appliance ${id} absent for ≥ grace period — removing`)
+          this.cleanupAppliance(id)
+          this.applianceMissingSince.delete(id)
+        }
+      }
+
+      // Find new appliances (present in API response but not yet managed)
       const newAppliances = appliances.filter((a: ApplianceStub) => !knownApplianceIds.has(a.applianceId))
-
-      // Find removed appliances
-      const removedApplianceIds = Array.from(knownApplianceIds).filter((id) => !currentApplianceIds.has(id))
 
       // Initialize new appliances
       if (newAppliances.length > 0) {
@@ -298,15 +328,7 @@ export class Orchestrator implements AsyncDisposable {
         }
       }
 
-      // Clean up removed appliances
-      if (removedApplianceIds.length > 0) {
-        logger.info(`Detected ${removedApplianceIds.length} removed appliance(s)`)
-        for (const applianceId of removedApplianceIds) {
-          this.cleanupAppliance(applianceId)
-        }
-      }
-
-      if (newAppliances.length === 0 && removedApplianceIds.length === 0) {
+      if (newAppliances.length === 0 && this.applianceMissingSince.size === 0) {
         logger.debug('No appliance changes detected')
       }
     } catch (error) {

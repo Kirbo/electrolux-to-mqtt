@@ -99,6 +99,7 @@ const defaultConfig: OrchestratorConfig = {
   autoDiscovery: true,
   apiFailureRestartThresholdMs: 2700000, // 45 minutes
   healthCheckEnabled: true,
+  applianceRemovalGracePeriodMs: 1800000, // 30 minutes
 }
 
 const mockStub: ApplianceStub = {
@@ -422,7 +423,7 @@ describe('Orchestrator', () => {
       // let's use a different appliance set instead
     })
 
-    it('should detect removed appliances when different set returned', async () => {
+    it('should detect removed appliances when different set returned (after grace period)', async () => {
       // Initialize with appliance-1
       vi.mocked(client.getAppliances).mockResolvedValue([mockStub])
       await orchestrator.discoverAppliances()
@@ -434,8 +435,16 @@ describe('Orchestrator', () => {
         created: '2024-01-01T00:00:00Z',
       }
 
-      // Discovery now returns appliance-2 only — appliance-1 was removed
+      // First sweep: appliance-1 absent — timer starts
       vi.mocked(client.getAppliances).mockResolvedValue([anotherStub])
+      await orchestrator.discoverAppliances()
+      // Grace period not elapsed yet — appliance-1 is still managed
+      expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Advance past the grace period (defaultConfig: 1800000 ms = 30 min)
+      vi.setSystemTime(Date.now() + defaultConfig.applianceRemovalGracePeriodMs + 1000)
+
+      // Second sweep: still absent, grace elapsed → cleanup fires
       await orchestrator.discoverAppliances()
 
       expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(false)
@@ -462,6 +471,163 @@ describe('Orchestrator', () => {
       vi.mocked(client.getAppliances).mockRejectedValue(new Error('API error'))
 
       await expect(orchestrator.discoverAppliances()).resolves.not.toThrow()
+    })
+
+    it('does not clean up an appliance after a single partial discovery response', async () => {
+      // Initialize APPLIANCE_A so the orchestrator manages it
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub])
+      await orchestrator.discoverAppliances()
+      expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Reset call trackers so we only observe what happens during the partial response
+      vi.mocked(mqtt.unsubscribe).mockClear()
+      vi.mocked(mqtt.publish).mockClear()
+
+      // Simulate a partial API response: non-empty but APPLIANCE_A is absent (transient hiccup)
+      const applianceBStub: ApplianceStub = {
+        applianceId: 'appliance-b',
+        applianceName: 'Other AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(client.getAppliances).mockResolvedValue([applianceBStub])
+
+      await orchestrator.discoverAppliances()
+
+      // APPLIANCE_A should still be managed — one partial response must not trigger cleanup
+      expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // No unsubscribe for APPLIANCE_A's command topic
+      expect(mqtt.unsubscribe).not.toHaveBeenCalledWith('appliance-1/command')
+
+      // No disconnected state published for APPLIANCE_A
+      expect(mqtt.publish).not.toHaveBeenCalledWith(
+        'appliance-1/state',
+        expect.stringContaining('"connectionState":"disconnected"'),
+      )
+    })
+
+    it('cleans up an appliance once it has been absent for >= the grace period', async () => {
+      const gracePeriodMs = 5000
+      const shortGraceOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        applianceRemovalGracePeriodMs: gracePeriodMs,
+      })
+
+      // Set up: initialize appliance-1
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Reset call trackers
+      vi.mocked(mqtt.unsubscribe).mockClear()
+      vi.mocked(mqtt.publish).mockClear()
+
+      // First sweep: appliance absent — timer starts
+      const applianceBStub: ApplianceStub = {
+        applianceId: 'appliance-b',
+        applianceName: 'Other AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(client.getAppliances).mockResolvedValue([applianceBStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      // Grace period not yet elapsed — still managed
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Advance system time past the grace period
+      vi.setSystemTime(Date.now() + gracePeriodMs + 100)
+
+      // Second sweep: still absent + grace period exceeded → cleanup fires
+      await shortGraceOrchestrator.discoverAppliances()
+
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(false)
+      expect(mqtt.unsubscribe).toHaveBeenCalledWith('appliance-1/command')
+      expect(mqtt.publish).toHaveBeenCalledWith(
+        'appliance-1/state',
+        expect.stringContaining('"connectionState":"disconnected"'),
+      )
+    })
+
+    it('does not advance the missing-since timer when a discovery sweep returns undefined (API failure)', async () => {
+      const gracePeriodMs = 5000
+      const shortGraceOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        applianceRemovalGracePeriodMs: gracePeriodMs,
+      })
+
+      // Initialize appliance-1
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub])
+      await shortGraceOrchestrator.discoverAppliances()
+
+      // First absence sweep: timer starts at T0
+      const applianceBStub: ApplianceStub = {
+        applianceId: 'appliance-b',
+        applianceName: 'Other AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(client.getAppliances).mockResolvedValue([applianceBStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Advance time to just under the grace period
+      vi.setSystemTime(Date.now() + gracePeriodMs - 500)
+
+      // API failure sweep: returns undefined — must not touch the timer or trigger cleanup
+      vi.mocked(client.getAppliances).mockResolvedValue(null as unknown as ApplianceStub[])
+      await shortGraceOrchestrator.discoverAppliances()
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Advance time past grace period from T0
+      vi.setSystemTime(Date.now() + 600)
+
+      // Next successful absence sweep — now past grace period → cleanup fires
+      vi.mocked(client.getAppliances).mockResolvedValue([applianceBStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(false)
+    })
+
+    it('resets the missing-since timer when an appliance reappears before the grace period elapses', async () => {
+      const gracePeriodMs = 5000
+      const shortGraceOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        applianceRemovalGracePeriodMs: gracePeriodMs,
+      })
+
+      // Initialize appliance-1
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub])
+      await shortGraceOrchestrator.discoverAppliances()
+
+      const applianceBStub: ApplianceStub = {
+        applianceId: 'appliance-b',
+        applianceName: 'Other AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+
+      // First absence sweep — timer starts
+      vi.mocked(client.getAppliances).mockResolvedValue([applianceBStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Advance time to just under grace period
+      vi.setSystemTime(Date.now() + gracePeriodMs - 500)
+
+      // Appliance reappears — timer resets
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub, applianceBStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+
+      // Advance time past what would have been the original grace deadline
+      vi.setSystemTime(Date.now() + 600)
+
+      // Absence sweep again — timer starts fresh from this new T0
+      vi.mocked(client.getAppliances).mockResolvedValue([applianceBStub])
+      await shortGraceOrchestrator.discoverAppliances()
+      // Grace period not elapsed since reappearance — still managed
+      expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+      expect(mqtt.unsubscribe).not.toHaveBeenCalledWith('appliance-1/command')
     })
   })
 

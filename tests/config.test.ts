@@ -1633,5 +1633,99 @@ homeAssistant:
 
       errorSpy.mockRestore()
     })
+
+    it('should default applianceRemovalGracePeriodMinutes to 30 when not specified', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.electrolux.applianceRemovalGracePeriodMinutes).toBe(30)
+    })
+
+    it('should accept a valid custom applianceRemovalGracePeriodMinutes', async () => {
+      const configWithGrace = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  applianceRemovalGracePeriodMinutes: 60
+homeAssistant:
+  autoDiscovery: true`
+      fs.writeFileSync(configPath, configWithGrace, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.electrolux.applianceRemovalGracePeriodMinutes).toBe(60)
+    })
+
+    it('should reject applianceRemovalGracePeriodMinutes below 1', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  applianceRemovalGracePeriodMinutes: 0
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(
+        errorSpy.mock.calls.some((call) => call[0].includes('electrolux.applianceRemovalGracePeriodMinutes')),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
+    it('should reject applianceRemovalGracePeriodMinutes above 1440', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  applianceRemovalGracePeriodMinutes: 1441
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(
+        errorSpy.mock.calls.some((call) => call[0].includes('electrolux.applianceRemovalGracePeriodMinutes')),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+    })
   })
 })

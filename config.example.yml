@@ -38,6 +38,11 @@ electrolux:
   # next full poll cycle. 30 s gives the API cache time to reflect the new state.
   # Increase if your appliance is slow to apply commands. Default: 30, Min: 5, Max: 300.
   commandStateDelaySeconds: 30
+  # (Optional) Minutes an appliance must be continuously absent from successful discovery
+  # responses before the bridge treats it as removed and cleans up its HA entity/subscription.
+  # Transient API hiccups (partial responses, 4xx/5xx, network errors) do not advance this
+  # timer — only clean 200 responses that lack the appliance count. Default: 30, Min: 1, Max: 1440.
+  applianceRemovalGracePeriodMinutes: 30
 
 homeAssistant:
   # (Optional) Automatically discover the device in Home Assistant. Default: true
