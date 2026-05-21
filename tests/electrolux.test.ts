@@ -2927,15 +2927,8 @@ describe('electrolux', () => {
     let mockMqtt: IMqtt
 
     beforeEach(() => {
-      mockMqtt = {
-        publish: vi.fn(),
-        subscribe: vi.fn(),
-        isConnected: vi.fn().mockReturnValue(true),
-        connect: vi.fn(),
-        disconnect: vi.fn(),
-        generateAutoDiscoveryConfig: vi.fn(),
-        publishInfo: vi.fn(),
-      } as unknown as IMqtt
+      // mqtt is unused in these dispose tests — ElectroluxClient.cleanup() does not touch it
+      mockMqtt = {} as unknown as IMqtt
 
       client = new ElectroluxClient(mockMqtt)
     })

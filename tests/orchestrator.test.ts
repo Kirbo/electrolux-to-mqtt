@@ -90,6 +90,7 @@ function createMockMqtt(): IMqtt {
     unsubscribe: vi.fn(),
     disconnect: vi.fn(),
     onReconnect: vi.fn(),
+    [Symbol.asyncDispose]: vi.fn(() => Promise.resolve()),
   }
 }
 
