@@ -32,7 +32,8 @@ Follow in order.
 3. **Apply updates**:
    - `pnpm` only — never npm/yarn/npx. `pnpm dlx` for non-local tools only.
    - `pnpm deps:update` in root + `cd telemetry-backend && pnpm deps:update`
-   - `corepack use pnpm@latest`
+   - **pnpm self-update** — always run `corepack use pnpm@latest`; confirm `packageManager` field in `package.json` was bumped. This is non-optional — do it every run even when no deps changed.
+   - **pnpm install output warnings** — read every line. The "pnpm field in package.json is no longer read" warning means overrides/settings drifted back to package.json; migrate them to `pnpm-workspace.yaml` immediately (see Decision Framework).
    - Dev tooling (Biome, Vitest, TypeScript): verify config parses
    - Docker base image: check https://hub.docker.com/hardened-images/catalog/dhi/node/images for latest LTS Node + Alpine tag
    - **Node LTS major bumped** → update **major only** everywhere:
@@ -59,8 +60,9 @@ Follow in order.
 
 - **Patch/minor, no breaking notes** → batch, verify, commit `chore(deps)`.
 - **Major** → read changelog, apply alone, adapt, verify, commit `chore(deps): bump <pkg> to vX`.
-- **Vuln, fix available** → upgrade to patched. Direct fixes over `pnpm.overrides`.
-- **Vuln, no fix** → document in commit/inline, `pnpm.overrides` only if reachable + justifiable, or pin + monitor.
+- **Vuln, fix available** → upgrade to patched. Direct fixes over overrides.
+- **Vuln, no fix** → document in commit/inline, override only if reachable + justifiable, or pin + monitor. Overrides go in `pnpm-workspace.yaml` under `overrides:` — never in the `pnpm` field of `package.json` (deprecated since pnpm 11, silently ignored).
+- **pnpm 11+ override migration** → if `pnpm.overrides` appears in `package.json`, move to `pnpm-workspace.yaml` `overrides:` and remove the `pnpm` block from `package.json`.
 - **Breakage unfixable without major refactor** → stop, report, propose options. No forced broken state.
 - **Ambiguous upgrade (ESM migration, API rewrite)** → pause, ask user.
 
