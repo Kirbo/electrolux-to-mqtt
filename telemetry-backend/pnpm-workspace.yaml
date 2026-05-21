@@ -1,7 +1,2 @@
 allowBuilds:
   esbuild: true
-
-# ws>=8.20.1: fixes GHSA-58qx-3vcg-4xpx (uninitialized memory disclosure).
-# Remove once mqtt bumps its own dep floor past 8.20.0.
-overrides:
-  ws: ">=8.20.1"
