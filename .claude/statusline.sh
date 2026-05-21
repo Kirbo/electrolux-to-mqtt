@@ -80,7 +80,7 @@ CACHE_MAX_AGE=5
 
 cache_stale() {
   [ ! -f "$CACHE_FILE" ] || \
-  [ $(($(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0))) -gt $CACHE_MAX_AGE ]
+  [ $(($(date +%s) - $(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0))) -gt $CACHE_MAX_AGE ]
 }
 
 branch=""; staged=0; modified=0; untracked=0
@@ -114,7 +114,7 @@ RATE_MAX_AGE=86400
 
 eur_rate_stale() {
   [ ! -f "$RATE_FILE" ] || \
-  [ $(($(date +%s) - $(stat -f %m "$RATE_FILE" 2>/dev/null || stat -c %Y "$RATE_FILE" 2>/dev/null || echo 0))) -gt $RATE_MAX_AGE ]
+  [ $(($(date +%s) - $(stat -c %Y "$RATE_FILE" 2>/dev/null || stat -f %m "$RATE_FILE" 2>/dev/null || echo 0))) -gt $RATE_MAX_AGE ]
 }
 
 if eur_rate_stale; then
@@ -131,7 +131,7 @@ SANDBOX_MAX_AGE=5
 
 sandbox_cache_stale() {
   [ ! -f "$SANDBOX_CACHE" ] || \
-  [ $(($(date +%s) - $(stat -f %m "$SANDBOX_CACHE" 2>/dev/null || stat -c %Y "$SANDBOX_CACHE" 2>/dev/null || echo 0))) -gt $SANDBOX_MAX_AGE ]
+  [ $(($(date +%s) - $(stat -c %Y "$SANDBOX_CACHE" 2>/dev/null || stat -f %m "$SANDBOX_CACHE" 2>/dev/null || echo 0))) -gt $SANDBOX_MAX_AGE ]
 }
 
 if sandbox_cache_stale; then
