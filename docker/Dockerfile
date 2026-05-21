@@ -71,7 +71,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Copy only what's needed for production install
-COPY pnpm-lock.yaml ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
 # Install only production dependencies

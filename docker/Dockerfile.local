@@ -27,7 +27,7 @@ RUN chown nodejs:nodejs /app && \
 USER nodejs
 
 # Copy package files first for better caching
-COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml ./
+COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install package manager and dependencies
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
