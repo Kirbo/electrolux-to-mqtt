@@ -234,6 +234,9 @@ export class Orchestrator implements AsyncDisposable {
       this.applianceStateIntervals.delete(applianceId)
     }
 
+    // Clear missing-since tracking (idempotent — no-op if entry was never set)
+    this.applianceMissingSince.delete(applianceId)
+
     // Purge cache entries before removing the instance (capabilitiesHash still reachable here)
     const appliance = this.applianceInstances.get(applianceId)
     const { state: stateKey, autoDiscovery: autoDiscoveryKey } = cache.cacheKey(
@@ -310,7 +313,6 @@ export class Orchestrator implements AsyncDisposable {
         if (now - missingSince >= this.config.applianceRemovalGracePeriodMs) {
           logger.info(`Appliance ${id} absent for ≥ grace period — removing`)
           this.cleanupAppliance(id)
-          this.applianceMissingSince.delete(id)
         }
       }
 
