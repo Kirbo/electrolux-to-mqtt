@@ -215,7 +215,7 @@ function formatAxiosError(error: unknown): string {
   return String(error)
 }
 
-export class ElectroluxClient {
+export class ElectroluxClient implements AsyncDisposable {
   private client?: AxiosInstance
   accessToken?: string
   refreshToken?: string
@@ -274,6 +274,10 @@ export class ElectroluxClient {
       clearTimeout(timeout)
     }
     activeTimeouts.clear()
+  }
+
+  public async [Symbol.asyncDispose](): Promise<void> {
+    this.cleanup()
   }
 
   /**

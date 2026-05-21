@@ -1,5 +1,6 @@
 import axios from 'axios'
 import config from './config.js'
+import { disposableInterval } from './disposable.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
 
@@ -318,7 +319,7 @@ export function startVersionChecker(currentVersion: string, userHash: string, mq
   })
 
   // Set up periodic check
-  const interval = setInterval(() => {
+  const intervalDisposable = disposableInterval(() => {
     checkForUpdates(currentVersion, userHash, mqtt).catch((error) => {
       logger.debug('Version check failed:', error)
     })
@@ -326,7 +327,7 @@ export function startVersionChecker(currentVersion: string, userHash: string, mq
 
   // Return cleanup function
   return () => {
-    clearInterval(interval)
+    intervalDisposable[Symbol.dispose]()
     logger.debug('Version checker stopped')
   }
 }

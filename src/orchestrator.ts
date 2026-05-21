@@ -17,11 +17,10 @@ export interface OrchestratorConfig {
   healthCheckEnabled: boolean
 }
 
-export class Orchestrator {
+export class Orchestrator implements AsyncDisposable {
   private readonly client: ElectroluxClient
   private readonly mqtt: IMqtt
   private readonly config: OrchestratorConfig
-  private readonly activeIntervals = new Set<NodeJS.Timeout>()
   private readonly activeTimeouts = new Set<NodeJS.Timeout>()
   private readonly applianceInstances = new Map<string, BaseAppliance>()
   private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
@@ -141,7 +140,6 @@ export class Orchestrator {
         })
     }, this.config.refreshInterval)
 
-    this.activeIntervals.add(intervalId)
     this.applianceStateIntervals.set(applianceId, intervalId)
   }
 
@@ -231,7 +229,6 @@ export class Orchestrator {
     const stateInterval = this.applianceStateIntervals.get(applianceId)
     if (stateInterval) {
       clearInterval(stateInterval)
-      this.activeIntervals.delete(stateInterval)
       this.applianceStateIntervals.delete(applianceId)
     }
 
@@ -317,24 +314,21 @@ export class Orchestrator {
     }
   }
 
+  public async [Symbol.asyncDispose](): Promise<void> {
+    this.shutdown()
+  }
+
   /**
-   * Graceful shutdown: stop all intervals, clean up client, disconnect MQTT
+   * Graceful shutdown: disposes orchestrator-owned resources — clears all
+   * pending startup timeouts, appliance polling intervals, client state, and
+   * MQTT connection. External resources (version checker, discovery interval)
+   * are owned by the caller (src/index.ts) and must be disposed there.
    */
-  public shutdown(stopVersionChecker: (() => void) | null, discoveryInterval: NodeJS.Timeout | null) {
+  public shutdown() {
     if (this.isShuttingDown) return
     this.isShuttingDown = true
 
     logger.info('Shutting down gracefully...')
-
-    // Stop version checker
-    if (stopVersionChecker) {
-      stopVersionChecker()
-    }
-
-    // Clear discovery interval
-    if (discoveryInterval) {
-      clearInterval(discoveryInterval)
-    }
 
     // Clear pending startup timeouts
     for (const t of this.activeTimeouts) {
@@ -342,13 +336,7 @@ export class Orchestrator {
     }
     this.activeTimeouts.clear()
 
-    // Clear all intervals
-    for (const interval of this.activeIntervals) {
-      clearInterval(interval)
-    }
-    this.activeIntervals.clear()
-
-    // Clear appliance state intervals
+    // Clear all appliance polling intervals
     for (const interval of this.applianceStateIntervals.values()) {
       clearInterval(interval)
     }

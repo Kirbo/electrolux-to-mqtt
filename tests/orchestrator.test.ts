@@ -518,7 +518,7 @@ describe('Orchestrator', () => {
       const callsAfterFirstPoll = vi.mocked(client.getApplianceState).mock.calls.length
 
       // Shut down before next interval fires
-      orchestrator.shutdown(null, null)
+      orchestrator.shutdown()
 
       // Advance past the next refresh interval
       await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
@@ -543,7 +543,7 @@ describe('Orchestrator', () => {
       vi.advanceTimersByTime(0)
 
       // Shut down while the call is pending
-      orchestrator.shutdown(null, null)
+      orchestrator.shutdown()
 
       // Resolve the pending call
       resolveStateCall()
@@ -569,8 +569,8 @@ describe('Orchestrator', () => {
       // Trigger the initial poll (in-flight)
       vi.advanceTimersByTime(0)
 
-      // Shutdown completes — clears activeIntervals sweep
-      orchestrator.shutdown(null, null)
+      // Shutdown completes — clears applianceStateIntervals sweep
+      orchestrator.shutdown()
 
       // Initial poll resolves after shutdown — .finally() must not create an interval
       resolveStateCall()
@@ -855,43 +855,43 @@ describe('Orchestrator', () => {
   })
 
   describe('shutdown', () => {
-    it('should clean up all resources', async () => {
-      const stopVersionChecker = vi.fn()
-
+    it('should clean up orchestrator-owned resources', async () => {
       // Initialize an appliance first to create intervals
       await orchestrator.initializeAppliance(mockStub)
 
-      orchestrator.shutdown(stopVersionChecker, null)
-
-      expect(orchestrator.isShuttingDown).toBe(true)
-      expect(stopVersionChecker).toHaveBeenCalled()
-      expect(client.cleanup).toHaveBeenCalled()
-      expect(mqtt.disconnect).toHaveBeenCalled()
-    })
-
-    it('should handle null stopVersionChecker and discoveryInterval', () => {
-      orchestrator.shutdown(null, null)
+      orchestrator.shutdown()
 
       expect(orchestrator.isShuttingDown).toBe(true)
       expect(client.cleanup).toHaveBeenCalled()
       expect(mqtt.disconnect).toHaveBeenCalled()
-    })
-
-    it('should clear discovery interval', () => {
-      const discoveryInterval = setInterval(() => {}, 1000)
-
-      orchestrator.shutdown(null, discoveryInterval)
-
-      expect(orchestrator.isShuttingDown).toBe(true)
-      // Interval should be cleared (no error thrown)
     })
 
     it('should be idempotent', () => {
-      orchestrator.shutdown(null, null)
-      orchestrator.shutdown(null, null)
+      orchestrator.shutdown()
+      orchestrator.shutdown()
 
       // cleanup should only be called once
       expect(client.cleanup).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('[Symbol.asyncDispose]', () => {
+    it('should call shutdown when Symbol.asyncDispose is invoked', async () => {
+      const shutdownSpy = vi.spyOn(orchestrator, 'shutdown')
+
+      await orchestrator[Symbol.asyncDispose]()
+
+      expect(shutdownSpy).toHaveBeenCalledWith()
+    })
+
+    it('should allow await using syntax', async () => {
+      const shutdownSpy = vi.spyOn(orchestrator, 'shutdown')
+
+      {
+        await using _orchestrator = orchestrator
+      }
+
+      expect(shutdownSpy).toHaveBeenCalledWith()
     })
   })
 })

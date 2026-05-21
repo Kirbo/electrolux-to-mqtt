@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import packageJson from '../package.json' with { type: 'json' }
 import config from './config.js'
+import { disposableInterval, disposableTimeout } from './disposable.js'
 import { ElectroluxClient } from './electrolux.js'
 import createLogger from './logger.js'
 import { runStartupMigrations } from './migrate.js'
@@ -33,17 +34,18 @@ const orchestrator = new Orchestrator(client, mqtt, {
   healthCheckEnabled: config.healthCheck.enabled,
 })
 
-let discoveryInterval: NodeJS.Timeout | null = null
+let discoveryIntervalDisposable: Disposable | null = null
 let stopVersionChecker: (() => void) | null = null
-let restartTimeout: NodeJS.Timeout | null = null
+let restartTimeoutDisposable: Disposable | null = null
 
 // Graceful shutdown handler
 const shutdown = async () => {
-  if (restartTimeout !== null) {
-    clearTimeout(restartTimeout)
-    restartTimeout = null
-  }
-  orchestrator.shutdown(stopVersionChecker, discoveryInterval)
+  restartTimeoutDisposable?.[Symbol.dispose]()
+  restartTimeoutDisposable = null
+  discoveryIntervalDisposable?.[Symbol.dispose]()
+  discoveryIntervalDisposable = null
+  if (stopVersionChecker) stopVersionChecker()
+  orchestrator.shutdown()
   process.exit(0)
 }
 
@@ -73,7 +75,8 @@ export const main = async () => {
     // API call failed (network error, DNS failure, etc.)
     logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshInterval / 1000} seconds...`)
     if (!orchestrator.isShuttingDown) {
-      restartTimeout = setTimeout(() => {
+      restartTimeoutDisposable = disposableTimeout(() => {
+        restartTimeoutDisposable = null
         main().catch((err: unknown) => logger.error('Error in restart:', err))
       }, refreshInterval)
     }
@@ -85,7 +88,8 @@ export const main = async () => {
       `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
     )
     if (!orchestrator.isShuttingDown) {
-      restartTimeout = setTimeout(() => {
+      restartTimeoutDisposable = disposableTimeout(() => {
+        restartTimeoutDisposable = null
         main().catch((err: unknown) => logger.error('Error in restart:', err))
       }, refreshInterval)
     }
@@ -104,9 +108,10 @@ export const main = async () => {
   }
 
   // Start periodic appliance discovery
-  discoveryInterval = setInterval(() => {
+  discoveryIntervalDisposable = disposableInterval(() => {
     if (orchestrator.isShuttingDown) {
-      if (discoveryInterval) clearInterval(discoveryInterval)
+      discoveryIntervalDisposable?.[Symbol.dispose]()
+      discoveryIntervalDisposable = null
       return
     }
     orchestrator.discoverAppliances()

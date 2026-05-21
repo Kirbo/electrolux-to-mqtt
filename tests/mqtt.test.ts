@@ -597,4 +597,24 @@ describe('Mqtt', () => {
       )
     })
   })
+
+  describe('[Symbol.asyncDispose]', () => {
+    it('should call disconnect when Symbol.asyncDispose is invoked', async () => {
+      const disconnectSpy = vi.spyOn(mqttInstance, 'disconnect')
+
+      await mqttInstance[Symbol.asyncDispose]()
+
+      expect(disconnectSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('should allow await using syntax', async () => {
+      const disconnectSpy = vi.spyOn(mqttInstance, 'disconnect')
+
+      {
+        await using _mqtt = mqttInstance
+      }
+
+      expect(disconnectSpy).toHaveBeenCalledTimes(1)
+    })
+  })
 })

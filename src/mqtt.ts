@@ -75,6 +75,7 @@ export interface IMqtt {
   disconnect(): void
   /** Register a callback to be fired on every MQTT 'connect' event (initial + reconnects). */
   onReconnect(callback: () => void): void
+  [Symbol.asyncDispose](): Promise<void>
 }
 
 class Mqtt implements IMqtt {
@@ -181,6 +182,10 @@ class Mqtt implements IMqtt {
     this.client.end(() => {
       logger.info('Disconnected from MQTT broker')
     })
+  }
+
+  public async [Symbol.asyncDispose](): Promise<void> {
+    this.disconnect()
   }
 
   public onReconnect(callback: () => void): void {

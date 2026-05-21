@@ -2921,4 +2921,45 @@ describe('electrolux', () => {
       })
     })
   })
+
+  describe('ElectroluxClient [Symbol.asyncDispose]', () => {
+    let client: ElectroluxClient
+    let mockMqtt: IMqtt
+
+    beforeEach(() => {
+      mockMqtt = {
+        publish: vi.fn(),
+        subscribe: vi.fn(),
+        isConnected: vi.fn().mockReturnValue(true),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
+      } as unknown as IMqtt
+
+      client = new ElectroluxClient(mockMqtt)
+    })
+
+    afterEach(() => {
+      client.cleanup()
+    })
+
+    it('should call cleanup when Symbol.asyncDispose is invoked', async () => {
+      const cleanupSpy = vi.spyOn(client, 'cleanup')
+
+      await client[Symbol.asyncDispose]()
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('should allow await using syntax', async () => {
+      const cleanupSpy = vi.spyOn(client, 'cleanup')
+
+      {
+        await using _client = client
+      }
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1)
+    })
+  })
 })
