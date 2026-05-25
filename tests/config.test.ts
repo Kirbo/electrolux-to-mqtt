@@ -187,6 +187,60 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should validate appliance removal grace period with env var - value too low', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES = '0' // Too low
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(
+        errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES')),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should validate appliance removal grace period with env var - value too high', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES = '1441' // Too high
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(
+        errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES')),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
     it('should validate token refresh threshold with Zod - value too low', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'

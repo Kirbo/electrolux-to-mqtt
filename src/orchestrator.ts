@@ -265,6 +265,39 @@ export class Orchestrator implements AsyncDisposable {
   }
 
   /**
+   * Update the missing-since map after an authoritative API response.
+   *
+   * For each known appliance: if it appears in the current response, clear its
+   * missing-since entry; otherwise record the first-missed timestamp (preserving
+   * the original if already set).
+   */
+  private updateMissingSince(currentIds: ReadonlySet<string>, knownIds: ReadonlySet<string>, now: number): void {
+    for (const id of knownIds) {
+      if (currentIds.has(id)) {
+        // Appliance is present — reset any prior missing-since entry
+        this.applianceMissingSince.delete(id)
+      } else {
+        // Appliance absent — record first-missed timestamp (preserve original)
+        if (!this.applianceMissingSince.has(id)) {
+          this.applianceMissingSince.set(id, now)
+        }
+      }
+    }
+  }
+
+  /**
+   * Remove appliances that have been continuously absent beyond the grace period.
+   */
+  private sweepExpired(now: number): void {
+    for (const [id, missingSince] of this.applianceMissingSince) {
+      if (now - missingSince >= this.config.applianceRemovalGracePeriodMs) {
+        logger.info(`Appliance ${id} absent for ≥ grace period — removing`)
+        this.cleanupAppliance(id)
+      }
+    }
+  }
+
+  /**
    * Discover and manage appliances dynamically.
    *
    * Only a successful 200 response (array, including []) advances the
@@ -295,26 +328,8 @@ export class Orchestrator implements AsyncDisposable {
       const knownApplianceIds = new Set(this.applianceInstances.keys())
       const now = Date.now()
 
-      // Update missing-since map for managed appliances
-      for (const id of knownApplianceIds) {
-        if (currentApplianceIds.has(id)) {
-          // Appliance is present — reset any prior missing-since entry
-          this.applianceMissingSince.delete(id)
-        } else {
-          // Appliance absent — record first-missed timestamp (preserve original)
-          if (!this.applianceMissingSince.has(id)) {
-            this.applianceMissingSince.set(id, now)
-          }
-        }
-      }
-
-      // Sweep: clean up appliances that have exceeded the grace period
-      for (const [id, missingSince] of this.applianceMissingSince) {
-        if (now - missingSince >= this.config.applianceRemovalGracePeriodMs) {
-          logger.info(`Appliance ${id} absent for ≥ grace period — removing`)
-          this.cleanupAppliance(id)
-        }
-      }
+      this.updateMissingSince(currentApplianceIds, knownApplianceIds, now)
+      this.sweepExpired(now)
 
       // Find new appliances (present in API response but not yet managed)
       const newAppliances = appliances.filter((a: ApplianceStub) => !knownApplianceIds.has(a.applianceId))
