@@ -32,7 +32,7 @@ const orchestrator = new Orchestrator(client, mqtt, {
   autoDiscovery: config.homeAssistant.autoDiscovery,
   apiFailureRestartThresholdMs: (config.healthCheck.unHealthyRestartMinutes ?? 45) * 60_000,
   healthCheckEnabled: config.healthCheck.enabled,
-  applianceRemovalGracePeriodMs: (config.electrolux.applianceRemovalGracePeriodMinutes ?? 30) * 60_000,
+  applianceRemovalGracePeriodMs: config.electrolux.applianceRemovalGracePeriodMinutes * 60_000,
 })
 
 let discoveryIntervalDisposable: Disposable | null = null
