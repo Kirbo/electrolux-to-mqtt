@@ -10,4 +10,4 @@ type: feedback
 
 **Why:** Node 25 is not LTS. Project is intentionally locked to Node 24 LTS per `engines` constraint added in commit dc9b355. @types/node v25 types may reference Node 25-only APIs not available at runtime.
 
-**How to apply:** If `@types/node` drifts to ^25 after a `pnpm update --latest` run, re-edit both `package.json` files to `^24.0.0` and run `pnpm install` (not `--latest`). The correct resolved version is `24.12.4` (or latest 24.x at time of install). After re-pinning, set to `^24.12.4` (or latest 24.x at time of run) to document the floor. Note: `^24` and `^24.0.0` are semantically identical — prefer pinning to current 24.x minor for explicitness (e.g., `^24.12.4`).
+**How to apply:** If `@types/node` drifts to ^25 after a `pnpm update --latest` run, re-edit both `package.json` files to `^24` and run `pnpm install` (not `--latest`). The correct resolved version is `24.12.4` (or latest 24.x at time of install). Use `^24` (not `^24.12.4`) — the major constraint is sufficient and avoids needing to update the pin on every 24.x patch release.
