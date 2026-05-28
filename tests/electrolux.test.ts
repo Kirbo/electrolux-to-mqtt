@@ -2033,7 +2033,8 @@ describe('electrolux', () => {
         expect(csrfSecretCookie).toBeDefined()
 
         if (csrfSecretCookie) {
-          const csrfSecret = csrfSecretCookie.split(';')[0].split('=')[1]
+          const firstPart = csrfSecretCookie.split(';')[0]
+          const csrfSecret = firstPart?.split('=')[1]
           expect(csrfSecret).toBe('abc123')
         }
       })
@@ -2391,7 +2392,7 @@ describe('electrolux', () => {
       it('should include method and URL path in error log for axios errors', async () => {
         const axiosError = new Error('Request failed') as AxiosError
         axiosError.response = { status: 500, statusText: 'Internal Server Error' } as AxiosResponse
-        ;(axiosError as Record<string, unknown>).config = {
+        ;(axiosError as unknown as Record<string, unknown>).config = {
           method: 'get',
           url: 'https://api.developer.electrolux.one/api/v1/appliances',
         }
@@ -2416,7 +2417,7 @@ describe('electrolux', () => {
           statusText: 'Bad Request',
           data: { error: 'invalid_param' },
         } as AxiosResponse
-        ;(axiosError as Record<string, unknown>).config = { method: 'get', url: '/api/v1/appliances' }
+        ;(axiosError as unknown as Record<string, unknown>).config = { method: 'get', url: '/api/v1/appliances' }
         vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
 
         mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
@@ -2433,7 +2434,7 @@ describe('electrolux', () => {
       it('should handle axios error with relative URL path', async () => {
         const axiosError = new Error('Request failed') as AxiosError
         axiosError.response = { status: 404, statusText: 'Not Found' } as AxiosResponse
-        ;(axiosError as Record<string, unknown>).config = { method: 'get', url: '/api/v1/appliances' }
+        ;(axiosError as unknown as Record<string, unknown>).config = { method: 'get', url: '/api/v1/appliances' }
         vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
 
         mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
@@ -2682,6 +2683,8 @@ describe('electrolux', () => {
         await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'off' })
 
         const publishCall = vi.mocked(mockMqtt.publish).mock.calls[0]
+        expect(publishCall).toBeDefined()
+        if (!publishCall) throw new Error('Expected publish to have been called')
         const publishedState = JSON.parse(publishCall[1] as string)
         expect(publishedState.mode).toBe('cool')
       })
@@ -2741,6 +2744,8 @@ describe('electrolux', () => {
         await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { targetTemperatureC: 25 })
 
         const publishCall = vi.mocked(mockMqtt.publish).mock.calls[0]
+        expect(publishCall).toBeDefined()
+        if (!publishCall) throw new Error('Expected publish to have been called')
         const publishedState = JSON.parse(publishCall[1] as string)
         expect(publishedState.applianceState).toBe('on')
         expect(publishedState.mode).toBe('heat')

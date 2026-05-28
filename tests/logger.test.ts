@@ -86,7 +86,7 @@ describe('logger', () => {
       logger.info('hello')
 
       expect(infoSpy).toHaveBeenCalledTimes(1)
-      const arg = infoSpy.mock.calls[0][0] as string
+      const arg = infoSpy.mock.calls[0]?.[0] as string | undefined
       // When version is not 'development' a vX.Y.Z :: prefix is prepended
       // The version comes from package.json so we just check it contains ' :: '
       expect(typeof arg).toBe('string')
@@ -111,7 +111,7 @@ describe('logger', () => {
       const logger = createLogger('test')
       logger.info('hello')
 
-      const arg = infoSpy.mock.calls[0][0] as string
+      const arg = infoSpy.mock.calls[0]?.[0] as string | undefined
       // With showVersionNumber false the prefix is empty so message starts directly
       expect(arg).toBe('hello')
     })
@@ -135,7 +135,7 @@ describe('logger', () => {
       logger.warn('part1', 'part2', 'part3')
 
       expect(warnSpy).toHaveBeenCalledTimes(1)
-      const arg = warnSpy.mock.calls[0][0] as string
+      const arg = warnSpy.mock.calls[0]?.[0] as string | undefined
       expect(arg).toContain('part1')
       expect(arg).toContain('part2')
       expect(arg).toContain('part3')
@@ -160,7 +160,7 @@ describe('logger', () => {
       logger.error({ code: 42, nested: { ok: true } })
 
       expect(errorSpy).toHaveBeenCalledTimes(1)
-      const arg = errorSpy.mock.calls[0][0] as string
+      const arg = errorSpy.mock.calls[0]?.[0] as string | undefined
       // util.inspect produces 'key: value' style output for objects
       expect(arg).toContain('code')
       expect(arg).toContain('42')

@@ -540,6 +540,10 @@ describe('Comfort600Appliance', () => {
           ...mockInfo.capabilities,
           mode: {
             ...mockInfo.capabilities.mode,
+            access: 'readwrite' as const,
+            schedulable: mockInfo.capabilities.mode?.schedulable ?? true,
+            type: 'string' as const,
+            values: mockInfo.capabilities.mode?.values ?? {},
             triggers: [
               {
                 action: { targetTemperatureC: { access: 'readwrite', min: 16, max: 32, type: 'temperature' } },
@@ -561,6 +565,10 @@ describe('Comfort600Appliance', () => {
           ...mockInfo.capabilities,
           mode: {
             ...mockInfo.capabilities.mode,
+            access: 'readwrite' as const,
+            schedulable: mockInfo.capabilities.mode?.schedulable ?? true,
+            type: 'string' as const,
+            values: mockInfo.capabilities.mode?.values ?? {},
             triggers: [
               {
                 action: {
@@ -737,7 +745,10 @@ describe('Comfort600Appliance', () => {
           ...mockInfo.capabilities,
           mode: {
             ...mockInfo.capabilities.mode,
-            values: { ...mockInfo.capabilities.mode.values, TURBO: {} },
+            access: 'readwrite' as const,
+            schedulable: mockInfo.capabilities.mode?.schedulable ?? true,
+            type: 'string' as const,
+            values: { ...(mockInfo.capabilities.mode?.values ?? {}), TURBO: {} },
           },
         },
       }
@@ -932,16 +943,20 @@ describe('Comfort600Appliance', () => {
         status: 'enabled',
         properties: {
           reported: {
-            applianceState: 'RUNNING',
-            mode: 'COOL',
-            fanSpeedSetting: 'AUTO',
+            applianceState: 'running',
+            mode: 'cool',
+            fanSpeedSetting: 'auto',
             targetTemperatureC: 24,
             ambientTemperatureC: 26,
-            verticalSwing: 'ON',
-            sleepMode: 'OFF',
+            verticalSwing: 'on',
+            sleepMode: 'off',
             uiLockMode: false,
-            Workmode_1: 1,
-            WorkMode: 1,
+            dataModelVersion: '',
+            deviceId: '',
+            networkInterface: {
+              linkQualityIndicator: 'EXCELLENT',
+              rssi: 0,
+            },
           },
         },
       }

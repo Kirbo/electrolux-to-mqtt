@@ -18,7 +18,7 @@ const levelMap: Record<string, Set<string>> = {
   off: new Set(), // suppress all
 }
 
-const activeLevel = levelMap[logLevel] ?? levelMap.off
+const activeLevel = levelMap[logLevel] ?? new Set<string>()
 
 // Store original functions
 const originalLog = console.log

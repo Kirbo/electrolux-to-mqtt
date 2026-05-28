@@ -225,7 +225,8 @@ export class ElectroluxClient implements AsyncDisposable {
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
   private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
-  private loginRetryCount = 0
+  /** @internal exposed for testing – do not use outside ElectroluxClient */
+  loginRetryCount = 0
   private refreshRetryCount = 0
   private loginWaiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
 

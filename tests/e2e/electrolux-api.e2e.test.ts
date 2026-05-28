@@ -66,7 +66,7 @@ const isE2EEnabled = process.env.E2E_TEST === 'true'
 
 describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
   let client: ElectroluxClient
-  let appliances: ApplianceStub[] | null = null
+  let appliances: ApplianceStub[] | null | undefined = null
   const applianceInfoMap = new Map<string, ApplianceInfo>()
 
   // Mock MQTT client that doesn't actually publish

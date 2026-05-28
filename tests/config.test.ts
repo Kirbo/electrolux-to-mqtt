@@ -1174,7 +1174,8 @@ homeAssistant:
       } catch (error) {
         expect(error).toBeInstanceOf(z.ZodError)
         if (error instanceof z.ZodError) {
-          expect(error.issues[0].message).toContain('mqtt.url must start with mqtt://')
+          const firstIssue = error.issues[0]
+          expect(firstIssue?.message).toContain('mqtt.url must start with mqtt://')
         }
       }
     })
@@ -1192,7 +1193,8 @@ homeAssistant:
       } catch (error) {
         expect(error).toBeInstanceOf(z.ZodError)
         if (error instanceof z.ZodError) {
-          expect(error.issues[0].message).toContain('must be at least 10 seconds')
+          const firstIssue = error.issues[0]
+          expect(firstIssue?.message).toContain('must be at least 10 seconds')
         }
       }
     })
@@ -1210,7 +1212,8 @@ homeAssistant:
       } catch (error) {
         expect(error).toBeInstanceOf(z.ZodError)
         if (error instanceof z.ZodError) {
-          expect(error.issues[0].path).toEqual(['mqtt', 'qos'])
+          const firstIssue = error.issues[0]
+          expect(firstIssue?.path).toEqual(['mqtt', 'qos'])
         }
       }
     })

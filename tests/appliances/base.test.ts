@@ -150,7 +150,7 @@ const mockRawState: Appliance = {
   connectionState: 'Connected',
   properties: {
     reported: {
-      applianceState: 'on',
+      applianceState: 'running',
       mode: 'cool',
       targetTemperatureC: 22,
       ambientTemperatureC: 25,

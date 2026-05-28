@@ -165,7 +165,8 @@ describe('version-checker', () => {
       stopChecker()
       const calls = mockPublishInfoCmp.mock.calls
       if (calls.length === 0) return null
-      return JSON.parse(calls[0][0] as string) as Record<string, unknown>
+      const firstArg = calls[0]?.[0]
+      return JSON.parse(firstArg as string) as Record<string, unknown>
     }
 
     it('RC is older than stable with same core: 1.17.0-rc.7 < 1.17.0 → update-available', async () => {
@@ -924,7 +925,7 @@ describe('version-checker', () => {
       const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
-      const publishedPayload = JSON.parse(mockPublishInfo.mock.calls[0][0])
+      const publishedPayload = JSON.parse(mockPublishInfo.mock.calls[0]?.[0])
       expect(publishedPayload).not.toHaveProperty('description')
 
       stopChecker()
