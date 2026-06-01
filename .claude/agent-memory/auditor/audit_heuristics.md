@@ -14,7 +14,8 @@ type: project
 ## Known safe patterns (not findings)
 
 - `normalizers.ts`: all `as OnOffState`, `as NormalizedClimateMode`, etc. preceded by `VALID_*.has()` set checks — intentional, not unsafe casts
-- `mqtt.ts:11`: `(config.mqtt.qos ?? 2) as QoS` — safe because `configSchema` enforces `int().min(0).max(2)` before this executes (comment on prior line documents the guard)
+- `mqtt.ts:11`: `config.mqtt.qos as QoS` — safe because `configSchema` enforces `int().min(0).max(2)` before this executes (comment on prior line documents the guard). (The old `?? 2` fallback was dropped as dead code in the 2026-06-01 review — schema guarantees the default; cast still required for the `0|1|2` narrowing.)
+- `telemetry-backend/src/utils.ts:65-67`: the trailing `version.length > 32` check **after** the regex passes is NOT redundant — `validateTelemetryPayload`'s version regex has no upper length bound on the pre-release group, so e.g. `1.0.0-`+30 chars passes the regex at length 36 and only this check rejects it. Do not "simplify" it away. (Nearly mis-flagged as redundant in the 2026-06-01 review.)
 - `electrolux.ts`: `tokenPayload as { exp: number; iat: number }` preceded by `typeof` checks both fields — safe
 - `normalizers.ts`: `rawState as unknown as Appliance['properties']['reported']` preceded by `'in'` checks three required fields — safe
 - Empty catches in `logger.ts` (timezone fallback), `mqtt.ts` (JSON.parse debug log), `electrolux.ts` (URL parse fallback), `health.ts` (read failure returns false), `config.ts` (write failure uses in-memory config) — all documented
