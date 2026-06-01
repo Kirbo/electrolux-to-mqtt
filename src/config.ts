@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import yaml from 'yaml'
 import { z } from 'zod'
 
@@ -259,7 +260,7 @@ const getConfigFilename = (): string => {
 }
 
 const configFilename = getConfigFilename()
-const configPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), `../${configFilename}`)
+const configPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../${configFilename}`)
 
 function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
   return {

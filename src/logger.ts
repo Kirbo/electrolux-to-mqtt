@@ -19,7 +19,7 @@ const getTimezone = () => {
     // Try macOS fallback: check /etc/localtime symlink
     try {
       const localtime = fs.readlinkSync('/etc/localtime')
-      const match = new RegExp(/zoneinfo\/(.*)/).exec(localtime)
+      const match = /zoneinfo\/(.*)/.exec(localtime)
       if (match) {
         const tz = match[1]
         console.log(`Using timezone from /etc/localtime symlink: ${tz}`)
