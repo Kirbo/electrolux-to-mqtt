@@ -68,6 +68,12 @@ function applyJitter(baseDelay: number): number {
   return baseDelay / 2 + Math.random() * (baseDelay / 2) // NOSONAR — non-crypto use; predictability is acceptable for retry jitter
 }
 
+// Exponential backoff (doubling per attempt) capped at LOGIN_RETRY_MAX_DELAY_MS, with jitter.
+// Exported so the cap behaviour can be unit-tested without reaching into private instance state.
+export function computeLoginRetryDelay(retryCount: number): number {
+  return applyJitter(Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** retryCount, LOGIN_RETRY_MAX_DELAY_MS))
+}
+
 // Track timeouts for cleanup
 const activeTimeouts = new Set<NodeJS.Timeout>()
 
@@ -225,8 +231,7 @@ export class ElectroluxClient implements AsyncDisposable {
   private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
   private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
-  /** @internal exposed for testing – do not use outside ElectroluxClient */
-  loginRetryCount = 0
+  private loginRetryCount = 0
   private refreshRetryCount = 0
   private loginWaiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
 
@@ -457,9 +462,7 @@ export class ElectroluxClient implements AsyncDisposable {
       // never be rejected from this path. Rejecting them would kill any caller awaiting login
       // (e.g. main()), even though the retry loop will eventually succeed.
       this.isLoggedIn = false
-      const delay = applyJitter(
-        Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** this.loginRetryCount, LOGIN_RETRY_MAX_DELAY_MS),
-      )
+      const delay = computeLoginRetryDelay(this.loginRetryCount)
       this.loginRetryCount++
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
       logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${this.loginRetryCount})...`)
