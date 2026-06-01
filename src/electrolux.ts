@@ -77,10 +77,11 @@ function applyJitter(baseDelay: number): number {
   return baseDelay / 2 + Math.random() * (baseDelay / 2) // NOSONAR — non-crypto use; predictability is acceptable for retry jitter
 }
 
-// Exponential backoff (doubling per attempt) capped at LOGIN_RETRY_MAX_DELAY_MS, with jitter.
-// Exported so the cap behaviour can be unit-tested without reaching into private instance state.
-export function computeLoginRetryDelay(retryCount: number): number {
-  return applyJitter(Math.min(LOGIN_RETRY_BASE_DELAY_MS * 2 ** retryCount, LOGIN_RETRY_MAX_DELAY_MS))
+// Exponential backoff (doubling per attempt) capped at maxMs, with jitter.
+// Shared by login and token-refresh retries; exported so the cap behaviour can
+// be unit-tested without reaching into private instance state.
+export function computeBackoffDelay(retryCount: number, baseMs: number, maxMs: number): number {
+  return applyJitter(Math.min(baseMs * 2 ** retryCount, maxMs))
 }
 
 // Track timeouts for cleanup
@@ -471,7 +472,7 @@ export class ElectroluxClient implements AsyncDisposable {
       // never be rejected from this path. Rejecting them would kill any caller awaiting login
       // (e.g. main()), even though the retry loop will eventually succeed.
       this.isLoggedIn = false
-      const delay = computeLoginRetryDelay(this.loginRetryCount)
+      const delay = computeBackoffDelay(this.loginRetryCount, LOGIN_RETRY_BASE_DELAY_MS, LOGIN_RETRY_MAX_DELAY_MS)
       this.loginRetryCount++
       logger.error(`Error logging in: ${formatAxiosError(error)}`)
       logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${this.loginRetryCount})...`)
@@ -590,8 +591,10 @@ export class ElectroluxClient implements AsyncDisposable {
         }
       } else {
         // Transient error (network issue, 5xx) — retry the refresh with exponential backoff
-        const delay = applyJitter(
-          Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** this.refreshRetryCount, TOKEN_REFRESH_MAX_DELAY_MS),
+        const delay = computeBackoffDelay(
+          this.refreshRetryCount,
+          TOKEN_REFRESH_BASE_DELAY_MS,
+          TOKEN_REFRESH_MAX_DELAY_MS,
         )
         this.refreshRetryCount++
         logger.warn(`Retrying token refresh in ${Math.round(delay / 1000)}s (attempt ${this.refreshRetryCount})...`)

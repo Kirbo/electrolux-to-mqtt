@@ -2,7 +2,7 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BaseAppliance } from '@/appliances/base.js'
 import config from '@/config.js'
-import { computeLoginRetryDelay, ElectroluxClient, formatStateDifferences, getStateDifferences } from '@/electrolux.js'
+import { computeBackoffDelay, ElectroluxClient, formatStateDifferences, getStateDifferences } from '@/electrolux.js'
 import type { IMqtt } from '@/mqtt.js'
 import type { NormalizedState } from '@/types/normalized.js'
 import type { Appliance } from '@/types.js'
@@ -2557,17 +2557,23 @@ describe('electrolux', () => {
         expect(client.isLoggedIn).toBe(true)
       })
 
-      it('should cap login retry delay at LOGIN_RETRY_MAX_DELAY_MS (m12)', () => {
+      it('computeBackoffDelay caps the delay at maxMs (m12)', () => {
         // With retryCount = 20 the uncapped backoff would be 5000 * 2^20 ≈ 5 billion ms.
         // The cap is 300_000 ms (5 minutes). With Math.random = 0, jitter gives exactly MAX/2 = 150_000.
-        const LOGIN_RETRY_MAX_DELAY_MS = 300_000
+        const BASE_MS = 5_000
+        const MAX_MS = 300_000
 
         vi.spyOn(Math, 'random').mockReturnValue(0)
         try {
-          const delay = computeLoginRetryDelay(20)
-          // With jitter at Math.random=0 the delay is MAX_DELAY/2 (within [MAX/2, MAX])
-          expect(delay).toBeLessThanOrEqual(LOGIN_RETRY_MAX_DELAY_MS)
-          expect(delay).toBeGreaterThanOrEqual(LOGIN_RETRY_MAX_DELAY_MS / 2)
+          const capped = computeBackoffDelay(20, BASE_MS, MAX_MS)
+          // With jitter at Math.random=0 the delay is MAX/2 (within [MAX/2, MAX])
+          expect(capped).toBeLessThanOrEqual(MAX_MS)
+          expect(capped).toBeGreaterThanOrEqual(MAX_MS / 2)
+
+          // Below the cap, the delay tracks baseMs * 2^retryCount (jitter within [half, full]).
+          const uncapped = computeBackoffDelay(0, BASE_MS, MAX_MS)
+          expect(uncapped).toBeLessThanOrEqual(BASE_MS)
+          expect(uncapped).toBeGreaterThanOrEqual(BASE_MS / 2)
         } finally {
           vi.restoreAllMocks()
         }
