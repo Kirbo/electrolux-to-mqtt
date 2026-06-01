@@ -3,3 +3,4 @@
 - [Node 24 via fnm multishell — plain pnpm works](node_version_fnm.md) — fnm symlink resolves v24.14.1; no PATH prefix needed in Claude Code sessions
 - [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
+- [redis v6 upgrade — no code changes needed](dep_redis_v6.md) — RESP3 default, RedisLike adapter unaffected; telemetry-only bumps use `chore:` not `chore(deps):`
