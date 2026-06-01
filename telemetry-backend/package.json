@@ -21,7 +21,7 @@
   "dependencies": {
     "express": "^5.2.1",
     "helmet": "^8.2.0",
-    "redis": "^5.12.1"
+    "redis": "^6.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
