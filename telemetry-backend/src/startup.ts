@@ -3,6 +3,24 @@ import type { Server } from 'node:http'
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 15_000
 
 /**
+ * Parse a numeric environment value, falling back to `fallback` when it is
+ * unset, empty, or non-numeric. A present-but-invalid value (e.g. a typo) is
+ * warned about rather than silently producing NaN, which would degrade the
+ * rate limiter without any signal.
+ */
+export function envNumber(value: string | undefined, fallback: number): number {
+  if (value === undefined || value === '') {
+    return fallback
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    console.warn(`[telemetry] WARN: expected a number but got "${value}"; using fallback ${fallback}.`)
+    return fallback
+  }
+  return parsed
+}
+
+/**
  * Resolve the rate-limit salt from the environment.
  * In production, refuses to start when no reliable unique identifier is
  * available (RATE_LIMIT_SALT env unset AND no /etc/machine-id readable).

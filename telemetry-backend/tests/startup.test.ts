@@ -1,6 +1,31 @@
 import http from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
-import { buildRateLimitSalt, createShutdownHandler } from '../src/startup.js'
+import { buildRateLimitSalt, createShutdownHandler, envNumber } from '../src/startup.js'
+
+// ── envNumber ─────────────────────────────────────────────────────────────────
+describe('envNumber', () => {
+  it('returns the parsed number for a valid numeric string', () => {
+    expect(envNumber('120000', 60_000)).toBe(120000)
+  })
+
+  it('returns the fallback when the value is undefined or empty', () => {
+    expect(envNumber(undefined, 60_000)).toBe(60_000)
+    expect(envNumber('', 60_000)).toBe(60_000)
+  })
+
+  it('allows an explicit 0', () => {
+    expect(envNumber('0', 10)).toBe(0)
+  })
+
+  it('warns and returns the fallback for a non-numeric value (no NaN)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = envNumber('abc', 60_000)
+    expect(result).toBe(60_000)
+    expect(Number.isNaN(result)).toBe(false)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('expected a number'))
+    warnSpy.mockRestore()
+  })
+})
 
 // ── buildRateLimitSalt ────────────────────────────────────────────────────────
 describe('buildRateLimitSalt', () => {
