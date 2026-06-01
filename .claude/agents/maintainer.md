@@ -32,6 +32,7 @@ Follow in order.
 3. **Apply updates**:
    - `pnpm` only — never npm/yarn/npx. `pnpm dlx` for non-local tools only.
    - `pnpm deps:update` in root + `cd telemetry-backend && pnpm deps:update`
+   - **`@types/node` re-pin** — `pnpm update --latest` (via `deps:update`) silently drifts `@types/node` ahead of the Node runtime major. After every run, re-pin it to `^<Node-LTS-major>` in **both** `package.json` files. It must never lead the runtime major (`engines.node`, `.nvmrc`); types ahead of runtime surface APIs that don't exist at runtime.
    - **pnpm self-update** — always run `corepack use pnpm@latest`; confirm `packageManager` field in `package.json` was bumped. This is non-optional — do it every run even when no deps changed.
    - **pnpm install output warnings** — read every line. The "pnpm field in package.json is no longer read" warning means overrides/settings drifted back to package.json; migrate them to `pnpm-workspace.yaml` immediately (see Decision Framework).
    - Dev tooling (Biome, Vitest, TypeScript): verify config parses
