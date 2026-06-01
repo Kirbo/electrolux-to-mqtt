@@ -6,9 +6,9 @@ type QoS = 0 | 1 | 2
 
 const logger = createLogger('mqtt')
 
-const retain = config.mqtt.retain ?? false
+const retain = config.mqtt.retain
 // configSchema enforces int().min(0).max(2) — cast is safe after schema validation.
-const qos = (config.mqtt.qos ?? 2) as QoS
+const qos = config.mqtt.qos as QoS
 
 const defaultOptions: IClientPublishOptions = {
   retain,
@@ -16,7 +16,7 @@ const defaultOptions: IClientPublishOptions = {
 }
 
 const client = mqtt.connect(config.mqtt.url, {
-  clientId: `${config.mqtt.clientId ?? config.mqtt.username}-electrolux`,
+  clientId: `${config.mqtt.clientId}-electrolux`,
   username: config.mqtt.username,
   password: config.mqtt.password,
   clean: true,

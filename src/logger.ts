@@ -35,10 +35,10 @@ const getTimezone = () => {
 
 const timeZone = getTimezone()
 
-const showTimestamp = config.logging?.showTimestamp ?? true
+const showTimestamp = config.logging.showTimestamp
 
 const baseLogger = pino({
-  level: process.env.LOG_LEVEL || config.logging?.logLevel || (process.env.VITEST ? 'silent' : 'info'),
+  level: process.env.LOG_LEVEL || config.logging.logLevel,
   timestamp: showTimestamp
     ? () =>
         `,"time":"${new Date().toLocaleString(undefined, {
@@ -57,7 +57,7 @@ const baseLogger = pino({
 
 const prefix = () => {
   const versionPrefix = appVersion === 'development' ? '' : `v${appVersion} :: `
-  const showVersionNumber = config.logging?.showVersionNumber ?? true
+  const showVersionNumber = config.logging.showVersionNumber
   return showVersionNumber ? `${versionPrefix}` : ''
 }
 

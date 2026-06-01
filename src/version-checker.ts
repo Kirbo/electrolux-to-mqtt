@@ -246,7 +246,7 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     logger.debug('Telemetry disabled, skipping')
   }
 
-  const updateChannel = config.versionCheck?.updateChannel ?? 'stable'
+  const updateChannel = config.versionCheck.updateChannel
   const latest = await fetchLatestVersion(updateChannel)
 
   if (!latest) {
@@ -308,7 +308,7 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
  */
 export function startVersionChecker(currentVersion: string, userHash: string, mqtt?: IMqtt): () => void {
   // Get check interval from config, default to 3600 seconds (1 hour)
-  const checkIntervalSeconds = config.versionCheck?.checkInterval ?? 3600
+  const checkIntervalSeconds = config.versionCheck.checkInterval
   const checkIntervalMs = checkIntervalSeconds * 1000
 
   logger.debug(`Version check interval set to ${checkIntervalSeconds} seconds`)

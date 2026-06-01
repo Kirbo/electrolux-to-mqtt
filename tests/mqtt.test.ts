@@ -43,11 +43,13 @@ vi.mock('mqtt', () => {
 vi.mock('@/config.js', () => ({
   default: {
     mqtt: {
-      host: 'test-broker',
-      port: 1883,
+      url: 'mqtt://test-broker:1883',
+      clientId: 'test-client',
       username: 'test-user',
       password: 'test-pass',
       topicPrefix: 'test_',
+      retain: false,
+      qos: 2,
     },
   },
 }))

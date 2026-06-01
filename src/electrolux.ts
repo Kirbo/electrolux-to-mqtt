@@ -62,8 +62,8 @@ function isTokenRefreshResponse(value: unknown): value is { accessToken: string;
 }
 
 // Configuration constants
-const RENEW_TOKEN_BEFORE_EXPIRY_MS = (config.electrolux.renewTokenBeforeExpiry ?? 60) * 60 * 1000
-const COMMAND_STATE_DELAY_MS = (config.electrolux.commandStateDelaySeconds ?? 30) * 1000
+const RENEW_TOKEN_BEFORE_EXPIRY_MS = config.electrolux.renewTokenBeforeExpiry * 60 * 1000
+const COMMAND_STATE_DELAY_MS = config.electrolux.commandStateDelaySeconds * 1000
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (doubles each attempt)
 const LOGIN_RETRY_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
@@ -98,7 +98,7 @@ export function getStateDifferences(
   newState: NormalizedState,
 ): Record<string, StateDifference> {
   const differences: Record<string, StateDifference> = {}
-  const ignoredKeys = config.logging?.ignoredKeys || []
+  const ignoredKeys = config.logging.ignoredKeys
 
   if (!oldState) {
     return differences
@@ -247,7 +247,7 @@ export class ElectroluxClient implements AsyncDisposable {
 
   public isLoggingIn = false
   public isLoggedIn = false
-  public refreshInterval: number = config.electrolux.refreshInterval ?? 30
+  public refreshInterval: number = config.electrolux.refreshInterval
 
   constructor(mqtt: IMqtt) {
     this.mqtt = mqtt
@@ -655,7 +655,7 @@ export class ElectroluxClient implements AsyncDisposable {
     const SECONDS_PER_DAY = 86400
     const numAppliances = Math.max(1, this.previousAppliances.size)
     const currentRefreshInterval = this.refreshInterval
-    const currentDiscoveryInterval = config.electrolux.applianceDiscoveryInterval ?? 300
+    const currentDiscoveryInterval = config.electrolux.applianceDiscoveryInterval
 
     // Recurring calls per day:
     // - State polling: numAppliances × (86400 / refreshInterval)
@@ -862,7 +862,7 @@ export class ElectroluxClient implements AsyncDisposable {
 
     if (hasChanges) {
       const changesSummary = formatStateDifferences(differences)
-      if (config.logging?.showChanges) {
+      if (config.logging.showChanges) {
         logger.info(`State changed for appliance ${appliance.getApplianceId()} via API: ${changesSummary}`)
       } else {
         logger.info(`State changed for appliance ${appliance.getApplianceId()} via API`)

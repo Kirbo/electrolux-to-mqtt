@@ -4,7 +4,7 @@ import config from './config.js'
 import createLogger from './logger.js'
 
 const logger = createLogger('cache')
-const skipCacheLogging = config.logging?.skipCacheLogging ?? true
+const skipCacheLogging = config.logging.skipCacheLogging
 
 const maxItems = 1000
 const defaultTtl = 1000 * 60 * 60 * 24 // 24 hours
