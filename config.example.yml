@@ -40,8 +40,10 @@ electrolux:
   commandStateDelaySeconds: 30
   # (Optional) Minutes an appliance must be continuously absent from successful discovery
   # responses before the bridge treats it as removed and cleans up its HA entity/subscription.
-  # Transient API hiccups (partial responses, 4xx/5xx, network errors) do not advance this
-  # timer — only clean 200 responses that lack the appliance count. Default: 30, Min: 1, Max: 1440.
+  # API failures (4xx/5xx, network errors, malformed responses) are ignored entirely and never
+  # trigger cleanup. A clean 200 that omits an appliance starts the timer; the appliance is only
+  # removed if it stays absent across successive successful responses for this many minutes.
+  # Default: 30, Min: 1, Max: 1440.
   applianceRemovalGracePeriodMinutes: 30
 
 homeAssistant:
