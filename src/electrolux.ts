@@ -52,6 +52,15 @@ function isApplianceStubArray(value: unknown): value is ApplianceStub[] {
   return Array.isArray(value) && value.every(isApplianceStub)
 }
 
+function isTokenRefreshResponse(value: unknown): value is { accessToken: string; refreshToken: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).accessToken === 'string' &&
+    typeof (value as Record<string, unknown>).refreshToken === 'string'
+  )
+}
+
 // Configuration constants
 const RENEW_TOKEN_BEFORE_EXPIRY_MS = (config.electrolux.renewTokenBeforeExpiry ?? 60) * 60 * 1000
 const COMMAND_STATE_DELAY_MS = (config.electrolux.commandStateDelaySeconds ?? 30) * 1000
@@ -537,14 +546,13 @@ export class ElectroluxClient implements AsyncDisposable {
         refreshToken: this.refreshToken,
       })
 
-      const { data } = response
+      const data: unknown = response.data
+      if (!isTokenRefreshResponse(data)) {
+        throw new Error('Invalid token refresh response')
+      }
 
       this.accessToken = data.accessToken
       this.refreshToken = data.refreshToken
-
-      if (!this.accessToken || !this.refreshToken) {
-        throw new Error('Access token is undefined')
-      }
 
       const { eat, iat } = this.parseAccessTokenPayload(this.accessToken)
       this.eat = eat
