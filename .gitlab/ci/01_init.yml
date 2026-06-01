@@ -57,29 +57,18 @@ bump version:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
         echo "[bump-version] branch=next — computing RC version"
-        # Step 1: compute base version (e.g. 1.17.0) and full changelog since last stable.
-        # --changelog here ensures UNRELEASED-CHANGELOG.md exists for the fallback sed below
-        # if Step 2 (--maintained-version) fails (e.g. after stable cuts the prior RC series).
-        # Step 2 overwrites the file when it succeeds, so this is a no-op on the happy path.
+        # Step 1: compute the base version (e.g. 1.18.5, or 1.19.0 once a feat
+        # lands) and the changelog since the last stable release.
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
         BASE_VERSION=$(cat .version-unreleased)
-        MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
-        echo "[bump-version] base_version=${BASE_VERSION} major=${MAJOR}"
-        # Step 2: try --maintained-version to find the last RC and increment.
-        # Exits 0 with new RC version when releasable commits exist since last RC.
-        # Exits non-zero (65 = no change, other = no prior RC found) — fall back to rc.1.
-        SEMREL_EXIT=0
-        semantic-release --version-file --changelog UNRELEASED-CHANGELOG.md --dry --maintained-version "${MAJOR}-rc" || SEMREL_EXIT=$?
-        echo "[bump-version] maintained-version exit=${SEMREL_EXIT}"
-        if [ "$SEMREL_EXIT" -eq 0 ]; then
-          echo "[bump-version] prior RC found with new commits — using computed RC"
-        else
-          echo "[bump-version] maintained-version failed (exit ${SEMREL_EXIT}) — falling back to rc.1"
-          echo "${BASE_VERSION}-rc.1" > .version-unreleased
-          sed -i "s/## ${BASE_VERSION}/## ${BASE_VERSION}-rc.1/g" UNRELEASED-CHANGELOG.md
-        fi
-        FINAL_VERSION=$(cat .version-unreleased)
+        echo "[bump-version] base_version=${BASE_VERSION}"
+        # Step 2: the rc number always advances — highest existing rc tag for this
+        # base plus 1, else rc.1. A base bump has no rc tags yet, so it resets to
+        # rc.1 (e.g. 1.18.5-rc.5 + feat -> 1.19.0-rc.1). See scripts/compute-rc-version.sh.
+        FINAL_VERSION=$(git tag --list "v${BASE_VERSION}-rc.*" | sh scripts/compute-rc-version.sh "$BASE_VERSION")
         echo "[bump-version] final_version=${FINAL_VERSION}"
+        echo "${FINAL_VERSION}" > .version-unreleased
+        sed -i "s/## ${BASE_VERSION}/## ${FINAL_VERSION}/g" UNRELEASED-CHANGELOG.md
         # Safeguard: next branch must never produce a bare production version.
         case "$FINAL_VERSION" in
           *-rc.*) ;;
