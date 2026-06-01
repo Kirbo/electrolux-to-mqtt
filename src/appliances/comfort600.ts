@@ -134,15 +134,20 @@ export class Comfort600Appliance extends BaseAppliance {
    * Handles mode and fan speed denormalization
    */
   public transformMqttCommandToApi(rawCommand: Partial<NormalizedState>): Record<string, unknown> {
-    const { mode, fanSpeedSetting, verticalSwing, sleepMode, ...otherCommands } = rawCommand
+    const { mode, fanSpeedSetting, verticalSwing, sleepMode, targetTemperatureC } = rawCommand
 
     // If mode is explicitly 'off', turn off the appliance
     // Otherwise, if any command is sent (including mode changes or other settings), turn on the appliance
     const executeCommand = mode?.toLowerCase() === 'off' ? 'OFF' : 'ON'
 
-    const payload: Record<string, unknown> = {
-      ...otherCommands,
-      executeCommand,
+    // Allowlist the payload: forward only known command fields to the API rather
+    // than spreading arbitrary keys from the incoming MQTT command. Unknown keys
+    // (e.g. injected via the command topic) are dropped, never reach the API.
+    const payload: Record<string, unknown> = { executeCommand }
+
+    // targetTemperatureC passes through as-is; 0 is a valid value so guard on undefined.
+    if (targetTemperatureC !== undefined) {
+      payload.targetTemperatureC = targetTemperatureC
     }
 
     // Add mode if not turning off

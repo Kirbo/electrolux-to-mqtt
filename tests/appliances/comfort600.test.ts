@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Comfort600Appliance, isFanSpeedAction, isSleepAction, isTempAction } from '@/appliances/comfort600.js'
+import type { NormalizedState } from '@/types/normalized.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
 
 // Mock data
@@ -395,6 +396,21 @@ describe('Comfort600Appliance', () => {
     it('should transform sleep mode to API format', () => {
       const apiCommand = appliance.transformMqttCommandToApi({ sleepMode: 'on' })
       expect(apiCommand.sleepMode).toBe('ON')
+    })
+
+    it('preserves a targetTemperatureC of 0 (not dropped as falsy)', () => {
+      const apiCommand = appliance.transformMqttCommandToApi({ targetTemperatureC: 0 })
+      expect(apiCommand.targetTemperatureC).toBe(0)
+    })
+
+    it('drops unknown command keys instead of forwarding them to the API', () => {
+      // Simulate an arbitrary/injected key arriving on the command topic.
+      const apiCommand = appliance.transformMqttCommandToApi({
+        mode: 'cool',
+        foo: 'bar',
+      } as Partial<NormalizedState>)
+      expect(apiCommand.mode).toBe('COOL')
+      expect(apiCommand).not.toHaveProperty('foo')
     })
   })
 
