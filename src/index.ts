@@ -24,13 +24,13 @@ const telemetrySalt = crypto
 const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
 
 const refreshInterval = client.refreshInterval * 1000
-const applianceDiscoveryInterval = (config.electrolux.applianceDiscoveryInterval ?? 300) * 1000
+const applianceDiscoveryInterval = config.electrolux.applianceDiscoveryInterval * 1000
 
 const orchestrator = new Orchestrator(client, mqtt, {
   refreshInterval,
   applianceDiscoveryInterval,
   autoDiscovery: config.homeAssistant.autoDiscovery,
-  apiFailureRestartThresholdMs: (config.healthCheck.unHealthyRestartMinutes ?? 45) * 60_000,
+  apiFailureRestartThresholdMs: config.healthCheck.unHealthyRestartMinutes * 60_000,
   healthCheckEnabled: config.healthCheck.enabled,
   applianceRemovalGracePeriodMs: config.electrolux.applianceRemovalGracePeriodMinutes * 60_000,
 })
