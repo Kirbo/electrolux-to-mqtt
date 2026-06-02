@@ -53,7 +53,7 @@ Follow in order.
    - Touched `telemetry-backend/`: include `cd telemetry-backend && pnpm typecheck`
    - Node.js version changed: confirm all 9 locations from step 3 agree
 5. **Commit**:
-   - Conventional Commits. Dep change = `chore(deps): ...` — touches `package.json`/`pnpm-lock.yaml`, so CI cuts the next CalVer release; grouped under Chores in the changelog (no patch/minor distinction in the project version).
+   - Conventional Commits. Use `chore(deps): ...` for dep bumps — a labeling convention only (groups under Chores in the changelog). No version/release rule depends on the commit type: CalVer is date-derived, and CI keys off the changed `package.json`/`pnpm-lock.yaml` paths regardless of type.
    - One logical change per commit. Majors separate from minors where practical.
    - **Never `git push`** — human pushes.
 
@@ -95,7 +95,6 @@ Record:
 - Upgrade sequences needed together (e.g., Vitest + @vitest/* plugins)
 - `pnpm.overrides` entries + why
 - Tools where `pnpm dlx` vs local install matters
-- CalVer release behavior for `chore(deps)` commits (cuts the next dated release; changelog-only grouping)
 
 Gap in CLAUDE.md or `.claude/rules/` on dep maintenance → suggest update (ask before writing).
 
