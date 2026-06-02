@@ -1,7 +1,7 @@
 # Electrolux to MQTT / Home Assistant
 
-[![Latest Stable](https://e2m.devaus.eu/stable.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases)
-[![Latest Beta](https://e2m.devaus.eu/beta.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases)
+[![Latest Stable](https://e2m.devaus.eu/stable.svg)](https://e2m.devaus.eu/stable)
+[![Latest Beta](https://e2m.devaus.eu/beta.svg)](https://e2m.devaus.eu/beta)
 [![Docker Pulls](https://badgen.net/docker/pulls/kirbownz/electrolux-to-mqtt)](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt/)
 [![Active Users](https://e2m.devaus.eu/users.svg)](https://e2m.devaus.eu/telemetry)
 

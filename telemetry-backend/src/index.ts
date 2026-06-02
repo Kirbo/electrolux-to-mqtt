@@ -28,6 +28,7 @@ const config: AppConfig = {
   rateLimitBreakerWindowMs: envNumber(process.env.RATE_LIMIT_BREAKER_WINDOW_MS, 60_000),
   rateLimitBreakerCooldownMs: envNumber(process.env.RATE_LIMIT_BREAKER_COOLDOWN_MS, 30_000),
   releasesApiUrl: 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases',
+  releasesPageUrl: 'https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases',
 }
 
 // Redis client setup
@@ -73,14 +74,14 @@ const server = app.listen(port, () => {
   console.log(`Telemetry server running on port ${port}`)
   // Generate initial badges on startup
   generateBadge({ redis, config })
-  generateReleaseBadges({ config }).catch((err: unknown) => {
+  generateReleaseBadges({ config, redis }).catch((err: unknown) => {
     console.error('Release badge generation failed:', err)
   })
 })
 
 // Refresh release badges every hour
 setInterval(() => {
-  generateReleaseBadges({ config }).catch((err: unknown) => {
+  generateReleaseBadges({ config, redis }).catch((err: unknown) => {
     console.error('Release badge generation failed:', err)
   })
 }, 3_600_000)

@@ -51,6 +51,11 @@ export interface AppConfig {
    * Example: 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases'
    */
   releasesApiUrl: string
+  /**
+   * GitLab releases page URL used for badge links and redirect fallback.
+   * Example: 'https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases'
+   */
+  releasesPageUrl: string
 }
 
 export interface AppDependencies {
@@ -60,6 +65,10 @@ export interface AppDependencies {
 
 const USER_TTL_SECONDS = 24 * 60 * 60
 const CACHED_TELEMETRY_KEY = 'cached:telemetry'
+export const RELEASE_STABLE_KEY = 'release:stable'
+export const RELEASE_BETA_KEY = 'release:beta'
+
+const INVISIBLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"/>'
 
 export async function getUserKeys(redis: RedisLike): Promise<string[]> {
   const keys: string[] = []
@@ -239,14 +248,22 @@ export async function fetchLatestReleases(
 
 export async function generateReleaseBadges(opts: {
   config: AppConfig
+  redis: RedisLike
   fetchFn?: typeof globalThis.fetch
 }): Promise<void> {
-  const { config, fetchFn } = opts
+  const { config, redis, fetchFn } = opts
   try {
     const { stable, beta } = await fetchLatestReleases(config.releasesApiUrl, fetchFn)
 
+    // Store tags in Redis for redirect endpoints (best-effort)
+    try {
+      await redis.set(RELEASE_STABLE_KEY, stable ?? '')
+      await redis.set(RELEASE_BETA_KEY, beta ?? '')
+    } catch (redisError) {
+      console.error('Error storing release tags in Redis:', redisError)
+    }
+
     const stableVersion = stable !== null ? stable.replace(/^v/, '') : 'none'
-    const betaVersion = beta !== null ? beta.replace(/^v/, '') : 'none'
 
     try {
       const stablePath = path.join(config.badgeDir, 'stable.svg')
@@ -258,11 +275,22 @@ export async function generateReleaseBadges(opts: {
       // Docker volume or reverse proxy, so it may not be writable here.
     }
 
+    // Beta is considered "newer" (and thus visible) when beta !== null and its
+    // version sorts before the stable (i.e. compareVersionsDescending(beta, stable) < 0
+    // means beta is newer). When stable is null and beta exists, beta is also shown.
+    const betaIsNewer = beta !== null && (stable === null || compareVersionsDescending(beta, stable) < 0)
+
     try {
       const betaPath = path.join(config.badgeDir, 'beta.svg')
       await fsp.mkdir(path.dirname(betaPath), { recursive: true })
-      await fsp.writeFile(betaPath, buildReleaseBadgeSvg('beta', betaVersion, '#fe7d37'))
-      console.log(`Release badge updated: beta=${betaVersion}`)
+      if (betaIsNewer && beta !== null) {
+        const betaVersion = beta.replace(/^v/, '')
+        await fsp.writeFile(betaPath, buildReleaseBadgeSvg('beta', betaVersion, '#fe7d37'))
+        console.log(`Release badge updated: beta=${betaVersion}`)
+      } else {
+        await fsp.writeFile(betaPath, INVISIBLE_SVG)
+        console.log('Release badge updated: beta=invisible (not newer than stable)')
+      }
     } catch {
       // Badge file write is non-critical — see above.
     }
@@ -418,6 +446,30 @@ export function createApp(deps: AppDependencies): Express {
   // Rate-limit circuit-breaker status — for observability
   app.get('/health/rate-limit', (_req: Request, res: Response) => {
     res.json(getBreakerStatus())
+  })
+
+  // Release redirect endpoints — forward to the specific GitLab release page.
+  // Falls back to the base releases page when no tag is stored or Redis errors.
+  async function redirectToRelease(key: string, res: Response): Promise<void> {
+    try {
+      const tag = await redis.get(key)
+      if (tag) {
+        res.redirect(302, `${config.releasesPageUrl}/${tag}`)
+      } else {
+        res.redirect(302, config.releasesPageUrl)
+      }
+    } catch (error) {
+      console.error(`Error reading release key ${key} from Redis:`, error)
+      res.redirect(302, config.releasesPageUrl)
+    }
+  }
+
+  app.get('/stable', (_req: Request, res: Response) => {
+    void redirectToRelease(RELEASE_STABLE_KEY, res)
+  })
+
+  app.get('/beta', (_req: Request, res: Response) => {
+    void redirectToRelease(RELEASE_BETA_KEY, res)
   })
 
   async function enforceRateLimitRedis(key: string, max: number, res: Response): Promise<boolean> {

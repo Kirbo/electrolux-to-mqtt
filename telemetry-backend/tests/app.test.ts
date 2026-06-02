@@ -11,6 +11,8 @@ import {
   generateBadge,
   generateReleaseBadges,
   getUserKeys,
+  RELEASE_BETA_KEY,
+  RELEASE_STABLE_KEY,
   type RedisLike,
 } from '../src/app.js'
 import { readMachineId } from '../src/utils.js'
@@ -36,6 +38,7 @@ function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     rateLimitBreakerWindowMs: 60_000,
     rateLimitBreakerCooldownMs: 30_000,
     releasesApiUrl: 'https://example.com/releases',
+    releasesPageUrl: 'https://example.com/releases',
     ...overrides,
   }
 }
@@ -976,83 +979,158 @@ describe('generateReleaseBadges', () => {
     return async () => new Response(JSON.stringify(releases), { status: 200 })
   }
 
-  it('writes stable.svg and beta.svg when both release types are present', async () => {
+  it('writes visible beta.svg and sets both Redis keys when beta is newer than stable', async () => {
+    const redis = new FakeRedis()
     const config = buildConfig({ badgeDir })
-    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0' }, { tag_name: 'v2026.6.0b1' }])
+    // v2026.7.0b1 is a newer release than v2026.6.0, so betaIsNewer = true
+    const fetchFn = makeFetch([{ tag_name: 'v2026.7.0b1' }, { tag_name: 'v2026.6.0' }])
 
-    await generateReleaseBadges({ config, fetchFn })
+    await generateReleaseBadges({ config, redis, fetchFn })
 
-    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
     const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
-    expect(stable).toContain('<svg')
-    expect(stable).toContain('stable')
-    expect(stable).toContain('2026.6.0')
-    expect(beta).toContain('<svg')
-    expect(beta).toContain('beta')
-    expect(beta).toContain('2026.6.0b1')
+    expect(beta).toContain('2026.7.0b1')
+    expect(beta).not.toContain('width="0"')
+    // Redis keys must be set
+    expect(await redis.get(RELEASE_STABLE_KEY)).toBe('v2026.6.0')
+    expect(await redis.get(RELEASE_BETA_KEY)).toBe('v2026.7.0b1')
   })
 
-  it('shows "none" in stable.svg when no stable release exists', async () => {
+  it('writes zero-size beta.svg when stable is newer than beta', async () => {
+    const redis = new FakeRedis()
     const config = buildConfig({ badgeDir })
-    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0b1' }, { tag_name: 'v2026.6.0b2' }])
+    // stable v2026.6.0 beats pre-release v2026.6.0b1 — betaIsNewer = false
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0' }, { tag_name: 'v2026.6.0b1' }])
 
-    await generateReleaseBadges({ config, fetchFn })
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(beta).toContain('width="0"')
+    expect(beta).toContain('height="0"')
+    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    expect(stable).toContain('2026.6.0')
+    expect(stable).not.toContain('width="0"')
+  })
+
+  it('writes zero-size beta.svg when beta is null', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    // No beta in the list — beta = null, so betaIsNewer = false
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0' }, { tag_name: 'v1.19.0' }])
+
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(beta).toContain('width="0"')
+    expect(beta).toContain('height="0"')
+    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    expect(stable).toContain('2026.6.0')
+  })
+
+  it('writes visible beta.svg and stable.svg shows "none" when only beta exists', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    // stable = null, beta = v2026.6.0b1 — betaIsNewer = true (stable is null)
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0b1' }])
+
+    await generateReleaseBadges({ config, redis, fetchFn })
 
     const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
     expect(stable).toContain('none')
-    // beta.svg should still have the first beta found
     const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
     expect(beta).toContain('2026.6.0b1')
-  })
-
-  it('shows "none" in beta.svg when no beta release exists', async () => {
-    const config = buildConfig({ badgeDir })
-    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0' }, { tag_name: 'v1.19.0' }])
-
-    await generateReleaseBadges({ config, fetchFn })
-
-    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
-    expect(beta).toContain('none')
-    // stable.svg should have the first stable found
-    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
-    expect(stable).toContain('2026.6.0')
-  })
-
-  it('picks the first stable and first beta from a newest-first list', async () => {
-    const config = buildConfig({ badgeDir })
-    const fetchFn = makeFetch([
-      { tag_name: 'v2026.6.0b2' }, // newest beta — should be picked
-      { tag_name: 'v2026.6.0b1' }, // older beta — ignored
-      { tag_name: 'v2026.6.0' }, // newest stable — should be picked
-      { tag_name: 'v1.19.0' }, // older stable — ignored
-    ])
-
-    await generateReleaseBadges({ config, fetchFn })
-
-    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
-    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
-    expect(stable).toContain('2026.6.0')
-    expect(stable).not.toContain('1.19.0')
-    expect(beta).toContain('2026.6.0b2')
-    expect(beta).not.toContain('2026.6.0b1')
+    expect(beta).not.toContain('width="0"')
   })
 
   it('handles a non-ok HTTP response gracefully without throwing to caller', async () => {
+    const redis = new FakeRedis()
     const config = buildConfig({ badgeDir })
     const fetchFn: typeof globalThis.fetch = async () => new Response('Internal Server Error', { status: 500 })
 
     // Must not throw
-    await expect(generateReleaseBadges({ config, fetchFn })).resolves.toBeUndefined()
+    await expect(generateReleaseBadges({ config, redis, fetchFn })).resolves.toBeUndefined()
   })
 
   it('handles a fetch network error gracefully without throwing to caller', async () => {
+    const redis = new FakeRedis()
     const config = buildConfig({ badgeDir })
     const fetchFn: typeof globalThis.fetch = async () => {
       throw new Error('network failure')
     }
 
     // Must not throw
-    await expect(generateReleaseBadges({ config, fetchFn })).resolves.toBeUndefined()
+    await expect(generateReleaseBadges({ config, redis, fetchFn })).resolves.toBeUndefined()
+  })
+})
+
+// ── GET /stable and GET /beta redirects ──────────────────────────────────────
+describe('GET /stable and GET /beta redirects', () => {
+  it('/stable with a stored tag redirects to releases page with tag path', async () => {
+    const redis = new FakeRedis()
+    redis.store.set(RELEASE_STABLE_KEY, 'v1.19.0')
+    const config = buildConfig()
+    const app = createApp({ redis, config })
+
+    const res = await request(app).get('/stable').redirects(0)
+
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://example.com/releases/v1.19.0')
+  })
+
+  it('/stable with no stored tag (empty string) redirects to base releases page', async () => {
+    const redis = new FakeRedis()
+    redis.store.set(RELEASE_STABLE_KEY, '')
+    const config = buildConfig()
+    const app = createApp({ redis, config })
+
+    const res = await request(app).get('/stable').redirects(0)
+
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://example.com/releases')
+  })
+
+  it('/stable with Redis error redirects to base releases page (fail-open)', async () => {
+    const base = new FakeRedis()
+    const brokenRedis: RedisLike = {
+      ...base,
+      get: async (_key: string): Promise<string | null> => {
+        throw new Error('redis down')
+      },
+      set: base.set.bind(base),
+      setEx: base.setEx.bind(base),
+      incrWithTtl: base.incrWithTtl.bind(base),
+      scanIterator: base.scanIterator.bind(base),
+    }
+    const config = buildConfig()
+    const app = createApp({ redis: brokenRedis, config })
+
+    const res = await request(app).get('/stable').redirects(0)
+
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://example.com/releases')
+  })
+
+  it('/beta with a stored tag redirects to releases page with tag path', async () => {
+    const redis = new FakeRedis()
+    redis.store.set(RELEASE_BETA_KEY, 'v2026.6.0b2')
+    const config = buildConfig()
+    const app = createApp({ redis, config })
+
+    const res = await request(app).get('/beta').redirects(0)
+
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://example.com/releases/v2026.6.0b2')
+  })
+
+  it('/beta with no stored tag redirects to base releases page', async () => {
+    const redis = new FakeRedis()
+    // No RELEASE_BETA_KEY in store — redis.get returns null
+    const config = buildConfig()
+    const app = createApp({ redis, config })
+
+    const res = await request(app).get('/beta').redirects(0)
+
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://example.com/releases')
   })
 })
 
