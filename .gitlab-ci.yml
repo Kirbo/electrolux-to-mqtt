@@ -42,6 +42,11 @@ default:
 
 ################################################################### SHARED RULES ######################################################################
 
+# Release/build gate: only paths that affect the shipped Docker image trigger a
+# version bump, changelog, image build, and release. Deliberately excludes
+# tests/vitest config (don't ship), docs, .claude/, CI config, scripts, and
+# config examples. Test/lint/typecheck run off .rules_node_changes instead, and
+# telemetry-backend has its own deploy job — neither bumps the app version.
 .rules_code_changes:
   rules:
     - if: $SCHEDULE
@@ -53,10 +58,7 @@ default:
         - pnpm-lock.yaml
         - pnpm-workspace.yaml
         - src/**/*
-        - tests/**/*
         - tsconfig.json
-        - vitest.config.ts
-        - vitest.setup.ts
       when: on_success
     - when: never
 

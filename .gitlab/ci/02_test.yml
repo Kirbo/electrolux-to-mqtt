@@ -187,8 +187,13 @@ sonarcloud-check:
       - .sonar/cache
     policy: pull-push
   needs:
+    # Optional: a tests-only change runs sonar but not bump version (which now
+    # gates on release paths only). Without bump's artifact, sonar uses the
+    # tracked sonar-project.properties (no dynamic projectVersion) — fine, the
+    # gate uses a day-based new-code period, not the version.
     - job: bump version
       artifacts: true
+      optional: true
     - job: install dependencies
       artifacts: false
     - job: test
