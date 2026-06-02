@@ -18,6 +18,10 @@ services:
     build:
       context: ../
       dockerfile: ./telemetry-backend/Dockerfile
+      # BuildKit runs in its own network namespace and cannot reach registry.npmjs.org
+      # without host networking. The host can reach it fine; regular docker run containers
+      # can too — it is specific to the BuildKit build network. Do not remove.
+      network: host
       args:
         - NODE_VERSION=${NODE_VERSION:-24}
     container_name: telemetry-backend
