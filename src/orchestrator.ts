@@ -276,11 +276,9 @@ export class Orchestrator implements AsyncDisposable {
       if (currentIds.has(id)) {
         // Appliance is present — reset any prior missing-since entry
         this.applianceMissingSince.delete(id)
-      } else {
+      } else if (!this.applianceMissingSince.has(id)) {
         // Appliance absent — record first-missed timestamp (preserve original)
-        if (!this.applianceMissingSince.has(id)) {
-          this.applianceMissingSince.set(id, now)
-        }
+        this.applianceMissingSince.set(id, now)
       }
     }
   }

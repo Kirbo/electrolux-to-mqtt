@@ -82,7 +82,7 @@ function splitVersion(clean: string): { core: string; pre: string } {
   if (dashIdx !== -1) {
     return { core: clean.slice(0, dashIdx), pre: clean.slice(dashIdx + 1) }
   }
-  const m = clean.match(/^(.+\d)(b\d+)$/)
+  const m = /^(\d+(?:\.\d+)*)(b\d+)$/.exec(clean)
   if (m?.[1] !== undefined && m[2] !== undefined) {
     return { core: m[1], pre: m[2] }
   }
@@ -96,8 +96,8 @@ function comparePreRelease(pre1: string, pre2: string): number {
   if (pre1 === pre2) return 0
   if (!pre1) return 1
   if (!pre2) return -1
-  const preNum1 = Number.parseInt(pre1.match(/\d+$/)?.[0] ?? '0', 10)
-  const preNum2 = Number.parseInt(pre2.match(/\d+$/)?.[0] ?? '0', 10)
+  const preNum1 = Number.parseInt(pre1.replace(/\D/g, '') || '0', 10)
+  const preNum2 = Number.parseInt(pre2.replace(/\D/g, '') || '0', 10)
   if (preNum1 < preNum2) return -1
   if (preNum1 > preNum2) return 1
   return 0

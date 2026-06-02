@@ -85,7 +85,7 @@ function splitParsedVersion(withoutV: string): { numeric: string; preRelease: st
   if (dashIndex !== -1) {
     return { numeric: withoutV.slice(0, dashIndex), preRelease: withoutV.slice(dashIndex + 1) }
   }
-  const m = withoutV.match(/^(.+\d)(b\d+)$/)
+  const m = /^(\d+(?:\.\d+)*)(b\d+)$/.exec(withoutV)
   if (m?.[1] !== undefined && m[2] !== undefined) {
     return { numeric: m[1], preRelease: m[2] }
   }
@@ -105,10 +105,10 @@ function parseVersion(raw: string): ParsedVersion {
 }
 
 function comparePreRelease(a: string, b: string): number {
-  // Extract trailing digits so both "rc.10" and "b2" compare numerically.
-  // Number.parseInt('b1'.match(/\d+$/)?.[0] ?? '0', 10) → 1 (no NaN).
-  const numA = Number.parseInt(a.match(/\d+$/)?.[0] ?? '0', 10)
-  const numB = Number.parseInt(b.match(/\d+$/)?.[0] ?? '0', 10)
+  // Extract all digits so both "rc.10" and "b2" compare numerically.
+  // /\D/g removal is non-backtracking (single negated class) and avoids ReDoS.
+  const numA = Number.parseInt(a.replace(/\D/g, '') || '0', 10)
+  const numB = Number.parseInt(b.replace(/\D/g, '') || '0', 10)
   if (numB !== numA) return numB - numA
   // Same numeric suffix — fall back to lexicographic prefix comparison
   if (b > a) return 1
