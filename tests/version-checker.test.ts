@@ -1199,4 +1199,248 @@ describe('version-checker', () => {
       })
     })
   })
+
+  // ── CalVer compatibility ──────────────────────────────────────────────────
+  describe('CalVer + SemVer forward-compatibility', () => {
+    // isPreRelease detection tests drive through startVersionChecker:
+    // on the stable channel a pre-release tag is filtered out (no payload);
+    // on the stable channel a stable tag produces update-available.
+    // We use the channel filter as an observable proxy for isPreRelease
+    // because the function itself is not exported.
+    describe('isPreRelease detection — stable channel', () => {
+      let moduleStableIsPre: typeof import('@/version-checker.js')
+
+      beforeEach(async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
+            telemetryEnabled: false,
+          },
+        }))
+        moduleStableIsPre = await import('@/version-checker.js')
+      })
+
+      it('treats 2026.6.0b1 as pre-release (stable channel skips it)', async () => {
+        // stable channel must filter out beta tag → no update-available published
+        mockAxiosGet
+          .mockResolvedValueOnce({
+            data: [{ tag_name: 'v2026.6.0b1', released_at: '2026-04-01T12:00:00Z' }],
+          })
+          .mockResolvedValueOnce({ data: [] })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleStableIsPre.startVersionChecker('1.18.5', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        for (const call of pub.mock.calls) {
+          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
+          expect(payload.status).not.toBe('update-available')
+        }
+      })
+
+      it('treats 2026.6.0 as stable (stable channel includes it)', async () => {
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v2026.6.0', released_at: '2026-04-01T12:00:00Z' }],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleStableIsPre.startVersionChecker('1.18.5', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+      })
+
+      it('treats 1.18.5-rc.1 as pre-release (stable channel skips it)', async () => {
+        mockAxiosGet
+          .mockResolvedValueOnce({
+            data: [{ tag_name: 'v1.18.5-rc.1', released_at: '2026-04-01T12:00:00Z' }],
+          })
+          .mockResolvedValueOnce({ data: [] })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleStableIsPre.startVersionChecker('1.17.0', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        for (const call of pub.mock.calls) {
+          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
+          expect(payload.status).not.toBe('update-available')
+        }
+      })
+
+      it('treats 1.18.5 as stable (stable channel includes it)', async () => {
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v1.18.5', released_at: '2026-04-01T12:00:00Z' }],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleStableIsPre.startVersionChecker('1.17.0', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+      })
+
+      it('treats v2026.6.0b1 (with v prefix) as pre-release', async () => {
+        mockAxiosGet
+          .mockResolvedValueOnce({
+            data: [{ tag_name: 'v2026.6.0b1', released_at: '2026-04-01T12:00:00Z' }],
+          })
+          .mockResolvedValueOnce({ data: [] })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleStableIsPre.startVersionChecker('2026.5.0', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        for (const call of pub.mock.calls) {
+          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
+          expect(payload.status).not.toBe('update-available')
+        }
+      })
+    })
+
+    describe('version ordering', () => {
+      // Uses beta channel so channel filtering does not mask comparison results.
+      let moduleCalVer: typeof import('@/version-checker.js')
+      let pubFn: ReturnType<typeof vi.fn>
+      let mqttCalVer: IMqtt
+
+      beforeEach(async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+            telemetryEnabled: false,
+          },
+        }))
+        moduleCalVer = await import('@/version-checker.js')
+        pubFn = vi.fn()
+        mqttCalVer = { publishInfo: pubFn } as unknown as IMqtt
+        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      })
+
+      const runCmp = async (current: string, latestTag: string): Promise<string | null> => {
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: latestTag, released_at: '2026-01-28T12:00:00Z' }],
+        })
+        const stop = moduleCalVer.startVersionChecker(current, 'hash', mqttCalVer)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        const calls = pubFn.mock.calls
+        if (calls.length === 0) return null
+        const raw = calls[0]?.[0]
+        return (JSON.parse(raw as string) as Record<string, unknown>).status as string
+      }
+
+      it('2026.6.0 > 1.18.5 (calver stable beats old semver stable)', async () => {
+        expect(await runCmp('1.18.5', 'v2026.6.0')).toBe('update-available')
+      })
+
+      it('2026.6.1 > 2026.6.0 (calver patch increment)', async () => {
+        expect(await runCmp('2026.6.0', 'v2026.6.1')).toBe('update-available')
+      })
+
+      it('2026.6.0 > 2026.6.0b1 (stable beats beta of same base)', async () => {
+        expect(await runCmp('2026.6.0b1', 'v2026.6.0')).toBe('update-available')
+      })
+
+      it('2026.6.0b2 > 2026.6.0b1 (higher beta number wins)', async () => {
+        expect(await runCmp('2026.6.0b1', 'v2026.6.0b2')).toBe('update-available')
+      })
+
+      it('2026.6.0b1 > 1.18.5-rc.5 (calver beta beats old semver rc)', async () => {
+        expect(await runCmp('1.18.5-rc.5', 'v2026.6.0b1')).toBe('update-available')
+      })
+
+      it('1.18.5 == 1.18.5 → up-to-date', async () => {
+        expect(await runCmp('1.18.5', 'v1.18.5')).toBe('up-to-date')
+      })
+
+      it('2026.6.0 == 2026.6.0 → up-to-date', async () => {
+        expect(await runCmp('2026.6.0', 'v2026.6.0')).toBe('up-to-date')
+      })
+    })
+
+    describe('channel filtering with mixed old+new releases — stable', () => {
+      let moduleStableMixed: typeof import('@/version-checker.js')
+
+      beforeEach(async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
+            telemetryEnabled: false,
+          },
+        }))
+        moduleStableMixed = await import('@/version-checker.js')
+      })
+
+      it('stable channel: picks 2026.6.0 (most recent stable) from mixed list, skips bN and rc', async () => {
+        // Dates ordered so 2026.6.0 is most recent stable. Use past dates so the
+        // 1-hour new-release guard never suppresses the notification.
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [
+            { tag_name: 'v2026.6.0b2', released_at: '2026-05-10T12:00:00Z' }, // latest by date but pre-release
+            { tag_name: 'v2026.6.0', released_at: '2026-05-09T12:00:00Z' }, // most recent stable
+            { tag_name: 'v1.18.5', released_at: '2026-04-01T12:00:00Z' },
+            { tag_name: 'v1.18.5-rc.1', released_at: '2026-03-20T12:00:00Z' },
+          ],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleStableMixed.startVersionChecker('1.18.5', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        // Should pick v2026.6.0 as latest stable, v1.18.5 is current → update-available
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v2026.6.0"'))
+      })
+    })
+
+    describe('channel filtering with mixed old+new releases — beta', () => {
+      let moduleBetaMixed: typeof import('@/version-checker.js')
+
+      beforeEach(async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+            telemetryEnabled: false,
+          },
+        }))
+        moduleBetaMixed = await import('@/version-checker.js')
+      })
+
+      it('beta channel: picks 2026.6.0b2 (most recent by date) from mixed list', async () => {
+        // Use dates well in the past so the 1-hour new-release guard never suppresses the notification.
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [
+            { tag_name: 'v2026.6.0b2', released_at: '2026-05-10T12:00:00Z' },
+            { tag_name: 'v2026.6.0', released_at: '2026-05-09T12:00:00Z' },
+            { tag_name: 'v1.18.5', released_at: '2026-04-01T12:00:00Z' },
+            { tag_name: 'v1.18.5-rc.1', released_at: '2026-03-20T12:00:00Z' },
+          ],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = moduleBetaMixed.startVersionChecker('1.18.5', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        // Beta channel picks latest by date = v2026.6.0b2
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v2026.6.0b2"'))
+      })
+    })
+  })
 })

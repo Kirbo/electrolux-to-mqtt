@@ -133,6 +133,37 @@ describe('generateBadge', () => {
     expect(cached.versions.map((v) => v.version)).toEqual(['1.3.0', '1.3.0-rc.2', '1.3.0-rc.1', '1.2.3', '1.2.3-rc.1'])
   })
 
+  it('sorts mixed CalVer and SemVer versions correctly (calver > semver, stable > beta)', async () => {
+    const redis = new FakeRedis()
+    // Each version gets a distinct hash
+    const entries: Array<[string, string]> = [
+      ['1.18.5', `${'1'.repeat(64)}`],
+      ['1.18.5-rc.1', `${'2'.repeat(64)}`],
+      ['2026.6.0', `${'3'.repeat(64)}`],
+      ['2026.6.0b1', `${'4'.repeat(64)}`],
+      ['2026.6.0b2', `${'5'.repeat(64)}`],
+    ]
+    for (const [version, hash] of entries) {
+      await redis.set(`user:${hash}`, version)
+    }
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as {
+      total: number
+      versions: Array<{ version: string; count: number }>
+    }
+    // Expected descending order: 2026.6.0 > 2026.6.0b2 > 2026.6.0b1 > 1.18.5 > 1.18.5-rc.1
+    expect(cached.versions.map((v) => v.version)).toEqual([
+      '2026.6.0',
+      '2026.6.0b2',
+      '2026.6.0b1',
+      '1.18.5',
+      '1.18.5-rc.1',
+    ])
+  })
+
   it('sorts pre-release rc numbers numerically so rc.10 comes before rc.9', async () => {
     const redis = new FakeRedis()
     const rcVersions = ['1.17.0-rc.1', '1.17.0-rc.10', '1.17.0-rc.2', '1.17.0-rc.9']

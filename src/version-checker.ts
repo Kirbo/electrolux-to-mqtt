@@ -70,13 +70,34 @@ type GitLabRelease = {
   }
 }
 
-// Pre-release versions (e.g. 1.17.0-rc.7) are lower than their stable counterpart per semver spec.
+/**
+ * Split a cleaned (no leading 'v') version string into its numeric core and
+ * pre-release label. Supports two pre-release forms:
+ *   - SemVer dash:  "1.18.5-rc.1"  → { core: "1.18.5", pre: "rc.1" }
+ *   - CalVer beta:  "2026.6.0b1"   → { core: "2026.6.0", pre: "b1" }
+ *   - Stable:       "2026.6.0"     → { core: "2026.6.0", pre: "" }
+ */
+function splitVersion(clean: string): { core: string; pre: string } {
+  const dashIdx = clean.indexOf('-')
+  if (dashIdx !== -1) {
+    return { core: clean.slice(0, dashIdx), pre: clean.slice(dashIdx + 1) }
+  }
+  const m = clean.match(/^(.+\d)(b\d+)$/)
+  if (m?.[1] !== undefined && m[2] !== undefined) {
+    return { core: m[1], pre: m[2] }
+  }
+  return { core: clean, pre: '' }
+}
+
+// Pre-release versions (e.g. 1.17.0-rc.7 or 2026.6.0b1) are lower than their
+// stable counterpart. Numeric suffix extracted via trailing digits so both
+// "rc.10" and "b2" compare correctly (no NaN from split('.').at(-1) on "b1").
 function comparePreRelease(pre1: string, pre2: string): number {
   if (pre1 === pre2) return 0
   if (!pre1) return 1
   if (!pre2) return -1
-  const preNum1 = Number.parseInt(pre1.split('.').at(-1) ?? '0', 10)
-  const preNum2 = Number.parseInt(pre2.split('.').at(-1) ?? '0', 10)
+  const preNum1 = Number.parseInt(pre1.match(/\d+$/)?.[0] ?? '0', 10)
+  const preNum2 = Number.parseInt(pre2.match(/\d+$/)?.[0] ?? '0', 10)
   if (preNum1 < preNum2) return -1
   if (preNum1 > preNum2) return 1
   return 0
@@ -86,12 +107,8 @@ function compareVersions(v1: string, v2: string): number {
   const clean1 = v1.replace(/^v/, '')
   const clean2 = v2.replace(/^v/, '')
 
-  const dashIdx1 = clean1.indexOf('-')
-  const dashIdx2 = clean2.indexOf('-')
-  const core1 = dashIdx1 === -1 ? clean1 : clean1.slice(0, dashIdx1)
-  const core2 = dashIdx2 === -1 ? clean2 : clean2.slice(0, dashIdx2)
-  const pre1 = dashIdx1 === -1 ? '' : clean1.slice(dashIdx1 + 1)
-  const pre2 = dashIdx2 === -1 ? '' : clean2.slice(dashIdx2 + 1)
+  const { core: core1, pre: pre1 } = splitVersion(clean1)
+  const { core: core2, pre: pre2 } = splitVersion(clean2)
 
   const parts1 = core1.split('.').map((n) => Number.parseInt(n, 10))
   const parts2 = core2.split('.').map((n) => Number.parseInt(n, 10))
@@ -112,7 +129,9 @@ type LatestVersionInfo = {
   description?: string
 }
 
-const isPreRelease = (tagName: string): boolean => tagName.includes('-')
+// A version is pre-release if it contains '-' (SemVer rc: "1.18.5-rc.1")
+// OR ends with a 'b<digits>' suffix preceded by a digit (CalVer beta: "2026.6.0b1").
+const isPreRelease = (tagName: string): boolean => tagName.includes('-') || /\db\d+$/.test(tagName)
 
 function pickLatestFromReleases(releases: GitLabRelease[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
   const eligible = channel === 'stable' ? releases.filter((r) => !isPreRelease(r.tag_name)) : releases

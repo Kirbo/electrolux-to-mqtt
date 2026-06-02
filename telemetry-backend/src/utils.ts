@@ -54,8 +54,9 @@ export function validateTelemetryPayload(userHash: unknown, version: unknown): s
     return 'userHash must be hex'
   }
 
-  // Semver-ish: vX.Y.Z or X.Y.Z with optional pre-release suffix (-alpha.1, etc.)
-  if (!/^v?\d+\.\d+\.\d+(-[a-z0-9.-]+)?$/i.test(version)) {
+  // Semver-ish: vX.Y.Z or X.Y.Z with optional pre-release suffix.
+  // Accepts: -alpha.1 (SemVer dash form) or b1 (CalVer beta form, no dash).
+  if (!/^v?\d+\.\d+\.\d+(-[a-z0-9.-]+|b\d+)?$/i.test(version)) {
     if (version.length < 1 || version.length > 32) {
       return 'version length is invalid'
     }

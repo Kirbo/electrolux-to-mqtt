@@ -47,6 +47,28 @@ describe('validateTelemetryPayload', () => {
     }
   })
 
+  it('accepts CalVer stable form 2026.6.0', () => {
+    expect(validateTelemetryPayload(validHash, '2026.6.0')).toBeNull()
+  })
+
+  it('accepts CalVer beta form 2026.6.0b1', () => {
+    expect(validateTelemetryPayload(validHash, '2026.6.0b1')).toBeNull()
+  })
+
+  it('accepts CalVer beta form with v prefix v2026.6.0b1', () => {
+    expect(validateTelemetryPayload(validHash, 'v2026.6.0b1')).toBeNull()
+  })
+
+  it('accepts CalVer stable with v prefix v2026.6.0', () => {
+    expect(validateTelemetryPayload(validHash, 'v2026.6.0')).toBeNull()
+  })
+
+  it('rejects junk version forms', () => {
+    expect(validateTelemetryPayload(validHash, 'not-a-version')).toMatch(/invalid characters/)
+    expect(validateTelemetryPayload(validHash, '2026.6.0b')).toMatch(/invalid characters/)
+    expect(validateTelemetryPayload(validHash, '2026.6.0b-1')).toMatch(/invalid characters/)
+  })
+
   it('rejects non-semver version forms', () => {
     // Underscore separators, dot-only, missing patch segment
     expect(validateTelemetryPayload(validHash, '2.3.4_beta')).toMatch(/invalid characters/)

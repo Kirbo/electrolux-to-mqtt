@@ -73,11 +73,28 @@ interface ParsedVersion {
   preRelease: string | null
 }
 
+/**
+ * Split a cleaned (no leading 'v') version string into its numeric core and
+ * pre-release label. Supports two pre-release forms:
+ *   - SemVer dash:  "1.18.5-rc.1"  → core "1.18.5", pre "rc.1"
+ *   - CalVer beta:  "2026.6.0b1"   → core "2026.6.0", pre "b1"
+ *   - Stable:       "2026.6.0"     → core "2026.6.0", pre null
+ */
+function splitParsedVersion(withoutV: string): { numeric: string; preRelease: string | null } {
+  const dashIndex = withoutV.indexOf('-')
+  if (dashIndex !== -1) {
+    return { numeric: withoutV.slice(0, dashIndex), preRelease: withoutV.slice(dashIndex + 1) }
+  }
+  const m = withoutV.match(/^(.+\d)(b\d+)$/)
+  if (m?.[1] !== undefined && m[2] !== undefined) {
+    return { numeric: m[1], preRelease: m[2] }
+  }
+  return { numeric: withoutV, preRelease: null }
+}
+
 function parseVersion(raw: string): ParsedVersion {
   const withoutV = raw.replace(/^v/, '')
-  const dashIndex = withoutV.indexOf('-')
-  const numeric = dashIndex === -1 ? withoutV : withoutV.slice(0, dashIndex)
-  const preRelease = dashIndex === -1 ? null : withoutV.slice(dashIndex + 1)
+  const { numeric, preRelease } = splitParsedVersion(withoutV)
   const [maj, min, pat] = numeric.split('.').map(Number)
   return {
     major: maj ?? 0,
@@ -88,9 +105,10 @@ function parseVersion(raw: string): ParsedVersion {
 }
 
 function comparePreRelease(a: string, b: string): number {
-  // Compare numeric suffix so rc.10 > rc.9 (lexicographic would break)
-  const numA = Number.parseInt(a.split('.').at(-1) ?? '0', 10)
-  const numB = Number.parseInt(b.split('.').at(-1) ?? '0', 10)
+  // Extract trailing digits so both "rc.10" and "b2" compare numerically.
+  // Number.parseInt('b1'.match(/\d+$/)?.[0] ?? '0', 10) → 1 (no NaN).
+  const numA = Number.parseInt(a.match(/\d+$/)?.[0] ?? '0', 10)
+  const numB = Number.parseInt(b.match(/\d+$/)?.[0] ?? '0', 10)
   if (numB !== numA) return numB - numA
   // Same numeric suffix — fall back to lexicographic prefix comparison
   if (b > a) return 1
