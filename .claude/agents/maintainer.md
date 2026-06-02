@@ -45,6 +45,7 @@ Follow in order.
      - `docker/docker-compose.local.yml` + `docker/docker-compose.local.example.yml` `NODE_VERSION:-<major>`
      - `telemetry-backend/Dockerfile` `ARG NODE_VERSION` → `<major>`
      - `telemetry-backend/docker-compose.yml` `NODE_VERSION:-<major>`
+   - **`telemetry-backend/docker-compose.yml` `build.network: host`** — do NOT remove. BuildKit's network namespace cannot reach `registry.npmjs.org`; `network: host` is the fix. The host and regular `docker run` containers reach it fine — it is a BuildKit-specific constraint.
    - **Alpine bumped** → update:
      - `docker/Dockerfile` `ARG NODE_VERSION` → `<major>-alpine<X.Y>`
      - `.gitlab-ci.yml` `echo "NODE_VERSION=$(cat .nvmrc)-alpine<X.Y>"` line
