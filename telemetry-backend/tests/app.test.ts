@@ -4,7 +4,15 @@ import os from 'node:os'
 import path from 'node:path'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type AppConfig, createApp, generateBadge, getUserKeys, type RedisLike } from '../src/app.js'
+import {
+  type AppConfig,
+  createApp,
+  fetchLatestReleases,
+  generateBadge,
+  generateReleaseBadges,
+  getUserKeys,
+  type RedisLike,
+} from '../src/app.js'
 import { readMachineId } from '../src/utils.js'
 import { FakeRedis } from './fake-redis.js'
 
@@ -27,6 +35,7 @@ function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     rateLimitBreakerThreshold: 5,
     rateLimitBreakerWindowMs: 60_000,
     rateLimitBreakerCooldownMs: 30_000,
+    releasesApiUrl: 'https://example.com/releases',
     ...overrides,
   }
 }
@@ -908,6 +917,142 @@ describe('rate-limit circuit breaker', () => {
     expect(status.body.state).toBe('open')
 
     vi.useRealTimers()
+  })
+})
+
+// ── fetchLatestReleases ───────────────────────────────────────────────────────
+describe('fetchLatestReleases', () => {
+  it('returns stable and beta tags from a mixed release list', async () => {
+    const fetchFn: typeof globalThis.fetch = async () =>
+      new Response(JSON.stringify([{ tag_name: 'v2026.6.0' }, { tag_name: 'v2026.6.0b1' }]), { status: 200 })
+
+    const result = await fetchLatestReleases('https://example.com/releases', fetchFn)
+
+    expect(result.stable).toBe('v2026.6.0')
+    expect(result.beta).toBe('v2026.6.0b1')
+  })
+
+  it('returns null for stable when only beta tags exist', async () => {
+    const fetchFn: typeof globalThis.fetch = async () =>
+      new Response(JSON.stringify([{ tag_name: 'v2026.6.0b1' }]), { status: 200 })
+
+    const result = await fetchLatestReleases('https://example.com/releases', fetchFn)
+
+    expect(result.stable).toBeNull()
+    expect(result.beta).toBe('v2026.6.0b1')
+  })
+
+  it('throws on a non-ok HTTP response', async () => {
+    const fetchFn: typeof globalThis.fetch = async () => new Response('Internal Server Error', { status: 500 })
+
+    await expect(fetchLatestReleases('https://example.com/releases', fetchFn)).rejects.toThrow('500')
+  })
+
+  it('returns null for both when the response body is not an array', async () => {
+    const fetchFn: typeof globalThis.fetch = async () =>
+      new Response(JSON.stringify({ not: 'an array' }), { status: 200 })
+
+    const result = await fetchLatestReleases('https://example.com/releases', fetchFn)
+
+    expect(result.stable).toBeNull()
+    expect(result.beta).toBeNull()
+  })
+})
+
+// ── Release badges ────────────────────────────────────────────────────────────
+describe('generateReleaseBadges', () => {
+  let badgeDir: string
+
+  beforeEach(() => {
+    badgeDir = path.join(os.tmpdir(), `telemetry-release-${Math.random().toString(36).slice(2)}`)
+  })
+
+  afterEach(async () => {
+    await fsp.rm(badgeDir, { recursive: true, force: true })
+  })
+
+  // Helper: build a mock fetch that returns the given releases payload
+  function makeFetch(releases: Array<{ tag_name: string }>): typeof globalThis.fetch {
+    return async () => new Response(JSON.stringify(releases), { status: 200 })
+  }
+
+  it('writes stable.svg and beta.svg when both release types are present', async () => {
+    const config = buildConfig({ badgeDir })
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0' }, { tag_name: 'v2026.6.0b1' }])
+
+    await generateReleaseBadges({ config, fetchFn })
+
+    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(stable).toContain('<svg')
+    expect(stable).toContain('stable')
+    expect(stable).toContain('2026.6.0')
+    expect(beta).toContain('<svg')
+    expect(beta).toContain('beta')
+    expect(beta).toContain('2026.6.0b1')
+  })
+
+  it('shows "none" in stable.svg when no stable release exists', async () => {
+    const config = buildConfig({ badgeDir })
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0b1' }, { tag_name: 'v2026.6.0b2' }])
+
+    await generateReleaseBadges({ config, fetchFn })
+
+    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    expect(stable).toContain('none')
+    // beta.svg should still have the first beta found
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(beta).toContain('2026.6.0b1')
+  })
+
+  it('shows "none" in beta.svg when no beta release exists', async () => {
+    const config = buildConfig({ badgeDir })
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.0' }, { tag_name: 'v1.19.0' }])
+
+    await generateReleaseBadges({ config, fetchFn })
+
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(beta).toContain('none')
+    // stable.svg should have the first stable found
+    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    expect(stable).toContain('2026.6.0')
+  })
+
+  it('picks the first stable and first beta from a newest-first list', async () => {
+    const config = buildConfig({ badgeDir })
+    const fetchFn = makeFetch([
+      { tag_name: 'v2026.6.0b2' }, // newest beta — should be picked
+      { tag_name: 'v2026.6.0b1' }, // older beta — ignored
+      { tag_name: 'v2026.6.0' }, // newest stable — should be picked
+      { tag_name: 'v1.19.0' }, // older stable — ignored
+    ])
+
+    await generateReleaseBadges({ config, fetchFn })
+
+    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(stable).toContain('2026.6.0')
+    expect(stable).not.toContain('1.19.0')
+    expect(beta).toContain('2026.6.0b2')
+    expect(beta).not.toContain('2026.6.0b1')
+  })
+
+  it('handles a non-ok HTTP response gracefully without throwing to caller', async () => {
+    const config = buildConfig({ badgeDir })
+    const fetchFn: typeof globalThis.fetch = async () => new Response('Internal Server Error', { status: 500 })
+
+    // Must not throw
+    await expect(generateReleaseBadges({ config, fetchFn })).resolves.toBeUndefined()
+  })
+
+  it('handles a fetch network error gracefully without throwing to caller', async () => {
+    const config = buildConfig({ badgeDir })
+    const fetchFn: typeof globalThis.fetch = async () => {
+      throw new Error('network failure')
+    }
+
+    // Must not throw
+    await expect(generateReleaseBadges({ config, fetchFn })).resolves.toBeUndefined()
   })
 })
 

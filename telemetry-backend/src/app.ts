@@ -46,6 +46,11 @@ export interface AppConfig {
    * Default: 30 000.
    */
   rateLimitBreakerCooldownMs: number
+  /**
+   * GitLab releases API URL for fetching the latest stable and beta release tags.
+   * Example: 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases'
+   */
+  releasesApiUrl: string
 }
 
 export interface AppDependencies {
@@ -161,6 +166,109 @@ function buildBadgeSvg(total: number): string {
     <text x="72.5" y="14">${total}</text>
   </g>
 </svg>`
+}
+
+function buildReleaseBadgeSvg(label: string, version: string, color: string): string {
+  const labelWidth = Math.round(label.length * 7 + 14)
+  const valueWidth = Math.round(version.length * 7 + 14)
+  const totalWidth = labelWidth + valueWidth
+  const labelX = Math.round(labelWidth / 2)
+  const valueX = labelWidth + Math.round(valueWidth / 2)
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <mask id="a">
+    <rect width="${totalWidth}" height="20" rx="3" fill="#fff"/>
+  </mask>
+  <g mask="url(#a)">
+    <path fill="#555" d="M0 0h${labelWidth}v20H0z"/>
+    <path fill="${color}" d="M${labelWidth} 0h${valueWidth}v20H${labelWidth}z"/>
+    <path fill="url(#b)" d="M0 0h${totalWidth}v20H0z"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="${labelX}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
+    <text x="${labelX}" y="14">${label}</text>
+    <text x="${valueX}" y="15" fill="#010101" fill-opacity=".3">${version}</text>
+    <text x="${valueX}" y="14">${version}</text>
+  </g>
+</svg>`
+}
+
+function isBetaTag(tagName: string): boolean {
+  const withoutV = tagName.replace(/^v/, '')
+  return /b\d+$/.test(withoutV)
+}
+
+function hasStringTagName(v: unknown): v is { tag_name: string } {
+  return typeof v === 'object' && v !== null && 'tag_name' in v && typeof v.tag_name === 'string'
+}
+
+export async function fetchLatestReleases(
+  url: string,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<{ stable: string | null; beta: string | null }> {
+  const res = await fetchFn(url)
+  if (!res.ok) {
+    throw new Error(`GitLab releases API returned ${res.status}`)
+  }
+  const data: unknown = await res.json()
+  if (!Array.isArray(data)) {
+    return { stable: null, beta: null }
+  }
+
+  let stable: string | null = null
+  let beta: string | null = null
+
+  for (const item of data) {
+    if (!hasStringTagName(item)) continue
+    const tag = item.tag_name
+    if (stable === null && !isBetaTag(tag)) {
+      stable = tag
+    }
+    if (beta === null && isBetaTag(tag)) {
+      beta = tag
+    }
+    if (stable !== null && beta !== null) break
+  }
+
+  return { stable, beta }
+}
+
+export async function generateReleaseBadges(opts: {
+  config: AppConfig
+  fetchFn?: typeof globalThis.fetch
+}): Promise<void> {
+  const { config, fetchFn } = opts
+  try {
+    const { stable, beta } = await fetchLatestReleases(config.releasesApiUrl, fetchFn)
+
+    const stableVersion = stable !== null ? stable.replace(/^v/, '') : 'none'
+    const betaVersion = beta !== null ? beta.replace(/^v/, '') : 'none'
+
+    try {
+      const stablePath = path.join(config.badgeDir, 'stable.svg')
+      await fsp.mkdir(path.dirname(stablePath), { recursive: true })
+      await fsp.writeFile(stablePath, buildReleaseBadgeSvg('stable', stableVersion, '#007ec6'))
+      console.log(`Release badge updated: stable=${stableVersion}`)
+    } catch {
+      // Badge file write is non-critical — the SVG is served via a
+      // Docker volume or reverse proxy, so it may not be writable here.
+    }
+
+    try {
+      const betaPath = path.join(config.badgeDir, 'beta.svg')
+      await fsp.mkdir(path.dirname(betaPath), { recursive: true })
+      await fsp.writeFile(betaPath, buildReleaseBadgeSvg('beta', betaVersion, '#fe7d37'))
+      console.log(`Release badge updated: beta=${betaVersion}`)
+    } catch {
+      // Badge file write is non-critical — see above.
+    }
+  } catch (error) {
+    console.error('Error generating release badges:', error)
+  }
 }
 
 // Update the telemetry cache in Redis and write the badge SVG file.
