@@ -80,7 +80,7 @@ Extra robustness checks beyond checklist:
 - [ ] `tsconfig.json` strict enabled
 - [ ] `vitest.config.ts` excludes/thresholds correct
 - [ ] `.nvmrc`/`engines`/Docker args agree on Node version
-- [ ] `.semrelrc` correct; CI matches local workflow
+- [ ] `cliff.toml` + `scripts/compute-calver-*.sh` correct; CI release flow (git-cliff + combine-changelogs) matches local workflow
 - [ ] Docker builds minimal (incl. `telemetry-backend/`)
 
 #### 8. Security

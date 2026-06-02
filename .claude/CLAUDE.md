@@ -62,13 +62,10 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
 - `pnpm` only (never npm/yarn; `pnpm dlx` not npx). Never `pnpm dlx` for locally installed tools — use `pnpm` scripts. Biome lint/format (no ESLint/Prettier), single quotes, semicolons per `biome.jsonc`.
 - `Number.parseInt` / `Number.parseFloat` only, never global forms.
 - SonarQube Cloud: all code must pass — no bugs, vulnerabilities, security hotspots. Cognitive complexity ≤ 15.
-- Conventional Commits. Semantic Versioning. Release config in `.semrelrc`.
-- **Version-bumping types** — only when change touches `src/`, `package.json`, or `pnpm-lock.yaml`:
-  - `feat:` → minor bump
-  - `fix:` → patch bump
-  - `chore(deps):` → patch bump (dep updates only)
-  - `<type>!:` → major bump. **Mandatory** for breaking changes — `!` in type is required. `BREAKING CHANGE:` footer is nice-to-have; add when possible but not required. If introducing breaking change, prefer both.
-- **Non-bumping types** — CI, docs, config, sonar, `telemetry-backend/`, `.claude/`, scripts: `ci:`, `docs:`, `refactor:`, `test:`, `style:`, `perf:`, `chore:` (without `(deps)`), `build:`.
+- Conventional Commits. **CalVer** versioning — `YYYY.M.MICRO` stable, `YYYY.M.MICRObN` beta — date-derived in CI (`scripts/compute-calver-*.sh`), **not** type-derived. Changelog format in `cliff.toml` (git-cliff generates per-release notes; `combine-changelogs` aggregates the full `CHANGELOG.md`).
+- **Commit type drives the changelog section, not the version** — CalVer has no minor/patch bump. `feat:`→Feature, `fix:`→Bug Fixes, `docs:`→Documentation, etc. (full mapping in `cliff.toml`).
+  - `<type>!:` (e.g. `feat!:`, `fix!:`) = **breaking change**, `!` **mandatory**. Routes to the top "Breaking Changes" changelog section; add a `MIGRATION.md` entry. `BREAKING CHANGE:` footer is nice-to-have (renders as a fenced note).
+- **A release is cut by file paths, not commit type** — the CI gate (`.rules_code_changes`) fires on `src/`, `tests/`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `docker/Dockerfile`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`. Pure docs / `.claude/` / CI-config / `telemetry-backend/`-only changes don't release. Still pick the conventional type that fits (it sets the changelog section).
 - Never `git push` — leave to human.
 - Never `git checkout` / switch branches — leave to human. Commit to whatever branch is currently checked out.
 
