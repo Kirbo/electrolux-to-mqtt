@@ -50,7 +50,7 @@ generate changelog:
   needs:
     - job: initialise variables
       artifacts: true
-    - job: bump version
+    - job: generate release notes
       artifacts: true
   artifacts:
     paths:
@@ -58,9 +58,10 @@ generate changelog:
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "main" ]; then
-        # Production release: drop RC entries so the public changelog is clean.
-        combine-changelogs -include UNRELEASED-CHANGELOG.md -ignore-regex '-rc\.'
+        # Production release: drop pre-release entries — old SemVer "-rc.N" and new
+        # CalVer "bN" betas — so the public changelog stays clean.
+        combine-changelogs -include UNRELEASED-CHANGELOG.md -ignore-regex '-rc\.' -ignore-regex 'b[0-9]+$'
       else
-        # next branch: include everything (RC entries are useful for pre-release history).
+        # next branch: include everything (pre-release entries are useful history).
         combine-changelogs -include UNRELEASED-CHANGELOG.md
       fi

@@ -9,7 +9,7 @@
 # Release/CI surfaces.
 /.gitlab-ci.yml @Kirbo
 /.gitlab/ @Kirbo
-/.semrelrc @Kirbo
+/cliff.toml @Kirbo
 
 # Telemetry backend (separate package).
 /telemetry-backend/ @Kirbo

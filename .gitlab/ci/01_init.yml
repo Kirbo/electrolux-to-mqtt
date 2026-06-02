@@ -32,9 +32,7 @@ initialise variables:
 
 bump version:
   stage: init
-  image:
-    name: registry.gitlab.com/go-semantic-release/semantic-release:latest
-    entrypoint: [""]
+  image: alpine:latest
   interruptible: true
   extends: .rules_code_changes
   cache: []
@@ -42,54 +40,94 @@ bump version:
     paths:
       - .version-unreleased
       - build.env
-      - UNRELEASED-CHANGELOG.md
       - sonar-project.properties
     expire_in: never
   before_script:
+    - apk add --no-cache git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
     - git fetch --tags --force || true
-    - git fetch origin "$CI_DEFAULT_BRANCH" || true
-    # Create a real local branch so go-semantic-release detects the branch name correctly
-    # (GitLab CI checks out in detached HEAD mode, causing it to report the SHA as branch).
-    - git checkout -B "$CI_COMMIT_BRANCH" || true
   script:
     - |
+      # CalVer, Home Assistant style: stable "YYYY.M.MICRO", beta "YYYY.M.MICRObN".
+      # MICRO is 0-based per month, betas are 1-based. The month is non-padded;
+      # BusyBox `date` has no %-m, so strip a single leading zero explicitly.
+      YEAR=$(date -u +%Y)
+      MONTH=$(date -u +%m); MONTH=${MONTH#0}
+      ALL_TAGS=$(git tag --list 'v*')
+      # Next stable base for this year.month: (highest stable micro)+1, else .0.
+      BASE=$(printf '%s\n' "$ALL_TAGS" | sh scripts/compute-calver-base.sh "$YEAR" "$MONTH")
+      echo "[bump-version] year=${YEAR} month=${MONTH} stable_base=${BASE}"
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        echo "[bump-version] branch=next — computing RC version"
-        # Step 1: compute the base version (e.g. 1.18.5, or 1.19.0 once a feat lands)
-        # plus a changelog since the last stable — kept only as a fallback in case the
-        # incremental changelog below cannot be produced.
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
-        BASE_VERSION=$(cat .version-unreleased)
-        MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
-        echo "[bump-version] base_version=${BASE_VERSION} major=${MAJOR}"
-        # The rc number always advances (highest existing rc tag for this base + 1,
-        # else rc.1). A base bump has no rc tags yet, so it resets to rc.1
-        # (e.g. 1.18.5-rc.5 + feat -> 1.19.0-rc.1). See scripts/compute-rc-version.sh.
-        FINAL_VERSION=$(git tag --list "v${BASE_VERSION}-rc.*" | sh scripts/compute-rc-version.sh "$BASE_VERSION")
-        echo "[bump-version] final_version=${FINAL_VERSION}"
-        # Regenerate the changelog as INCREMENTAL — only commits since the last RC on
-        # the X-rc line, not since the last stable. --allow-no-changes keeps it from
-        # erroring when only non-bumping commits exist; on failure the step-1 changelog
-        # remains as a fallback. The version stays ours (the script), independent of
-        # whatever semantic-release would compute for the maintained line here.
-        semantic-release --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --maintained-version "${MAJOR}-rc" || true
-        echo "${FINAL_VERSION}" > .version-unreleased
-        # Relabel the changelog's first header to the final version (keep any trailing date).
-        sed -i "1,/^## / s/^## [^[:space:]]*/## ${FINAL_VERSION}/" UNRELEASED-CHANGELOG.md
-        # Safeguard: next branch must never produce a bare production version.
-        case "$FINAL_VERSION" in
-          *-rc.*) ;;
-          *) echo "[bump-version] ERROR: version '${FINAL_VERSION}' has no -rc.N suffix on next branch" ; exit 1 ;;
+        # Beta track: append bN ((highest beta for this base)+1, else b1).
+        VERSION=$(printf '%s\n' "$ALL_TAGS" | sh scripts/compute-calver-beta.sh "$BASE")
+        # Incremental release notes: commits since the nearest tag (last beta/stable).
+        PREV=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
+        # Safeguard: the next branch must always carry a bN pre-release suffix.
+        case "$VERSION" in
+          *b[0-9]*) ;;
+          *) echo "[bump-version] ERROR: '${VERSION}' has no bN suffix on next branch"; exit 1 ;;
         esac
       else
-        semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
+        # Stable track: the bare CalVer base.
+        VERSION=$BASE
+        # Release notes: commits since the last STABLE tag (beta/rc commits fold in).
+        PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*b[0-9]*' --exclude '*-rc.*' HEAD 2>/dev/null || true)
       fi
-    - export VERSION=$(cat .version-unreleased)
-    - echo "VERSION=${VERSION}" > build.env
-    - echo "sonar.projectVersion=${VERSION}" >> sonar-project.properties
-    - cat UNRELEASED-CHANGELOG.md
+      # First release ever (no prior tag): fall back to the repo root commit.
+      if [ -z "$PREV" ]; then
+        PREV=$(git rev-list --max-parents=0 HEAD | tail -n 1)
+      fi
+      echo "[bump-version] version=${VERSION} range=${PREV}..HEAD"
+      printf '%s\n' "$VERSION" > .version-unreleased
+      {
+        printf 'VERSION=%s\n' "$VERSION"
+        printf 'CHANGELOG_RANGE=%s..HEAD\n' "$PREV"
+      } > build.env
+      printf 'sonar.projectVersion=%s\n' "$VERSION" >> sonar-project.properties
+    - cat build.env
+
+generate release notes:
+  stage: init
+  image:
+    name: orhunp/git-cliff:latest
+    entrypoint: [""]
+  interruptible: true
+  extends: .rules_code_changes
+  cache: []
+  # git-cliff reads tags via embedded gix; mark the checkout safe to avoid a
+  # dubious-ownership refusal regardless of the runner's UID mapping.
+  variables:
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: safe.directory
+    GIT_CONFIG_VALUE_0: "*"
+  needs:
+    - job: bump version
+      artifacts: true
+  artifacts:
+    paths:
+      - UNRELEASED-CHANGELOG.md
+    expire_in: never
+  script:
+    # VERSION + CHANGELOG_RANGE (e.g. "v1.19.0..HEAD") come from the bump job.
+    - . ./build.env
+    - |
+      set -e
+      # git-cliff produces the per-release notes in the go-semantic-release default
+      # format (see cliff.toml). It replaces go-semantic-release's GENERATOR only —
+      # combine-changelogs still AGGREGATES these into the full CHANGELOG.md.
+      # On main, pre-release tags inside the range (old -rc.N and new bN) fold into
+      # the stable section. git-cliff writes to a temp file rather than piping into
+      # sed, so a git-cliff failure fails the job instead of being masked by sed's
+      # exit code (dash has no reliable pipefail).
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        git-cliff --config cliff.toml --ignore-tags '(-rc\.[0-9]+|b[0-9]+)$' --tag "v${VERSION}" "${CHANGELOG_RANGE}" > notes.tmp
+      else
+        git-cliff --config cliff.toml --tag "v${VERSION}" "${CHANGELOG_RANGE}" > notes.tmp
+      fi
+      sed '1{/^$/d;}' notes.tmp > UNRELEASED-CHANGELOG.md
+      rm -f notes.tmp
+    - echo "===== UNRELEASED-CHANGELOG.md =====" && cat UNRELEASED-CHANGELOG.md
 
 install dependencies:
   stage: init

@@ -45,9 +45,7 @@ build and deploy docker images:
 
 create gitlab release:
   stage: release
-  image:
-    name: registry.gitlab.com/go-semantic-release/semantic-release:latest
-    entrypoint: [""]
+  image: alpine:latest
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -68,15 +66,39 @@ create gitlab release:
       artifacts: false
     - job: bump version
       artifacts: true
+    - job: generate release notes
+      artifacts: true
     - job: build and deploy docker images
       artifacts: false
   before_script:
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
-    - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
-    - git fetch --tags --force || true
-    - git fetch origin "$CI_DEFAULT_BRANCH" || true
+    - apk add --no-cache curl jq
   script:
-    - semantic-release --allow-no-changes
+    - source build.env
+    - TAG="v${VERSION}"
+    - |
+      # Create the stable release (and its tag, from CI_COMMIT_SHA) via the GitLab
+      # Releases API — no go-semantic-release. The description is the folded,
+      # pre-release-free changelog produced by the generate-changelog job.
+      HTTP_STATUS=$(curl --silent --output /tmp/release_response.json --write-out "%{http_code}" \
+        --request POST \
+        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "$(jq -n \
+          --arg name "${TAG}" \
+          --arg tag_name "${TAG}" \
+          --arg ref "${CI_COMMIT_SHA}" \
+          --rawfile description UNRELEASED-CHANGELOG.md \
+          '{name: $name, tag_name: $tag_name, ref: $ref, description: $description}')" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases")
+      if [ "${HTTP_STATUS}" = "201" ]; then
+        echo "Release ${TAG} created"
+      elif [ "${HTTP_STATUS}" = "409" ]; then
+        echo "Release ${TAG} already exists, skipping"
+      else
+        echo "Failed to create release (HTTP ${HTTP_STATUS}):"
+        cat /tmp/release_response.json
+        exit 1
+      fi
 
 build and deploy rc docker images:
   extends: .docker_build_base
@@ -143,6 +165,8 @@ create gitlab prerelease:
     - job: initialise variables
       artifacts: false
     - job: bump version
+      artifacts: true
+    - job: generate release notes
       artifacts: true
     - job: build and deploy rc docker images
       artifacts: false
