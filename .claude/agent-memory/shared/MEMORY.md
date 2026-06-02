@@ -3,4 +3,4 @@
 - [Run Biome before committing](feedback_biome_before_commit.md) — pnpm check before every commit; stage Biome's formatting changes and include in the same commit
 - [Deferred review items (2026-06-01)](project_review_deferred.md) — optional/scope items left undone after the F1–F6 review: PORT NaN guard, exactOptionalPropertyTypes, mqtt import side-effect, factory single-model fallback
 - [Delegate by default](feedback_delegate_by_default.md) — propose engineer/subagent delegation for code work by default; only handle directly when explicitly told, and that's one-time per task
-- [CalVer migration](project_calver_migration.md) — SemVer→CalVer (HA-style `YYYY.M.MICRO`/`bN`); Phase 1+2 done (git-cliff generates, combine-changelogs aggregates), Phase 3 docs pending (CLAUDE.md bump rules now obsolete)
+- [CalVer migration](project_calver_migration.md) — SemVer→CalVer (HA-style `YYYY.M.MICRO`/`bN`) complete: git-cliff generates per-release notes, combine-changelogs aggregates; only the 1.19.0→2026.6.0 release-notes announcement is left (human, at release)

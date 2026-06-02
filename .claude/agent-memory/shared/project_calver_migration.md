@@ -13,10 +13,8 @@ Release versioning migrated from SemVer to CalVer (Home Assistant style): stable
 
 **Phase 2 (done — the flip):** dropped go-semantic-release. `scripts/compute-calver-{base,beta}.sh` (+ subprocess tests) compute the version; `cliff.toml` + git-cliff generate the per-release `UNRELEASED-CHANGELOG.md` (reproduces go-semantic-release default format 1:1, validated byte-identical to v1.17.0; Breaking Changes is the top section per the user's request). **combine-changelogs is KEPT** as the aggregator for the full `CHANGELOG.md` (user's external tool — git-cliff is only the generator). Tags + releases created via the GitLab Releases API on both tracks. Removed `.semrelrc`. First CalVer beta = `2026.6.0b1`, first stable = `2026.6.0`.
 
-**Phase 3 (PENDING — docs):** Not yet done. Needs:
-- `README.md` version examples / updateChannel beta wording (`bN` instead of `-rc.N`).
-- `.claude/CLAUDE.md` "Version-bumping types" section is now **obsolete** — under CalVer nothing bumps by commit type; types only drive changelog grouping, and `!`/`BREAKING CHANGE` drives the top Breaking Changes section. Rewrite that section.
-- `.claude/agents/maintainer.md` (lines ~56, ~98) + `.claude/agents/auditor.md` (~83) reference `.semrelrc` / semantic-release behavior — stale, update to git-cliff/CalVer.
-- Announce the scheme switch (release notes / migration doc).
+**Phase 3 (DONE — docs):** README beta channel + env table, `config.example.yml` + both compose examples (updateChannel wording), `MIGRATION.md` (CalVer + generator), `.claude/CLAUDE.md` versioning rules (rewritten: version is date-derived, commit type only sets the changelog section, `!` → top Breaking Changes section, release cut by file paths not type), and stale `.semrelrc`/semantic-release refs in `.claude/agents/{maintainer,auditor}.md`. `updateChannel` is `stable`|`beta` (unchanged). The only intentional remaining "go-semantic-release" mention is a descriptive comment in `.gitlab/ci/01_init.yml`.
+
+**Remaining (human, at release time):** announce the 1.19.0 → 2026.6.0 jump in the first stable release notes / a pinned note (not a code break — version-checker compares numerically, so `:latest` users get the update notification normally).
 
 See [[project_review_deferred.md]] for other deferred items.
