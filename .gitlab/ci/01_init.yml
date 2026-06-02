@@ -57,18 +57,27 @@ bump version:
     - |
       if [ "$CI_COMMIT_BRANCH" = "next" ]; then
         echo "[bump-version] branch=next — computing RC version"
-        # Step 1: compute the base version (e.g. 1.18.5, or 1.19.0 once a feat
-        # lands) and the changelog since the last stable release.
+        # Step 1: compute the base version (e.g. 1.18.5, or 1.19.0 once a feat lands)
+        # plus a changelog since the last stable — kept only as a fallback in case the
+        # incremental changelog below cannot be produced.
         semantic-release --version-file --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry
         BASE_VERSION=$(cat .version-unreleased)
-        echo "[bump-version] base_version=${BASE_VERSION}"
-        # Step 2: the rc number always advances — highest existing rc tag for this
-        # base plus 1, else rc.1. A base bump has no rc tags yet, so it resets to
-        # rc.1 (e.g. 1.18.5-rc.5 + feat -> 1.19.0-rc.1). See scripts/compute-rc-version.sh.
+        MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+        echo "[bump-version] base_version=${BASE_VERSION} major=${MAJOR}"
+        # The rc number always advances (highest existing rc tag for this base + 1,
+        # else rc.1). A base bump has no rc tags yet, so it resets to rc.1
+        # (e.g. 1.18.5-rc.5 + feat -> 1.19.0-rc.1). See scripts/compute-rc-version.sh.
         FINAL_VERSION=$(git tag --list "v${BASE_VERSION}-rc.*" | sh scripts/compute-rc-version.sh "$BASE_VERSION")
         echo "[bump-version] final_version=${FINAL_VERSION}"
+        # Regenerate the changelog as INCREMENTAL — only commits since the last RC on
+        # the X-rc line, not since the last stable. --allow-no-changes keeps it from
+        # erroring when only non-bumping commits exist; on failure the step-1 changelog
+        # remains as a fallback. The version stays ours (the script), independent of
+        # whatever semantic-release would compute for the maintained line here.
+        semantic-release --allow-no-changes --changelog UNRELEASED-CHANGELOG.md --dry --maintained-version "${MAJOR}-rc" || true
         echo "${FINAL_VERSION}" > .version-unreleased
-        sed -i "s/## ${BASE_VERSION}/## ${FINAL_VERSION}/g" UNRELEASED-CHANGELOG.md
+        # Relabel the changelog's first header to the final version (keep any trailing date).
+        sed -i "1,/^## / s/^## [^[:space:]]*/## ${FINAL_VERSION}/" UNRELEASED-CHANGELOG.md
         # Safeguard: next branch must never produce a bare production version.
         case "$FINAL_VERSION" in
           *-rc.*) ;;
