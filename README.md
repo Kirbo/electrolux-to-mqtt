@@ -94,7 +94,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `LOGGING_SHOW_TIMESTAMP`                              | Show timestamps in logs                                                  | `true`                  | No       |
 | `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                  | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                       | No       |
-| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips rc releases; `beta` includes them                         | `stable`                | No       |
+| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them                  | `stable`                | No       |
 | `HEALTH_CHECK_ENABLED`                                | Enable file-based health check for Docker HEALTHCHECK                    | `true`                  | No       |
 | `HEALTH_CHECK_FILE_PATH`                              | Path to health check file                                                | `/tmp/e2m-health`       | No       |
 | `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`              | Minutes of API failure before container self-restarts                    | `45`                    | No       |
@@ -246,9 +246,9 @@ services:
 
 ## Beta / pre-release channel
 
-Pre-release (rc) builds are published to the `:next` Docker tag on every push to the `next` branch.
-Release candidates follow the `vX.Y.Z-rc.N` versioning scheme. Each rc changelog covers only the
-changes since the previous release (stable or rc).
+Pre-release (beta) builds are published to the `:next` Docker tag on every push to the `next` branch.
+Betas follow Home Assistant's CalVer scheme `YYYY.M.MICRObN` (e.g. `2026.6.0b1`). Each beta changelog
+covers only the changes since the previous release (stable or beta).
 
 <details>
   <summary>I want to try the beta channel!</summary>
@@ -268,10 +268,10 @@ docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbow
 image: kirbownz/electrolux-to-mqtt:next
 ```
 
-To receive update notifications for rc releases, set `VERSION_CHECK_UPDATE_CHANNEL=beta`
+To receive update notifications for pre-release builds, set `VERSION_CHECK_UPDATE_CHANNEL=beta`
 (env var) or `updateChannel: beta` in `config.yml` under `versionCheck:`.
 
-Release notes for each rc are available on the
+Release notes for each beta are available on the
 [GitLab releases page](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases).
 </details>
 
