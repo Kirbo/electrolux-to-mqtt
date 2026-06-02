@@ -2,20 +2,30 @@
 
 set -euo pipefail
 
-ROOT_DIR=$(git rev-parse --show-toplevel)
+BRANCH="${1:-main}"
 
+ROOT_DIR=$(git rev-parse --show-toplevel)
 cd "${ROOT_DIR}"
 
-git fetch origin main
+BEFORE=$(git rev-parse HEAD)
 
-CHANGES=$(git diff HEAD origin/main -- telemetry-backend/)
+git fetch origin "${BRANCH}"
+git checkout "${BRANCH}"
+git pull origin "${BRANCH}"
 
-if [[ -z "${CHANGES}" ]]; then
-  echo "Already up-to-date, no changes in telemetry-backend/"
+AFTER=$(git rev-parse HEAD)
+
+if [[ "${BEFORE}" == "${AFTER}" ]]; then
+  echo "Already up-to-date, nothing to do"
   exit 0
 fi
 
-echo "Changes detected in telemetry-backend/, redeploying..."
-git pull origin main
+CHANGES=$(git diff "${BEFORE}" "${AFTER}" -- telemetry-backend/)
 
+if [[ -z "${CHANGES}" ]]; then
+  echo "Pulled ${BRANCH} (${BEFORE:0:7}→${AFTER:0:7}) but no telemetry-backend changes, skip rebuild"
+  exit 0
+fi
+
+echo "Changes in telemetry-backend/ detected (${BEFORE:0:7}→${AFTER:0:7}), redeploying..."
 "${ROOT_DIR}/telemetry-backend/start.sh"
