@@ -36,6 +36,12 @@ Store telemetry data for a user.
 }
 ```
 
+### GET /stable
+Redirects (302) to the GitLab release page for the latest stored stable tag. Falls back to the base releases page when no stable tag is stored or on Redis error.
+
+### GET /beta
+Redirects (302) to the GitLab release page for the latest stored beta tag. Falls back to the base releases page when no beta tag is stored or on Redis error.
+
 ### GET /telemetry
 Get aggregated telemetry statistics. Versions are sorted by version descending, capped at 100 entries.
 
@@ -172,16 +178,27 @@ This service uses `console.*` directly rather than a structured logger like pino
 Redis data is persisted using AOF (Append Only File) mode with `appendfsync everysec` (flush to disk at most once per second — the recommended durability/performance balance) and stored in a Docker volume, ensuring data survives container restarts.
 
 ### Badge Persistence
-The user count badge (`badge/users.svg`) is persisted outside the Docker container in the `./badge` directory. This allows:
-- Nginx to serve the badge directly without hitting the application
-- Badge to remain accessible even when the Docker container is down
-- The badge is regenerated on startup and on every telemetry submission (POST /telemetry)
+Three SVG badges are persisted outside the Docker container in the `./badge` directory. This allows:
+- Nginx to serve badges directly without hitting the application
+- Badges to remain accessible even when the Docker container is down
 
-Example Nginx configuration:
+| File | Description |
+|---|---|
+| `badge/users.svg` | Active user count — regenerated on startup and on every `POST /telemetry` |
+| `badge/stable.svg` | Latest stable release version — refreshed on startup and every hour |
+| `badge/beta.svg` | Latest beta release version (invisible zero-size SVG when stable is newer) — refreshed on startup and every hour |
+
+Example Nginx configuration (matches `nginx/reverse-proxy.conf`):
 ```nginx
-location /badge {
-    alias /path/to/telemetry-backend/badge/users.svg;
-    add_header Content-Type image/svg+xml;
+location = /users.svg {
+    add_header Cache-Control "no-cache, no-store, must-revalidate";
+}
+
+location = /stable.svg {
+    add_header Cache-Control "no-cache, no-store, must-revalidate";
+}
+
+location = /beta.svg {
     add_header Cache-Control "no-cache, no-store, must-revalidate";
 }
 ```
