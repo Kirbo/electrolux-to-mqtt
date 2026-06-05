@@ -1062,6 +1062,36 @@ describe('generateReleaseBadges', () => {
   })
 })
 
+// ── XML escaping in release badge SVG ────────────────────────────────────────
+describe('generateReleaseBadges XML escaping', () => {
+  let badgeDir: string
+
+  beforeEach(() => {
+    badgeDir = path.join(os.tmpdir(), `telemetry-escape-${Math.random().toString(36).slice(2)}`)
+  })
+
+  afterEach(async () => {
+    await fsp.rm(badgeDir, { recursive: true, force: true })
+  })
+
+  it('escapes XML special characters in the version text of stable.svg', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    // Tag containing all four special chars: < > & "
+    const fetchFn: typeof globalThis.fetch = async () =>
+      new Response(JSON.stringify([{ tag_name: '<script>&"' }]), { status: 200 })
+
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    const svg = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
+    // Must contain escaped forms
+    expect(svg).toContain('&lt;script&gt;&amp;&quot;')
+    // Must NOT contain raw unescaped injection chars inside text nodes
+    expect(svg).not.toContain('<script>')
+    expect(svg).not.toContain('&"')
+  })
+})
+
 // ── GET /stable and GET /beta redirects ──────────────────────────────────────
 describe('GET /stable and GET /beta redirects', () => {
   it('/stable with a stored tag redirects to releases page with tag path', async () => {

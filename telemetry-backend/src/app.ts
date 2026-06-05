@@ -154,6 +154,14 @@ function compareVersionsDescending(a: string, b: string): number {
   return 0
 }
 
+/**
+ * Escape characters that are special in XML/SVG text content and attribute values.
+ * Must escape `&` first to avoid double-escaping subsequent replacements.
+ */
+function escapeXml(raw: string): string {
+  return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 function buildBadgeSvg(total: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
   <linearGradient id="b" x2="0" y2="100%">
@@ -171,18 +179,23 @@ function buildBadgeSvg(total: number): string {
   <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
     <text x="24.5" y="15" fill="#010101" fill-opacity=".3">Users</text>
     <text x="24.5" y="14">Users</text>
-    <text x="72.5" y="15" fill="#010101" fill-opacity=".3">${total}</text>
-    <text x="72.5" y="14">${total}</text>
+    <text x="72.5" y="15" fill="#010101" fill-opacity=".3">${escapeXml(String(total))}</text>
+    <text x="72.5" y="14">${escapeXml(String(total))}</text>
   </g>
 </svg>`
 }
 
 function buildReleaseBadgeSvg(label: string, version: string, color: string): string {
+  // Use raw strings for geometry (length in display chars, not escaped entity chars)
   const labelWidth = Math.round(label.length * 7 + 14)
   const valueWidth = Math.round(version.length * 7 + 14)
   const totalWidth = labelWidth + valueWidth
   const labelX = Math.round(labelWidth / 2)
   const valueX = labelWidth + Math.round(valueWidth / 2)
+
+  // Escape only for text node interpolation — never reassign the geometry variables
+  const safeLabel = escapeXml(label)
+  const safeVersion = escapeXml(version)
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
   <linearGradient id="b" x2="0" y2="100%">
@@ -198,10 +211,10 @@ function buildReleaseBadgeSvg(label: string, version: string, color: string): st
     <path fill="url(#b)" d="M0 0h${totalWidth}v20H0z"/>
   </g>
   <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-    <text x="${labelX}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
-    <text x="${labelX}" y="14">${label}</text>
-    <text x="${valueX}" y="15" fill="#010101" fill-opacity=".3">${version}</text>
-    <text x="${valueX}" y="14">${version}</text>
+    <text x="${labelX}" y="15" fill="#010101" fill-opacity=".3">${safeLabel}</text>
+    <text x="${labelX}" y="14">${safeLabel}</text>
+    <text x="${valueX}" y="15" fill="#010101" fill-opacity=".3">${safeVersion}</text>
+    <text x="${valueX}" y="14">${safeVersion}</text>
   </g>
 </svg>`
 }

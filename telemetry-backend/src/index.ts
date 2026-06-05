@@ -79,12 +79,13 @@ const server = app.listen(port, () => {
   })
 })
 
-// Refresh release badges every hour
+// Refresh release badges every hour. unref() so the interval does not
+// prevent the process from exiting cleanly when shutdown is requested.
 setInterval(() => {
   generateReleaseBadges({ config, redis }).catch((err: unknown) => {
     console.error('Release badge generation failed:', err)
   })
-}, 3_600_000)
+}, 3_600_000).unref()
 
 const shutdown = createShutdownHandler(server, redisClient, {
   timeoutMs: DEFAULT_SHUTDOWN_TIMEOUT_MS,
