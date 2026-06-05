@@ -29,6 +29,13 @@ build and deploy docker images:
   script:
     - source build.env
     - |
+      # A stable build also moves the :next (beta-channel) tag to the leading edge.
+      # In this CalVer scheme a stable VERSION always outranks the last beta — a
+      # final release beats its own bN pre-releases of the same base, and a later
+      # base wins outright (time only moves forward, so cross-month can't invert
+      # it). So :next followers never have to jump between :next and :latest: they
+      # stay on :next and receive whichever is newer, the latest beta or a stable
+      # that has overtaken it. All tags push off one manifest, so it's atomic.
       docker buildx build \
         --builder "${BUILDER_NAME}" \
         --build-arg NODE_VERSION=${NODE_VERSION} \
@@ -41,6 +48,7 @@ build and deploy docker images:
         --platform linux/amd64,linux/arm64 \
         -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
         -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
+        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:next \
         -f docker/Dockerfile .
 
 create gitlab release:

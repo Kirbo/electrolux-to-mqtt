@@ -251,6 +251,12 @@ Pre-release (beta) builds are published to the `:next` Docker tag on every push 
 Betas follow Home Assistant's CalVer scheme `YYYY.M.MICRObN` (e.g. `2026.6.0b1`). Each beta changelog
 covers only the changes since the previous release (stable or beta).
 
+The `:next` tag always tracks the leading edge. When a stable release overtakes the last beta — which it
+always does, since a final release outranks its own `bN` pre-releases — the stable build re-points `:next`
+to that stable too. So if you follow the beta channel for early access and update notifications, you can
+stay on `:next` permanently: it serves whichever is newer, the latest beta or a stable that has overtaken
+it, and you never have to switch between `:next` and `:latest`.
+
 <details>
   <summary>I want to try the beta channel!</summary>
 
