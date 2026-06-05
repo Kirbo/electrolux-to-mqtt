@@ -951,14 +951,21 @@ describe('fetchLatestReleases', () => {
     await expect(fetchLatestReleases('https://example.com/releases', fetchFn)).rejects.toThrow('500')
   })
 
-  it('returns null for both when the response body is not an array', async () => {
+  it('throws when the response body is not an array', async () => {
     const fetchFn: typeof globalThis.fetch = async () =>
       new Response(JSON.stringify({ not: 'an array' }), { status: 200 })
 
-    const result = await fetchLatestReleases('https://example.com/releases', fetchFn)
+    await expect(fetchLatestReleases('https://example.com/releases', fetchFn)).rejects.toThrow(
+      'GitLab releases API returned a non-array body',
+    )
+  })
 
-    expect(result.stable).toBeNull()
-    expect(result.beta).toBeNull()
+  it('throws when the response body is a string (not an array)', async () => {
+    const fetchFn: typeof globalThis.fetch = async () => new Response(JSON.stringify('oops'), { status: 200 })
+
+    await expect(fetchLatestReleases('https://example.com/releases', fetchFn)).rejects.toThrow(
+      'GitLab releases API returned a non-array body',
+    )
   })
 })
 
@@ -1042,19 +1049,29 @@ describe('generateReleaseBadges', () => {
     expect(stable).toContain('2026.6.0')
   })
 
-  it('writes visible beta.svg and stable.svg shows "none" when only beta exists', async () => {
+  it('writes visible beta.svg and preserves stable.svg when only beta exists (genesis case)', async () => {
     const redis = new FakeRedis()
     const config = buildConfig({ badgeDir })
     // stable = null, beta = v2026.6.0b1 — betaIsNewer = true (stable is null)
+    // stable.svg must NOT be written (no stable release → preserve whatever existed)
     const fetchFn = makeFetch([{ tag_name: 'v2026.6.0b1' }])
+    // Pre-seed a stable.svg with known content to verify it is preserved
+    await fsp.mkdir(badgeDir, { recursive: true })
+    const stablePath = path.join(badgeDir, 'stable.svg')
+    await fsp.writeFile(stablePath, '<svg>prev-stable</svg>')
 
     await generateReleaseBadges({ config, redis, fetchFn })
 
-    const stable = await fsp.readFile(path.join(badgeDir, 'stable.svg'), 'utf8')
-    expect(stable).toContain('none')
+    // stable.svg must be untouched — no stable release means no write
+    const stable = await fsp.readFile(stablePath, 'utf8')
+    expect(stable).toBe('<svg>prev-stable</svg>')
+    // RELEASE_STABLE_KEY must NOT be set (no stable data)
+    expect(await redis.get(RELEASE_STABLE_KEY)).toBeNull()
+    // beta.svg must be visible, RELEASE_BETA_KEY must be set
     const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
     expect(beta).toContain('2026.6.0b1')
     expect(beta).not.toContain('width="0"')
+    expect(await redis.get(RELEASE_BETA_KEY)).toBe('v2026.6.0b1')
   })
 
   it('handles a non-ok HTTP response gracefully without throwing to caller', async () => {
@@ -1064,6 +1081,60 @@ describe('generateReleaseBadges', () => {
 
     // Must not throw
     await expect(generateReleaseBadges({ config, redis, fetchFn })).resolves.toBeUndefined()
+  })
+
+  it('preserves existing stable.svg when HTTP response is non-ok', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    const fetchFn: typeof globalThis.fetch = async () => new Response('Internal Server Error', { status: 500 })
+    await fsp.mkdir(badgeDir, { recursive: true })
+    const stablePath = path.join(badgeDir, 'stable.svg')
+    await fsp.writeFile(stablePath, '<svg>good-badge</svg>')
+
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    const content = await fsp.readFile(stablePath, 'utf8')
+    expect(content).toBe('<svg>good-badge</svg>')
+    // Redis keys must not be touched
+    expect(await redis.get(RELEASE_STABLE_KEY)).toBeNull()
+    expect(await redis.get(RELEASE_BETA_KEY)).toBeNull()
+  })
+
+  it('preserves existing stable.svg when response body is a non-array (200 but garbage)', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    const fetchFn: typeof globalThis.fetch = async () =>
+      new Response(JSON.stringify({ not: 'an array' }), { status: 200 })
+    await fsp.mkdir(badgeDir, { recursive: true })
+    const stablePath = path.join(badgeDir, 'stable.svg')
+    await fsp.writeFile(stablePath, '<svg>good-badge</svg>')
+
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    const content = await fsp.readFile(stablePath, 'utf8')
+    expect(content).toBe('<svg>good-badge</svg>')
+    // Redis keys must not be touched
+    expect(await redis.get(RELEASE_STABLE_KEY)).toBeNull()
+    expect(await redis.get(RELEASE_BETA_KEY)).toBeNull()
+  })
+
+  it('preserves existing badges and Redis keys when fetch returns an empty array', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    const fetchFn = makeFetch([])
+    await fsp.mkdir(badgeDir, { recursive: true })
+    const stablePath = path.join(badgeDir, 'stable.svg')
+    const betaPath = path.join(badgeDir, 'beta.svg')
+    await fsp.writeFile(stablePath, '<svg>good-stable</svg>')
+    await fsp.writeFile(betaPath, '<svg>good-beta</svg>')
+
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    expect(await fsp.readFile(stablePath, 'utf8')).toBe('<svg>good-stable</svg>')
+    expect(await fsp.readFile(betaPath, 'utf8')).toBe('<svg>good-beta</svg>')
+    // Redis keys must not be touched
+    expect(await redis.get(RELEASE_STABLE_KEY)).toBeNull()
+    expect(await redis.get(RELEASE_BETA_KEY)).toBeNull()
   })
 
   it('handles a fetch network error gracefully without throwing to caller', async () => {

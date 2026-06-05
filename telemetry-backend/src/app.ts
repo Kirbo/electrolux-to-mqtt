@@ -238,7 +238,7 @@ export async function fetchLatestReleases(
   }
   const data: unknown = await res.json()
   if (!Array.isArray(data)) {
-    return { stable: null, beta: null }
+    throw new Error('GitLab releases API returned a non-array body')
   }
 
   let stable: string | null = null
@@ -268,24 +268,36 @@ export async function generateReleaseBadges(opts: {
   try {
     const { stable, beta } = await fetchLatestReleases(config.releasesApiUrl, fetchFn)
 
-    // Store tags in Redis for redirect endpoints (best-effort)
+    // No usable data — empty release list. Preserve existing badges and Redis keys.
+    if (stable === null && beta === null) {
+      console.log('Release badges: no releases found — preserving existing badges')
+      return
+    }
+
+    // Store tags in Redis for redirect endpoints (best-effort, only when data is available)
     try {
-      await redis.set(RELEASE_STABLE_KEY, stable ?? '')
-      await redis.set(RELEASE_BETA_KEY, beta ?? '')
+      if (stable !== null) {
+        await redis.set(RELEASE_STABLE_KEY, stable)
+      }
+      if (beta !== null) {
+        await redis.set(RELEASE_BETA_KEY, beta)
+      }
     } catch (redisError) {
       console.error('Error storing release tags in Redis:', redisError)
     }
 
-    const stableVersion = stable !== null ? stable.replace(/^v/, '') : 'none'
-
-    try {
-      const stablePath = path.join(config.badgeDir, 'stable.svg')
-      await fsp.mkdir(path.dirname(stablePath), { recursive: true })
-      await fsp.writeFile(stablePath, buildReleaseBadgeSvg('stable', stableVersion, '#007ec6'))
-      console.log(`Release badge updated: stable=${stableVersion}`)
-    } catch {
-      // Badge file write is non-critical — the SVG is served via a
-      // Docker volume or reverse proxy, so it may not be writable here.
+    // Write stable badge only when a stable release exists
+    if (stable !== null) {
+      const stableVersion = stable.replace(/^v/, '')
+      try {
+        const stablePath = path.join(config.badgeDir, 'stable.svg')
+        await fsp.mkdir(path.dirname(stablePath), { recursive: true })
+        await fsp.writeFile(stablePath, buildReleaseBadgeSvg('stable', stableVersion, '#007ec6'))
+        console.log(`Release badge updated: stable=${stableVersion}`)
+      } catch {
+        // Badge file write is non-critical — the SVG is served via a
+        // Docker volume or reverse proxy, so it may not be writable here.
+      }
     }
 
     // Beta is considered "newer" (and thus visible) when beta !== null and its
