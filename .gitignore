@@ -13,6 +13,8 @@ tests/e2e/snapshots
 .env
 .env.*
 !.env.example
+!**/.env.enc
+age-key.txt
 .scannerwork
 **.original.md
 .semrel/

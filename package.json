@@ -23,7 +23,10 @@
     "sonar": "sh scripts/sonar.sh",
     "osv-scan": "sh scripts/osv-scan.sh",
     "deps:check": "pnpm outdated ; pnpm audit ; pnpm osv-scan",
-    "deps:update": "pnpm update --latest && pnpm install"
+    "deps:update": "pnpm update --latest && pnpm install",
+    "sops:decrypt": "scripts/sops-env.sh decrypt",
+    "sops:encrypt": "scripts/sops-env.sh encrypt",
+    "sops:rotate": "scripts/sops-rotate.sh"
   },
   "keywords": [
     "electrolux",
