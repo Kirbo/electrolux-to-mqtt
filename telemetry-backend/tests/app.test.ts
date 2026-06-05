@@ -995,6 +995,22 @@ describe('generateReleaseBadges', () => {
     expect(await redis.get(RELEASE_BETA_KEY)).toBe('v2026.7.0b1')
   })
 
+  it('writes visible beta.svg when beta is patch-higher than stable (incident repro: v2026.6.3b1 vs v2026.6.2)', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+    // Exact scenario from the staleness incident: beta v2026.6.3b1 is a newer
+    // pre-release of a higher patch than stable v2026.6.2 — betaIsNewer = true.
+    const fetchFn = makeFetch([{ tag_name: 'v2026.6.3b1' }, { tag_name: 'v2026.6.2' }])
+
+    await generateReleaseBadges({ config, redis, fetchFn })
+
+    const beta = await fsp.readFile(path.join(badgeDir, 'beta.svg'), 'utf8')
+    expect(beta).toContain('2026.6.3b1')
+    expect(beta).not.toContain('width="0"')
+    expect(await redis.get(RELEASE_STABLE_KEY)).toBe('v2026.6.2')
+    expect(await redis.get(RELEASE_BETA_KEY)).toBe('v2026.6.3b1')
+  })
+
   it('writes zero-size beta.svg when stable is newer than beta', async () => {
     const redis = new FakeRedis()
     const config = buildConfig({ badgeDir })

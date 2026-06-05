@@ -185,8 +185,8 @@ Three SVG badges are persisted outside the Docker container in the `./badge` dir
 | File | Description |
 |---|---|
 | `badge/users.svg` | Active user count — regenerated on startup and on every `POST /telemetry` |
-| `badge/stable.svg` | Latest stable release version — refreshed on startup and every hour |
-| `badge/beta.svg` | Latest beta release version (invisible zero-size SVG when stable is newer) — refreshed on startup and every hour |
+| `badge/stable.svg` | Latest stable release version — refreshed on startup, every 10 minutes, and on each release via CI |
+| `badge/beta.svg` | Latest beta release version (invisible zero-size SVG when stable is newer) — refreshed on startup, every 10 minutes, and on each release via CI |
 
 Example Nginx configuration (matches `nginx/reverse-proxy.conf`):
 ```nginx

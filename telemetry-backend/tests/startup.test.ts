@@ -1,6 +1,24 @@
 import http from 'node:http'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { buildRateLimitSalt, createShutdownHandler, envNumber } from '../src/startup.js'
+import { buildRateLimitSalt, createConfig, createShutdownHandler, envNumber } from '../src/startup.js'
+
+// ── createConfig ──────────────────────────────────────────────────────────────
+describe('createConfig', () => {
+  it('returns badgeDir resolved to <cwd>/badge', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const config = createConfig({ RATE_LIMIT_SALT: 'test-salt' })
+    warnSpy.mockRestore()
+    expect(config.badgeDir).toBe(path.join(process.cwd(), 'badge'))
+  })
+
+  it('returns the canonical GitLab releasesApiUrl (guards against drift)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const config = createConfig({ RATE_LIMIT_SALT: 'test-salt' })
+    warnSpy.mockRestore()
+    expect(config.releasesApiUrl).toBe('https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases')
+  })
+})
 
 // ── envNumber ─────────────────────────────────────────────────────────────────
 describe('envNumber', () => {
