@@ -369,5 +369,5 @@ Please read [HOME_ASSISTANT.md](./HOME_ASSISTANT.md) for more details.
 
 ## Epilogue
 
-Inspired and thanks to [Dannyyy](https://github.com/dannyyy) for making the [Electrolux to MQTT](https://github.com/dannyyy/electrolux_mqtt) repository.
-As I constantly had some issues with other implementations, I decided to make my own, based on [Public Electrolux API](https://developer.electrolux.one/documentation).
+Inspired by — and thanks to — [Dannyyy](https://github.com/dannyyy) for the [Electrolux to MQTT](https://github.com/dannyyy/electrolux_mqtt) repository.
+I kept running into issues with various other implementations, and often had to wait a while for fixes, so I decided to build my own on top of the [public Electrolux API](https://developer.electrolux.one/documentation).
