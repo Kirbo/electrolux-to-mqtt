@@ -102,10 +102,10 @@ const configSchema = z.object({
         .max(86400, 'should not exceed 86400 seconds')
         .default(3600),
       ntfyWebhookUrl: z.string().optional(),
-      updateChannel: z.enum(['stable', 'beta']).default('stable'),
+      updateChannel: z.enum(['stable', 'beta']).optional(),
     })
     .optional()
-    .transform((val) => val ?? { checkInterval: 3600, updateChannel: 'stable' as const }),
+    .transform((val) => val ?? { checkInterval: 3600, updateChannel: undefined }),
   healthCheck: z
     .object({
       enabled: z.boolean().default(true),

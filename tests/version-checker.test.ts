@@ -2,15 +2,19 @@ import axios from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IMqtt } from '@/mqtt.js'
 
+// Stable logger spies shared across all logger consumers in this file.
+// Must be hoisted so vi.mock() factories can close over them.
+const loggerSpies = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
+
 // Mock dependencies before importing the module
 vi.mock('axios')
 vi.mock('@/logger.js', () => ({
-  default: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  default: () => loggerSpies,
 }))
 
 // Mock config with default values
@@ -1440,6 +1444,128 @@ describe('version-checker', () => {
 
         // Beta channel picks latest by date = v2026.6.0b2
         expect(pub).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v2026.6.0b2"'))
+      })
+    })
+  })
+
+  // ── Version-derived update channel ────────────────────────────────────────
+  // When updateChannel is undefined (not set by user), the running version
+  // determines the channel: pre-release version → beta, stable → stable.
+  // An explicit config value wins in both directions.
+  describe('version-derived update channel', () => {
+    // Helper: start version-checker with a given config mock, wait, stop, return MQTT publish calls.
+    const makeModule = async (updateChannel: 'stable' | 'beta' | undefined) => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel },
+          telemetryEnabled: false,
+        },
+      }))
+      return await import('@/version-checker.js')
+    }
+
+    describe('derive from version (unset channel)', () => {
+      it('pre-release version 2026.6.0b1 + unset channel → derives beta → sees pre-release tags', async () => {
+        // beta channel: pre-release tag is NOT filtered → update-available
+        const mod = await makeModule(undefined)
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v2026.6.0b2', released_at: '2026-05-01T12:00:00Z' }],
+        })
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('2026.6.0b1', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+      })
+
+      it('stable version 2026.6.0 + unset channel → derives stable → pre-release tags filtered', async () => {
+        // stable channel: only pre-release tag available → filtered → no update-available
+        const mod = await makeModule(undefined)
+        mockAxiosGet
+          .mockResolvedValueOnce({
+            data: [{ tag_name: 'v2026.6.0b2', released_at: '2026-05-01T12:00:00Z' }],
+          })
+          .mockResolvedValueOnce({ data: [] })
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('2026.6.0', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        for (const call of pub.mock.calls) {
+          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
+          expect(payload.status).not.toBe('update-available')
+        }
+      })
+
+      it('development + unset channel → derives stable → logs derived channel', async () => {
+        // development skips version check entirely; this test verifies channel resolution still logs
+        const mod = await makeModule(undefined)
+        const stop = mod.startVersionChecker('development', 'hash')
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        // Should log the resolved channel with a "derived" indicator
+        const allDebugCalls = loggerSpies.debug.mock.calls.map((c) => String(c[0]))
+        expect(allDebugCalls.some((msg) => msg.includes('stable') && msg.includes('derived'))).toBe(true)
+      })
+    })
+
+    describe('explicit channel wins over derived (both directions)', () => {
+      it('explicit stable + pre-release version 2026.6.0b1 → stays stable → filters pre-release tags', async () => {
+        const mod = await makeModule('stable')
+        mockAxiosGet
+          .mockResolvedValueOnce({
+            data: [{ tag_name: 'v2026.6.0b2', released_at: '2026-05-01T12:00:00Z' }],
+          })
+          .mockResolvedValueOnce({ data: [] })
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('2026.6.0b1', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        for (const call of pub.mock.calls) {
+          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
+          expect(payload.status).not.toBe('update-available')
+        }
+      })
+
+      it('explicit beta + stable version 2026.5.0 → stays beta → sees pre-release tags from 2026.6.x', async () => {
+        // Current running version is stable 2026.5.0. With explicit beta channel,
+        // a newer pre-release tag 2026.6.0b1 should be visible as update-available.
+        const mod = await makeModule('beta')
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v2026.6.0b1', released_at: '2026-05-01T12:00:00Z' }],
+        })
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('2026.5.0', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+      })
+    })
+
+    describe('logging of resolved channel', () => {
+      it('logs resolved channel and source (derived vs explicit) at startup', async () => {
+        const mod = await makeModule(undefined)
+        mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
+        const stop = mod.startVersionChecker('2026.6.0b1', 'hash')
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        const allDebugCalls = loggerSpies.debug.mock.calls.map((c) => String(c[0]))
+        // Should log that channel is beta and was derived (not explicit)
+        expect(allDebugCalls.some((msg) => msg.includes('beta') && msg.includes('derived'))).toBe(true)
+      })
+
+      it('logs resolved channel as explicit when updateChannel is set', async () => {
+        const mod = await makeModule('stable')
+        mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
+        const stop = mod.startVersionChecker('2026.6.0', 'hash')
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+        const allDebugCalls = loggerSpies.debug.mock.calls.map((c) => String(c[0]))
+        expect(allDebugCalls.some((msg) => msg.includes('stable') && msg.includes('explicit'))).toBe(true)
       })
     })
   })

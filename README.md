@@ -95,7 +95,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `LOGGING_SHOW_TIMESTAMP`                              | Show timestamps in logs                                                  | `true`                  | No       |
 | `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                  | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                       | No       |
-| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them                  | `stable`                | No       |
+| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them. Omit to auto-detect: `:next` (beta image) defaults to `beta`, `:latest` (stable image) defaults to `stable`. | `auto` | No       |
 | `HEALTH_CHECK_ENABLED`                                | Enable file-based health check for Docker HEALTHCHECK                    | `true`                  | No       |
 | `HEALTH_CHECK_FILE_PATH`                              | Path to health check file                                                | `/tmp/e2m-health`       | No       |
 | `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`              | Minutes of API failure before container self-restarts                    | `45`                    | No       |
@@ -162,7 +162,7 @@ docker run --rm \
   # -e LOGGING_SHOW_TIMESTAMP=true \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
-  # -e VERSION_CHECK_UPDATE_CHANNEL=stable \
+  # -e VERSION_CHECK_UPDATE_CHANNEL=stable \                                   # auto-derived from image (omit unless pinning)
   # -e HEALTH_CHECK_ENABLED=true \
   # -e HEALTH_CHECK_FILE_PATH=/tmp/e2m-health \
   # -e HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45 \
@@ -237,7 +237,7 @@ services:
       # - LOGGING_SHOW_TIMESTAMP=true
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
-      # - VERSION_CHECK_UPDATE_CHANNEL=stable
+      # - VERSION_CHECK_UPDATE_CHANNEL=stable                              # auto-derived from image (omit unless pinning)
       # - HEALTH_CHECK_ENABLED=true
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health
       # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45
@@ -275,8 +275,14 @@ docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbow
 image: kirbownz/electrolux-to-mqtt:next
 ```
 
-To receive update notifications for pre-release builds, set `VERSION_CHECK_UPDATE_CHANNEL=beta`
-(env var) or `updateChannel: beta` in `config.yml` under `versionCheck:`.
+When running the `:next` image, the update channel defaults automatically to `beta` — no extra
+configuration needed. Override with `VERSION_CHECK_UPDATE_CHANNEL=stable` (env var) or
+`updateChannel: stable` in `config.yml` under `versionCheck:` to pin to the stable channel.
+
+> **Note:** A `:next` user sitting on a _promoted-stable_ image (a stable release that has overtaken
+> the last beta) will default to the **stable** channel and won't receive beta notifications until the
+> next beta is published. Pin `VERSION_CHECK_UPDATE_CHANNEL=beta` to keep beta notifications while
+> running a current stable image.
 
 Release notes for each beta are available on the
 [GitLab releases page](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases).

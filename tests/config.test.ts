@@ -613,6 +613,51 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should yield updateChannel absent in generated config when VERSION_CHECK_UPDATE_CHANNEL is not set', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      delete process.env.VERSION_CHECK_UPDATE_CHANNEL
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      // updateChannel must not appear in the YAML when unset — it must remain undefined
+      expect(result).not.toContain('updateChannel:')
+
+      infoSpy.mockRestore()
+    })
+
+    it('should include updateChannel: stable in generated config when explicitly set to stable', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_UPDATE_CHANNEL = 'stable'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('updateChannel: stable')
+
+      infoSpy.mockRestore()
+    })
+
     it('should include logLevel in generated config content', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'
@@ -1579,6 +1624,39 @@ logging:
       expect(config.default.electrolux).toBeDefined()
 
       errorSpy.mockRestore()
+    })
+
+    it('should yield updateChannel: undefined when versionCheck is absent from config file', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.versionCheck.updateChannel).toBeUndefined()
+    })
+
+    it('should preserve explicit updateChannel: stable from config file as distinct from undefined', async () => {
+      const configWithStable = `${defaultValidConfig}
+versionCheck:
+  updateChannel: stable`
+      fs.writeFileSync(configPath, configWithStable, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.versionCheck.updateChannel).toBe('stable')
+    })
+
+    it('should preserve explicit updateChannel: beta from config file', async () => {
+      const configWithBeta = `${defaultValidConfig}
+versionCheck:
+  updateChannel: beta`
+      fs.writeFileSync(configPath, configWithBeta, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.versionCheck.updateChannel).toBe('beta')
     })
 
     it('should default telemetryEnabled to true when not specified in config file', async () => {

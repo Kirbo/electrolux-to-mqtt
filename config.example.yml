@@ -78,8 +78,13 @@ versionCheck:
   # (Optional) ntfy.sh webhook URL for notifications when a new version is found.
   # Example: https://ntfy.sh/vB66ozQaRiqhTE9j
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
-  # (Optional) Which releases to track. 'stable' (default) skips pre-release (beta) builds.
-  # Set to 'beta' to also receive notifications for betas (e.g. 2026.6.0b1).
+  # (Optional) Which releases to track.
+  # Omit this field to auto-derive the channel from the running image:
+  #   :next  image (version like 2026.6.0b1) → beta  (includes pre-release builds)
+  #   :latest image (version like 2026.6.0)  → stable (skips pre-release builds)
+  # Set explicitly to pin regardless of the image:
+  #   updateChannel: stable   — always track stable, even when running :next
+  #   updateChannel: beta     — always track beta,   even when running :latest
   updateChannel: stable
 
 healthCheck:

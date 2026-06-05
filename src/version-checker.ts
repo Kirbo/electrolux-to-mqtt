@@ -250,7 +250,12 @@ function publishInfoIfChanged(mqtt: IMqtt | undefined, message: string): void {
   mqtt.publishInfo(message)
 }
 
-async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: IMqtt): Promise<void> {
+async function checkForUpdates(
+  currentVersion: string,
+  userHash: string,
+  updateChannel: 'stable' | 'beta',
+  mqtt?: IMqtt,
+): Promise<void> {
   // Skip check if running development version
   if (currentVersion === 'development') {
     logger.debug('Running development version, skipping version check')
@@ -265,7 +270,6 @@ async function checkForUpdates(currentVersion: string, userHash: string, mqtt?: 
     logger.debug('Telemetry disabled, skipping')
   }
 
-  const updateChannel = config.versionCheck.updateChannel
   const latest = await fetchLatestVersion(updateChannel)
 
   if (!latest) {
@@ -330,16 +334,23 @@ export function startVersionChecker(currentVersion: string, userHash: string, mq
   const checkIntervalSeconds = config.versionCheck.checkInterval
   const checkIntervalMs = checkIntervalSeconds * 1000
 
+  // Resolve the update channel once at startup.
+  // An explicit config value wins; otherwise derive from the running version.
+  const configuredChannel = config.versionCheck.updateChannel
+  const updateChannel: 'stable' | 'beta' = configuredChannel ?? (isPreRelease(currentVersion) ? 'beta' : 'stable')
+  const channelSource = configuredChannel === undefined ? 'derived' : 'explicit'
+  logger.debug(`Update channel: ${updateChannel} (${channelSource} from version ${currentVersion})`)
+
   logger.debug(`Version check interval set to ${checkIntervalSeconds} seconds`)
 
   // Check immediately on start
-  checkForUpdates(currentVersion, userHash, mqtt).catch((error) => {
+  checkForUpdates(currentVersion, userHash, updateChannel, mqtt).catch((error) => {
     logger.debug('Version check failed:', error)
   })
 
   // Set up periodic check
   const intervalDisposable = disposableInterval(() => {
-    checkForUpdates(currentVersion, userHash, mqtt).catch((error) => {
+    checkForUpdates(currentVersion, userHash, updateChannel, mqtt).catch((error) => {
       logger.debug('Version check failed:', error)
     })
   }, checkIntervalMs)
