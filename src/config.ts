@@ -103,9 +103,15 @@ const configSchema = z.object({
         .default(3600),
       ntfyWebhookUrl: z.string().optional(),
       updateChannel: z.enum(['stable', 'beta']).optional(),
+      notifyGracePeriod: z
+        .number()
+        .int()
+        .min(0, 'must be at least 0 seconds (0 = notify immediately)')
+        .max(604800, 'should not exceed 604800 seconds (7 days)')
+        .default(3600),
     })
     .optional()
-    .transform((val) => val ?? { checkInterval: 3600, updateChannel: undefined }),
+    .transform((val) => val ?? { checkInterval: 3600, updateChannel: undefined, notifyGracePeriod: 3600 }),
   healthCheck: z
     .object({
       enabled: z.boolean().default(true),
@@ -172,6 +178,7 @@ const envSchema = z.object({
   VERSION_CHECK_INTERVAL: z.coerce.number().optional(),
   VERSION_CHECK_NTFY_WEBHOOK_URL: z.string().optional(),
   VERSION_CHECK_UPDATE_CHANNEL: z.string().optional(),
+  VERSION_CHECK_NOTIFY_GRACE_PERIOD: z.coerce.number().optional(),
   HEALTH_CHECK_ENABLED: z
     .string()
     .optional()
@@ -213,6 +220,7 @@ const configPathToEnvVar: Record<string, string> = {
   'versionCheck.checkInterval': 'VERSION_CHECK_INTERVAL',
   'versionCheck.ntfyWebhookUrl': 'VERSION_CHECK_NTFY_WEBHOOK_URL',
   'versionCheck.updateChannel': 'VERSION_CHECK_UPDATE_CHANNEL',
+  'versionCheck.notifyGracePeriod': 'VERSION_CHECK_NOTIFY_GRACE_PERIOD',
   'healthCheck.enabled': 'HEALTH_CHECK_ENABLED',
   'healthCheck.filePath': 'HEALTH_CHECK_FILE_PATH',
   'healthCheck.unHealthyRestartMinutes': 'HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES',
@@ -300,6 +308,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       checkInterval: envConfig.VERSION_CHECK_INTERVAL,
       ntfyWebhookUrl: envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL,
       updateChannel: envConfig.VERSION_CHECK_UPDATE_CHANNEL,
+      notifyGracePeriod: envConfig.VERSION_CHECK_NOTIFY_GRACE_PERIOD,
     }),
     healthCheck: stripUndefined({
       enabled: envConfig.HEALTH_CHECK_ENABLED,

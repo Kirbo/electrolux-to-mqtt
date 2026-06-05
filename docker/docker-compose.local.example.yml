@@ -41,6 +41,7 @@ services:
       # - LOGGING_SKIP_CACHE_LOGGING=true                                     # Skip cache debug logs (default: true)
       # - LOGGING_SHOW_TIMESTAMP=true                                         # Show timestamp in logs (default: true)
       # - VERSION_CHECK_INTERVAL=3600                                         # Version check interval in seconds (default: 3600)
+      # - VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600                              # Minimum release age in seconds before notification (0–604800, default: 3600)
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here      # ntfy.sh webhook URL for update notifications
       # - VERSION_CHECK_UPDATE_CHANNEL=stable                                 # Release channel: auto-derived from image if omitted; 'stable' or 'beta' to pin
       # - HEALTH_CHECK_ENABLED=true                                            # Enable file-based health check for Docker HEALTHCHECK (default: true)

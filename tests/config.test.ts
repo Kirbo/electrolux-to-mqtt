@@ -658,6 +658,131 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should include notifyGracePeriod in generated config when VERSION_CHECK_NOTIFY_GRACE_PERIOD is set', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '7200'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('notifyGracePeriod: 7200')
+
+      infoSpy.mockRestore()
+      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
+    })
+
+    it('should default VERSION_CHECK_NOTIFY_GRACE_PERIOD to 3600 when not set', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.versionCheck.notifyGracePeriod).toBe(3600)
+
+      infoSpy.mockRestore()
+    })
+
+    it('should reject VERSION_CHECK_NOTIFY_GRACE_PERIOD below 0', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '-1'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(
+        errorSpy.mock.calls.some((call) => (call[0] as string).includes('VERSION_CHECK_NOTIFY_GRACE_PERIOD')),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
+    })
+
+    it('should reject VERSION_CHECK_NOTIFY_GRACE_PERIOD above 604800', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '604801'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(
+        errorSpy.mock.calls.some((call) => (call[0] as string).includes('VERSION_CHECK_NOTIFY_GRACE_PERIOD')),
+      ).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
+    })
+
+    it('should accept VERSION_CHECK_NOTIFY_GRACE_PERIOD=0 (notify immediately)', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '0'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(errorSpy).not.toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(result).toContain('notifyGracePeriod: 0')
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
+    })
+
     it('should include logLevel in generated config content', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'

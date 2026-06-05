@@ -94,6 +94,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `LOGGING_SKIP_CACHE_LOGGING`                          | Suppress cache debug logs                                                | `true`                  | No       |
 | `LOGGING_SHOW_TIMESTAMP`                              | Show timestamps in logs                                                  | `true`                  | No       |
 | `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                  | No       |
+| `VERSION_CHECK_NOTIFY_GRACE_PERIOD`                   | Minimum age (seconds) a release must reach before you are notified (0–604800) | `3600`            | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                       | No       |
 | `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them. Omit to auto-detect: `:next` (beta image) defaults to `beta`, `:latest` (stable image) defaults to `stable`. | `auto` | No       |
 | `HEALTH_CHECK_ENABLED`                                | Enable file-based health check for Docker HEALTHCHECK                    | `true`                  | No       |
@@ -161,6 +162,7 @@ docker run --rm \
   # -e LOGGING_SKIP_CACHE_LOGGING=true \
   # -e LOGGING_SHOW_TIMESTAMP=true \
   # -e VERSION_CHECK_INTERVAL=3600 \
+  # -e VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
   # -e VERSION_CHECK_UPDATE_CHANNEL=stable \                                   # auto-derived from image (omit unless pinning)
   # -e HEALTH_CHECK_ENABLED=true \
@@ -236,6 +238,7 @@ services:
       # - LOGGING_SKIP_CACHE_LOGGING=true
       # - LOGGING_SHOW_TIMESTAMP=true
       # - VERSION_CHECK_INTERVAL=3600
+      # - VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
       # - VERSION_CHECK_UPDATE_CHANNEL=stable                              # auto-derived from image (omit unless pinning)
       # - HEALTH_CHECK_ENABLED=true

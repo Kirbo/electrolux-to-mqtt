@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IMqtt } from '@/mqtt.js'
+import { formatDuration } from '@/version-checker.js'
 
 // Stable logger spies shared across all logger consumers in this file.
 // Must be hoisted so vi.mock() factories can close over them.
@@ -23,10 +24,53 @@ vi.mock('@/config.js', () => ({
     versionCheck: {
       checkInterval: 3600,
       ntfyWebhookUrl: undefined,
+      notifyGracePeriod: 3600,
     },
     telemetryEnabled: true,
   },
 }))
+
+describe('formatDuration', () => {
+  it('returns "1 minute" for 60 seconds', () => {
+    expect(formatDuration(60)).toBe('1 minute')
+  })
+
+  it('returns "2 minutes" for 120 seconds', () => {
+    expect(formatDuration(120)).toBe('2 minutes')
+  })
+
+  it('returns "30 minutes" for 1800 seconds', () => {
+    expect(formatDuration(1800)).toBe('30 minutes')
+  })
+
+  it('returns "59 minutes" for 3540 seconds', () => {
+    expect(formatDuration(3540)).toBe('59 minutes')
+  })
+
+  it('returns "1 hour" for 3600 seconds', () => {
+    expect(formatDuration(3600)).toBe('1 hour')
+  })
+
+  it('returns "2 hours" for 7200 seconds', () => {
+    expect(formatDuration(7200)).toBe('2 hours')
+  })
+
+  it('returns "1.5 hours" for 5400 seconds', () => {
+    expect(formatDuration(5400)).toBe('1.5 hours')
+  })
+
+  it('returns "24 hours" for 86400 seconds', () => {
+    expect(formatDuration(86400)).toBe('24 hours')
+  })
+
+  it('trims trailing ".0" — 3600 is "1 hour" not "1.0 hours"', () => {
+    expect(formatDuration(3600)).not.toContain('.0')
+  })
+
+  it('trims trailing ".0" — 7200 is "2 hours" not "2.0 hours"', () => {
+    expect(formatDuration(7200)).not.toContain('.0')
+  })
+})
 
 describe('version-checker', () => {
   let startVersionChecker: typeof import('@/version-checker.js')['startVersionChecker']
@@ -91,6 +135,19 @@ describe('version-checker', () => {
       stopChecker()
     })
 
+    it('should log update channel and check interval at INFO level on startup', () => {
+      mockAxiosGet.mockResolvedValue({ data: [] })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      // v1.6.3 is a stable version → channel is derived as 'stable'
+      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+
+      expect(loggerSpies.info).toHaveBeenCalledWith('Update channel: stable (derived from version v1.6.3)')
+      expect(loggerSpies.info).toHaveBeenCalledWith('Version check interval set to 1 hour')
+
+      stopChecker()
+    })
+
     it('should return a function that stops the version checker', () => {
       mockAxiosGet.mockResolvedValue({ data: [] })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
@@ -150,7 +207,12 @@ describe('version-checker', () => {
       vi.resetModules()
       vi.doMock('@/config.js', () => ({
         default: {
-          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+          versionCheck: {
+            checkInterval: 3600,
+            ntfyWebhookUrl: undefined,
+            updateChannel: 'beta',
+            notifyGracePeriod: 3600,
+          },
           telemetryEnabled: false,
         },
       }))
@@ -218,7 +280,12 @@ describe('version-checker', () => {
       vi.resetModules()
       vi.doMock('@/config.js', () => ({
         default: {
-          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+          versionCheck: {
+            checkInterval: 3600,
+            ntfyWebhookUrl: undefined,
+            updateChannel: 'beta',
+            notifyGracePeriod: 3600,
+          },
           telemetryEnabled: false,
         },
       }))
@@ -464,7 +531,7 @@ describe('version-checker', () => {
 
       vi.doMock('@/config.js', () => ({
         default: {
-          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined },
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 3600 },
           telemetryEnabled: false,
         },
       }))
@@ -496,7 +563,7 @@ describe('version-checker', () => {
       vi.resetModules()
       vi.doMock('@/config.js', () => ({
         default: {
-          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined },
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 3600 },
           telemetryEnabled: true,
         },
       }))
@@ -578,6 +645,7 @@ describe('version-checker', () => {
           versionCheck: {
             checkInterval: 3600,
             ntfyWebhookUrl: 'https://ntfy.sh/vB66ozQaRiqhTE9j',
+            notifyGracePeriod: 3600,
           },
           telemetryEnabled: true,
         },
@@ -744,7 +812,7 @@ describe('version-checker', () => {
       stopChecker()
     })
 
-    it('should not notify about a newer version released less than 1 hour ago', async () => {
+    it('should not notify about a newer version released less than 1 hour ago (default grace period)', async () => {
       const now = new Date('2026-04-21T12:00:00Z')
       vi.setSystemTime(now)
       const recentRelease = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
@@ -761,7 +829,7 @@ describe('version-checker', () => {
       stopChecker()
     })
 
-    it('should notify about a newer version released more than 1 hour ago', async () => {
+    it('should notify about a newer version released more than 1 hour ago (default grace period)', async () => {
       const now = new Date('2026-04-21T12:00:00Z')
       vi.setSystemTime(now)
       const oldRelease = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString()
@@ -776,6 +844,89 @@ describe('version-checker', () => {
 
       expect(mockPublishInfo).toHaveBeenCalledWith(expect.stringContaining('update-available'))
       stopChecker()
+    })
+
+    describe('configurable notifyGracePeriod', () => {
+      it('with notifyGracePeriod=0 a release younger than 1 hour is still notified', async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 0 },
+            telemetryEnabled: false,
+          },
+        }))
+        const mod = await import('@/version-checker.js')
+
+        const now = new Date('2026-04-21T12:00:00Z')
+        vi.setSystemTime(now)
+        const recentRelease = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
+
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v1.6.4', released_at: recentRelease }],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('v1.6.3', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('update-available'))
+      })
+
+      it('with notifyGracePeriod=7200 a release 90 minutes old is still skipped', async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 7200 },
+            telemetryEnabled: false,
+          },
+        }))
+        const mod = await import('@/version-checker.js')
+
+        const now = new Date('2026-04-21T12:00:00Z')
+        vi.setSystemTime(now)
+        const ninetyMinAgo = new Date(now.getTime() - 90 * 60 * 1000).toISOString()
+
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v1.6.4', released_at: ninetyMinAgo }],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('v1.6.3', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        expect(pub).not.toHaveBeenCalledWith(expect.stringContaining('update-available'))
+      })
+
+      it('with notifyGracePeriod=7200 a release older than 2 hours is notified', async () => {
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 7200 },
+            telemetryEnabled: false,
+          },
+        }))
+        const mod = await import('@/version-checker.js')
+
+        const now = new Date('2026-04-21T12:00:00Z')
+        vi.setSystemTime(now)
+        const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString()
+
+        mockAxiosGet.mockResolvedValueOnce({
+          data: [{ tag_name: 'v1.6.4', released_at: threeHoursAgo }],
+        })
+
+        const pub = vi.fn()
+        const mqtt = { publishInfo: pub } as unknown as IMqtt
+        const stop = mod.startVersionChecker('v1.6.3', 'hash', mqtt)
+        await vi.advanceTimersByTimeAsync(0)
+        stop()
+
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('update-available'))
+      })
     })
 
     it('should publish development status and skip version fetch for development builds', async () => {
@@ -1057,7 +1208,12 @@ describe('version-checker', () => {
         vi.resetModules()
         vi.doMock('@/config.js', () => ({
           default: {
-            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'stable',
+              notifyGracePeriod: 3600,
+            },
             telemetryEnabled: false,
           },
         }))
@@ -1145,7 +1301,12 @@ describe('version-checker', () => {
         vi.resetModules()
         vi.doMock('@/config.js', () => ({
           default: {
-            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'beta',
+              notifyGracePeriod: 3600,
+            },
             telemetryEnabled: false,
           },
         }))
@@ -1218,7 +1379,12 @@ describe('version-checker', () => {
         vi.resetModules()
         vi.doMock('@/config.js', () => ({
           default: {
-            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'stable',
+              notifyGracePeriod: 3600,
+            },
             telemetryEnabled: false,
           },
         }))
@@ -1322,7 +1488,12 @@ describe('version-checker', () => {
         vi.resetModules()
         vi.doMock('@/config.js', () => ({
           default: {
-            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'beta',
+              notifyGracePeriod: 3600,
+            },
             telemetryEnabled: false,
           },
         }))
@@ -1381,7 +1552,12 @@ describe('version-checker', () => {
         vi.resetModules()
         vi.doMock('@/config.js', () => ({
           default: {
-            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'stable' },
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'stable',
+              notifyGracePeriod: 3600,
+            },
             telemetryEnabled: false,
           },
         }))
@@ -1418,7 +1594,12 @@ describe('version-checker', () => {
         vi.resetModules()
         vi.doMock('@/config.js', () => ({
           default: {
-            versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel: 'beta' },
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'beta',
+              notifyGracePeriod: 3600,
+            },
             telemetryEnabled: false,
           },
         }))
@@ -1458,7 +1639,7 @@ describe('version-checker', () => {
       vi.resetModules()
       vi.doMock('@/config.js', () => ({
         default: {
-          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel },
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel, notifyGracePeriod: 3600 },
           telemetryEnabled: false,
         },
       }))
@@ -1506,8 +1687,8 @@ describe('version-checker', () => {
         await vi.advanceTimersByTimeAsync(0)
         stop()
         // Should log the resolved channel with a "derived" indicator
-        const allDebugCalls = loggerSpies.debug.mock.calls.map((c) => String(c[0]))
-        expect(allDebugCalls.some((msg) => msg.includes('stable') && msg.includes('derived'))).toBe(true)
+        const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
+        expect(allInfoCalls.some((msg) => msg.includes('stable') && msg.includes('derived'))).toBe(true)
       })
     })
 
@@ -1553,9 +1734,9 @@ describe('version-checker', () => {
         const stop = mod.startVersionChecker('2026.6.0b1', 'hash')
         await vi.advanceTimersByTimeAsync(0)
         stop()
-        const allDebugCalls = loggerSpies.debug.mock.calls.map((c) => String(c[0]))
+        const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
         // Should log that channel is beta and was derived (not explicit)
-        expect(allDebugCalls.some((msg) => msg.includes('beta') && msg.includes('derived'))).toBe(true)
+        expect(allInfoCalls.some((msg) => msg.includes('beta') && msg.includes('derived'))).toBe(true)
       })
 
       it('logs resolved channel as explicit when updateChannel is set', async () => {
@@ -1564,8 +1745,8 @@ describe('version-checker', () => {
         const stop = mod.startVersionChecker('2026.6.0', 'hash')
         await vi.advanceTimersByTimeAsync(0)
         stop()
-        const allDebugCalls = loggerSpies.debug.mock.calls.map((c) => String(c[0]))
-        expect(allDebugCalls.some((msg) => msg.includes('stable') && msg.includes('explicit'))).toBe(true)
+        const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
+        expect(allInfoCalls.some((msg) => msg.includes('stable') && msg.includes('explicit'))).toBe(true)
       })
     })
   })

@@ -71,6 +71,20 @@ type GitLabRelease = {
 }
 
 /**
+ * Format a duration in seconds as a human-readable string in minutes or hours.
+ * - < 3600s → "N minute(s)"
+ * - >= 3600s → "N hour(s)" (fractional, trailing ".0" trimmed)
+ */
+export function formatDuration(seconds: number): string {
+  if (seconds < 3600) {
+    const minutes = seconds / 60
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`
+  }
+  const hours = seconds / 3600
+  return hours === 1 ? '1 hour' : `${hours} hours`
+}
+
+/**
  * Split a cleaned (no leading 'v') version string into its numeric core and
  * pre-release label. Supports two pre-release forms:
  *   - SemVer dash:  "1.18.5-rc.1"  → { core: "1.18.5", pre: "rc.1" }
@@ -286,7 +300,7 @@ async function checkForUpdates(
 
   if (comparison < 0) {
     const releaseAgeMs = Date.now() - new Date(latest.releasedAt).getTime()
-    if (releaseAgeMs < 60 * 60 * 1000) {
+    if (releaseAgeMs < config.versionCheck.notifyGracePeriod * 1000) {
       logger.debug(`Newer version ${versionTag} found but released recently, skipping notification`)
       return
     }
@@ -339,9 +353,9 @@ export function startVersionChecker(currentVersion: string, userHash: string, mq
   const configuredChannel = config.versionCheck.updateChannel
   const updateChannel: 'stable' | 'beta' = configuredChannel ?? (isPreRelease(currentVersion) ? 'beta' : 'stable')
   const channelSource = configuredChannel === undefined ? 'derived' : 'explicit'
-  logger.debug(`Update channel: ${updateChannel} (${channelSource} from version ${currentVersion})`)
+  logger.info(`Update channel: ${updateChannel} (${channelSource} from version ${currentVersion})`)
 
-  logger.debug(`Version check interval set to ${checkIntervalSeconds} seconds`)
+  logger.info(`Version check interval set to ${formatDuration(checkIntervalSeconds)}`)
 
   // Check immediately on start
   checkForUpdates(currentVersion, userHash, updateChannel, mqtt).catch((error) => {

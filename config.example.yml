@@ -75,6 +75,8 @@ logging:
 versionCheck:
   # (Optional) How often to check for new versions, in seconds. Default: 3600 (1 hour), Min: 60, Max: 86400 (24 hours)
   checkInterval: 3600
+  # (Optional) Minimum age (seconds) a release must reach before you are notified. Default: 3600 (1 hour), Min: 0 (notify immediately), Max: 604800 (7 days)
+  notifyGracePeriod: 3600
   # (Optional) ntfy.sh webhook URL for notifications when a new version is found.
   # Example: https://ntfy.sh/vB66ozQaRiqhTE9j
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
