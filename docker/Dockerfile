@@ -95,10 +95,15 @@ ARG LOG_LEVEL=info
 ARG VERSION=development
 ARG BUILD_DATE
 ARG VCS_REF
+# UPDATE_CHANNEL is set to 'stable' or 'beta' by CI when building :latest/:next images.
+# Empty default is intentional: local/dev builds leave it unset so the app falls through
+# to version-derived channel resolution (see resolveUpdateChannel in src/version-checker.ts).
+ARG UPDATE_CHANNEL=""
 
 # Set environment variables from build args (baked in at build time)
 ENV LOG_LEVEL=${LOG_LEVEL}
 ENV NODE_ENV=production
+ENV E2M_IMAGE_CHANNEL=${UPDATE_CHANNEL}
 
 # OCI Image Format Specification labels (https://github.com/opencontainers/image-spec/blob/main/annotations.md)
 LABEL org.opencontainers.image.title="Electrolux to MQTT Bridge"

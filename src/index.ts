@@ -120,8 +120,10 @@ export const main = async () => {
 
   logger.info(`Appliance discovery running every ${applianceDiscoveryInterval / 1000 / 60} minutes to detect changes`)
 
-  // Start version checker
-  stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt)
+  // Start version checker.
+  // process.env.E2M_IMAGE_CHANNEL is baked into the Docker image at build time (UPDATE_CHANNEL ARG).
+  // It is NOT routed through config.ts so it is honoured in YAML-config mode too.
+  stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt, process.env.E2M_IMAGE_CHANNEL)
 }
 
 if (process.env.VITEST !== 'true') {

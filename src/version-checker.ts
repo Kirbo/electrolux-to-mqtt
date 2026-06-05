@@ -147,6 +147,45 @@ type LatestVersionInfo = {
 // OR ends with a 'b<digits>' suffix preceded by a digit (CalVer beta: "2026.6.0b1").
 const isPreRelease = (tagName: string): boolean => tagName.includes('-') || /\db\d+$/.test(tagName)
 
+/**
+ * Normalize a raw image channel string to 'stable' | 'beta' | undefined.
+ * Only exact lowercase 'stable' or 'beta' are valid — anything else (empty string,
+ * 'Beta', junk) is treated as unset and falls through to version-derived.
+ */
+function normalizeImageChannel(raw?: string): 'stable' | 'beta' | undefined {
+  return raw === 'stable' || raw === 'beta' ? raw : undefined
+}
+
+/**
+ * Resolve the effective update channel.
+ *
+ * Precedence (highest first):
+ *   1. explicit user config/env  → `configured`                   (source: 'explicit')
+ *   2. image-baked default       → `imageChannel` (E2M_IMAGE_CHANNEL, valid only) (source: 'image')
+ *   3. version-derived fallback  → isPreRelease(currentVersion)    (source: 'derived')
+ *
+ * The empty-string trap: Docker ENV with an empty ARG default sets E2M_IMAGE_CHANNEL to "" (present but
+ * empty). normalizeImageChannel rejects anything that is not exactly 'stable' or 'beta' so the ?? chain
+ * never gets a falsy-but-non-undefined value.
+ */
+export function resolveUpdateChannel(args: {
+  configured?: 'stable' | 'beta'
+  imageChannel?: string
+  currentVersion: string
+}): { channel: 'stable' | 'beta'; source: 'explicit' | 'image' | 'derived' } {
+  if (args.configured !== undefined) {
+    return { channel: args.configured, source: 'explicit' }
+  }
+  const img = normalizeImageChannel(args.imageChannel)
+  if (img !== undefined) {
+    return { channel: img, source: 'image' }
+  }
+  return {
+    channel: isPreRelease(args.currentVersion) ? 'beta' : 'stable',
+    source: 'derived',
+  }
+}
+
 function pickLatestFromReleases(releases: GitLabRelease[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
   const eligible = channel === 'stable' ? releases.filter((r) => !isPreRelease(r.tag_name)) : releases
   const sorted = [...eligible].sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime())
@@ -341,19 +380,39 @@ async function checkForUpdates(
 
 /**
  * Start the version check interval
+ * @param currentVersion - Running image version string
+ * @param userHash - Anonymous installation hash for telemetry
+ * @param mqtt - Optional MQTT client for publishing version info
+ * @param imageChannel - Raw value of E2M_IMAGE_CHANNEL env var baked into the Docker image at build time.
+ *   Pass process.env.E2M_IMAGE_CHANNEL directly (may be undefined or empty string). NOT sourced from
+ *   config.ts (which would silently ignore it in YAML-mode).
  * @returns A function to stop the interval
  */
-export function startVersionChecker(currentVersion: string, userHash: string, mqtt?: IMqtt): () => void {
+export function startVersionChecker(
+  currentVersion: string,
+  userHash: string,
+  mqtt?: IMqtt,
+  imageChannel?: string,
+): () => void {
   // Get check interval from config, default to 3600 seconds (1 hour)
   const checkIntervalSeconds = config.versionCheck.checkInterval
   const checkIntervalMs = checkIntervalSeconds * 1000
 
-  // Resolve the update channel once at startup.
-  // An explicit config value wins; otherwise derive from the running version.
-  const configuredChannel = config.versionCheck.updateChannel
-  const updateChannel: 'stable' | 'beta' = configuredChannel ?? (isPreRelease(currentVersion) ? 'beta' : 'stable')
-  const channelSource = configuredChannel === undefined ? 'derived' : 'explicit'
-  logger.info(`Update channel: ${updateChannel} (${channelSource} from version ${currentVersion})`)
+  // Resolve update channel once at startup.
+  // Precedence: explicit config/env > image-baked default (E2M_IMAGE_CHANNEL) > version-derived.
+  const { channel: updateChannel, source: channelSource } = resolveUpdateChannel({
+    configured: config.versionCheck.updateChannel,
+    imageChannel,
+    currentVersion,
+  })
+
+  const channelLogSuffix =
+    channelSource === 'explicit'
+      ? '(explicit override)'
+      : channelSource === 'image'
+        ? '(image default)'
+        : `(derived from version ${currentVersion})`
+  logger.info(`Update channel: ${updateChannel} ${channelLogSuffix}`)
 
   logger.info(`Version check interval set to ${formatDuration(checkIntervalSeconds)}`)
 

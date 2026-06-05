@@ -81,10 +81,10 @@ versionCheck:
   # Example: https://ntfy.sh/vB66ozQaRiqhTE9j
   ntfyWebhookUrl: https://ntfy.sh/your_topic_here
   # (Optional) Which releases to track.
-  # Omit this field to auto-derive the channel from the running image:
-  #   :next  image (version like 2026.6.0b1) → beta  (includes pre-release builds)
-  #   :latest image (version like 2026.6.0)  → stable (skips pre-release builds)
-  # Set explicitly to pin regardless of the image:
+  # The default channel is baked into the Docker image at build time:
+  #   :latest image → stable (skips pre-release builds)
+  #   :next   image → beta   (includes pre-release builds)
+  # Omit this field to use the image default. Set explicitly only to override:
   #   updateChannel: stable   — always track stable, even when running :next
   #   updateChannel: beta     — always track beta,   even when running :latest
   updateChannel: stable

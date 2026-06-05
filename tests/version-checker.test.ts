@@ -1750,4 +1750,269 @@ describe('version-checker', () => {
       })
     })
   })
+
+  // ── resolveUpdateChannel unit tests ─────────────────────────────────────
+  describe('resolveUpdateChannel', () => {
+    let resolveUpdateChannel: typeof import('@/version-checker.js')['resolveUpdateChannel']
+
+    beforeEach(async () => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 3600 },
+          telemetryEnabled: false,
+        },
+      }))
+      const mod = await import('@/version-checker.js')
+      resolveUpdateChannel = mod.resolveUpdateChannel
+    })
+
+    describe('precedence: explicit > image > derived', () => {
+      it('explicit configured beats image channel', () => {
+        const result = resolveUpdateChannel({
+          configured: 'stable',
+          imageChannel: 'beta',
+          currentVersion: '2026.6.0b1',
+        })
+        expect(result).toEqual({ channel: 'stable', source: 'explicit' })
+      })
+
+      it('explicit configured beats derived', () => {
+        const result = resolveUpdateChannel({ configured: 'beta', imageChannel: undefined, currentVersion: '2026.6.0' })
+        expect(result).toEqual({ channel: 'beta', source: 'explicit' })
+      })
+
+      it('image channel beats version-derived when no explicit config', () => {
+        // Running stable version (2026.6.4) but image says beta → image wins
+        const result = resolveUpdateChannel({ configured: undefined, imageChannel: 'beta', currentVersion: '2026.6.4' })
+        expect(result).toEqual({ channel: 'beta', source: 'image' })
+      })
+
+      it('image channel beta used when no explicit config and stable version', () => {
+        const result = resolveUpdateChannel({
+          configured: undefined,
+          imageChannel: 'stable',
+          currentVersion: '2026.6.0b1',
+        })
+        expect(result).toEqual({ channel: 'stable', source: 'image' })
+      })
+
+      it('falls through to version-derived when no explicit and no image channel', () => {
+        const result = resolveUpdateChannel({
+          configured: undefined,
+          imageChannel: undefined,
+          currentVersion: '2026.6.0b1',
+        })
+        expect(result).toEqual({ channel: 'beta', source: 'derived' })
+      })
+
+      it('falls through to derived stable when no explicit, no image channel, stable version', () => {
+        const result = resolveUpdateChannel({
+          configured: undefined,
+          imageChannel: undefined,
+          currentVersion: '2026.6.4',
+        })
+        expect(result).toEqual({ channel: 'stable', source: 'derived' })
+      })
+    })
+
+    describe('empty-string and junk image channel normalization', () => {
+      it('empty string imageChannel falls through to version-derived', () => {
+        // Running stable version → derived should be stable (not broken/empty)
+        const result = resolveUpdateChannel({ configured: undefined, imageChannel: '', currentVersion: '2026.6.4' })
+        expect(result).toEqual({ channel: 'stable', source: 'derived' })
+      })
+
+      it('empty string imageChannel + pre-release version falls through to beta-derived', () => {
+        const result = resolveUpdateChannel({ configured: undefined, imageChannel: '', currentVersion: '2026.6.0b1' })
+        expect(result).toEqual({ channel: 'beta', source: 'derived' })
+      })
+
+      it('"Beta" (capital B) imageChannel falls through to version-derived', () => {
+        const result = resolveUpdateChannel({ configured: undefined, imageChannel: 'Beta', currentVersion: '2026.6.4' })
+        expect(result).toEqual({ channel: 'stable', source: 'derived' })
+      })
+
+      it('"xyz" junk imageChannel falls through to version-derived', () => {
+        const result = resolveUpdateChannel({ configured: undefined, imageChannel: 'xyz', currentVersion: '2026.6.4' })
+        expect(result).toEqual({ channel: 'stable', source: 'derived' })
+      })
+    })
+
+    describe('source label in startup log', () => {
+      it('logs "image default" when channel is resolved from imageChannel', () => {
+        mockAxiosGet.mockResolvedValue({ data: [] })
+        // Use the 4th arg to pass imageChannel
+        // We re-import startVersionChecker via the same module
+        let startFn: typeof import('@/version-checker.js')['startVersionChecker']
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: undefined,
+              notifyGracePeriod: 3600,
+            },
+            telemetryEnabled: false,
+          },
+        }))
+        // We test this through the startVersionChecker log output
+        return import('@/version-checker.js').then((mod) => {
+          startFn = mod.startVersionChecker
+          const stop = startFn('2026.6.4', 'hash', undefined, 'beta')
+          stop()
+          const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
+          expect(allInfoCalls.some((msg) => msg.includes('beta') && msg.includes('image'))).toBe(true)
+        })
+      })
+
+      it('logs "explicit override" when channel is from config', () => {
+        mockAxiosGet.mockResolvedValue({ data: [] })
+        let startFn: typeof import('@/version-checker.js')['startVersionChecker']
+        vi.resetModules()
+        vi.doMock('@/config.js', () => ({
+          default: {
+            versionCheck: {
+              checkInterval: 3600,
+              ntfyWebhookUrl: undefined,
+              updateChannel: 'stable',
+              notifyGracePeriod: 3600,
+            },
+            telemetryEnabled: false,
+          },
+        }))
+        return import('@/version-checker.js').then((mod) => {
+          startFn = mod.startVersionChecker
+          const stop = startFn('2026.6.4', 'hash', undefined, 'beta')
+          stop()
+          const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
+          expect(allInfoCalls.some((msg) => msg.includes('stable') && msg.includes('explicit'))).toBe(true)
+        })
+      })
+    })
+  })
+
+  // ── E2E regression: stable version + image channel beta → notification fires ─
+  // This is the exact bug: :next re-tagged to stable (2026.6.4, no bN) would
+  // previously derive 'stable' and miss beta updates. With image channel baked
+  // in as 'beta', it must fire update-available for a numerically-higher beta.
+  describe('E2E regression: stable version on beta image channel', () => {
+    let moduleReg: typeof import('@/version-checker.js')
+    let pubReg: ReturnType<typeof vi.fn>
+    let mqttReg: IMqtt
+
+    beforeEach(async () => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          versionCheck: {
+            checkInterval: 3600,
+            ntfyWebhookUrl: undefined,
+            updateChannel: undefined, // no explicit config — relies on image channel
+            notifyGracePeriod: 0, // disable grace period so release age doesn't suppress
+          },
+          telemetryEnabled: false,
+        },
+      }))
+      moduleReg = await import('@/version-checker.js')
+      pubReg = vi.fn()
+      mqttReg = { publishInfo: pubReg } as unknown as IMqtt
+    })
+
+    it('running 2026.6.4 (stable) + imageChannel=beta + newer beta available → update-available fires', async () => {
+      // Simulate: :next image carrying promoted-stable 2026.6.4 with UPDATE_CHANNEL=beta baked in.
+      // A later beta 2026.6.5b1 is available. Without the fix, this would derive 'stable' and miss it.
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [
+          { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' }, // beta, numerically higher
+          { tag_name: 'v2026.6.4', released_at: '2026-04-01T12:00:00Z' }, // current stable
+        ],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      // Pass 'beta' as 4th arg (imageChannel baked into :next Docker image)
+      const stop = moduleReg.startVersionChecker('2026.6.4', 'hash', mqttReg, 'beta')
+      await vi.advanceTimersByTimeAsync(0)
+      stop()
+
+      expect(pubReg).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+      expect(pubReg).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v2026.6.5b1"'))
+    })
+
+    it('running 2026.6.4 (stable) + imageChannel=stable + newer beta available → stays up-to-date', async () => {
+      // :latest image with UPDATE_CHANNEL=stable baked in; beta not shown on stable channel
+      mockAxiosGet
+        .mockResolvedValueOnce({
+          data: [
+            { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' },
+            { tag_name: 'v2026.6.4', released_at: '2026-04-01T12:00:00Z' },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] }) // tags fallback (beta filtered from stable releases)
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stop = moduleReg.startVersionChecker('2026.6.4', 'hash', mqttReg, 'stable')
+      await vi.advanceTimersByTimeAsync(0)
+      stop()
+
+      // Stable channel: latest stable is 2026.6.4 (current) → up-to-date
+      expect(pubReg).toHaveBeenCalledWith(expect.stringContaining('"status":"up-to-date"'))
+      expect(pubReg).not.toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+    })
+
+    it('YAML-mode: explicit config channel wins over image channel (config=stable beats imageChannel=beta)', async () => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          versionCheck: {
+            checkInterval: 3600,
+            ntfyWebhookUrl: undefined,
+            updateChannel: 'stable', // explicit YAML/env override
+            notifyGracePeriod: 0,
+          },
+          telemetryEnabled: false,
+        },
+      }))
+      const mod = await import('@/version-checker.js')
+      const pub = vi.fn()
+      const mqtt = { publishInfo: pub } as unknown as IMqtt
+
+      mockAxiosGet
+        .mockResolvedValueOnce({
+          data: [
+            { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' },
+            { tag_name: 'v2026.6.4', released_at: '2026-04-01T12:00:00Z' },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      // imageChannel=beta passed but explicit config=stable should win
+      const stop = mod.startVersionChecker('2026.6.4', 'hash', mqtt, 'beta')
+      await vi.advanceTimersByTimeAsync(0)
+      stop()
+
+      // stable config wins → no beta update-available
+      expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"up-to-date"'))
+      expect(pub).not.toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+    })
+
+    it('YAML-mode: no explicit config + imageChannel=beta → beta channel honored', async () => {
+      // Verifies the image default works even though E2M_IMAGE_CHANNEL never goes through config.ts
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [
+          { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' },
+          { tag_name: 'v2026.6.4', released_at: '2026-04-01T12:00:00Z' },
+        ],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stop = moduleReg.startVersionChecker('2026.6.4', 'hash', mqttReg, 'beta')
+      await vi.advanceTimersByTimeAsync(0)
+      stop()
+
+      expect(pubReg).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
+    })
+  })
 })

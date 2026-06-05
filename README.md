@@ -96,7 +96,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                  | No       |
 | `VERSION_CHECK_NOTIFY_GRACE_PERIOD`                   | Minimum age (seconds) a release must reach before you are notified (0–604800) | `3600`            | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                       | No       |
-| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them. Omit to auto-detect: `:next` (beta image) defaults to `beta`, `:latest` (stable image) defaults to `stable`. | `auto` | No       |
+| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them. Omit to use the image default: `:next` images are built with `beta`, `:latest` images with `stable`. Set only to override the image default. | image-baked | No       |
 | `HEALTH_CHECK_ENABLED`                                | Enable file-based health check for Docker HEALTHCHECK                    | `true`                  | No       |
 | `HEALTH_CHECK_FILE_PATH`                              | Path to health check file                                                | `/tmp/e2m-health`       | No       |
 | `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`              | Minutes of API failure before container self-restarts                    | `45`                    | No       |
@@ -164,7 +164,7 @@ docker run --rm \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
-  # -e VERSION_CHECK_UPDATE_CHANNEL=stable \                                   # auto-derived from image (omit unless pinning)
+  # -e VERSION_CHECK_UPDATE_CHANNEL=stable \                                   # image default (omit unless pinning)
   # -e HEALTH_CHECK_ENABLED=true \
   # -e HEALTH_CHECK_FILE_PATH=/tmp/e2m-health \
   # -e HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45 \
@@ -240,7 +240,7 @@ services:
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/
-      # - VERSION_CHECK_UPDATE_CHANNEL=stable                              # auto-derived from image (omit unless pinning)
+      # - VERSION_CHECK_UPDATE_CHANNEL=stable                              # image default (omit unless pinning)
       # - HEALTH_CHECK_ENABLED=true
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health
       # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45
@@ -254,11 +254,13 @@ Pre-release (beta) builds are published to the `:next` Docker tag on every push 
 Betas follow Home Assistant's CalVer scheme `YYYY.M.MICRObN` (e.g. `2026.6.0b1`). Each beta changelog
 covers only the changes since the previous release (stable or beta).
 
-The `:next` tag always tracks the leading edge. When a stable release overtakes the last beta — which it
-always does, since a final release outranks its own `bN` pre-releases — the stable build re-points `:next`
-to that stable too. So if you follow the beta channel for early access and update notifications, you can
-stay on `:next` permanently: it serves whichever is newer, the latest beta or a stable that has overtaken
-it, and you never have to switch between `:next` and `:latest`.
+`:next` and `:latest` are **separate images** built with different update channel defaults baked in:
+- `:latest` — built with `stable` channel baked in; only notifies about stable releases.
+- `:next` — built with `beta` channel baked in; notifies about both beta and stable releases.
+
+This means the correct channel is always active regardless of what version number is running — even if
+`:next` temporarily carries a promoted-stable version (e.g. `2026.6.4`, no `bN`), it still defaults to
+the beta channel.
 
 <details>
   <summary>I want to try the beta channel!</summary>
@@ -281,11 +283,6 @@ image: kirbownz/electrolux-to-mqtt:next
 When running the `:next` image, the update channel defaults automatically to `beta` — no extra
 configuration needed. Override with `VERSION_CHECK_UPDATE_CHANNEL=stable` (env var) or
 `updateChannel: stable` in `config.yml` under `versionCheck:` to pin to the stable channel.
-
-> **Note:** A `:next` user sitting on a _promoted-stable_ image (a stable release that has overtaken
-> the last beta) will default to the **stable** channel and won't receive beta notifications until the
-> next beta is published. Pin `VERSION_CHECK_UPDATE_CHANNEL=beta` to keep beta notifications while
-> running a current stable image.
 
 Release notes for each beta are available on the
 [GitLab releases page](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases).
