@@ -13,6 +13,7 @@ json=$(cat)
 cwd=$(echo "$json"         | jq -r '.workspace.current_dir // .cwd // empty')
 worktree=$(echo "$json"    | jq -r '.workspace.git_worktree // empty')
 model=$(echo "$json"       | jq -r '.model.display_name // empty')
+effort=$(echo "$json"      | jq -r '.effort.level // empty')
 session_id=$(echo "$json"  | jq -r '.session_id // "nosession"')
 output_style=$(echo "$json"| jq -r '.output_style.name // empty')
 
@@ -215,7 +216,23 @@ fi
 # ============================================================
 econ_parts=()
 [[ -n "$caveman_text" ]] && econ_parts+=("$caveman_text")
-[[ -n "$model" ]]   && econ_parts+=("${MAGENTA}${model}${RESET}")
+
+if [[ -n "$model" ]]; then
+  model_seg="${MAGENTA}${model}${RESET}"
+  if [[ -n "$effort" ]]; then
+    case "$effort" in
+      low)    ec="$BLUE"   ;;
+      medium) ec="$GREEN"  ;;
+      high)   ec="$YELLOW" ;;
+      xhigh)  ec="$ORANGE" ;;
+      max)    ec="$RED"    ;;
+      *)      ec="$DIM"    ;;
+    esac
+    model_seg="${model_seg} ${ec}(${effort})${RESET}"
+  fi
+  econ_parts+=("$model_seg")
+fi
+
 [[ -n "${session_id}" && "${session_id}" != "nosession" ]] && econ_parts+=("${DIM}[${session_id}]${RESET}")
 
 cost_eur=$(awk -v u="$cost_usd" -v r="$EUR_RATE" 'BEGIN{printf "%.3f", u*r}')
