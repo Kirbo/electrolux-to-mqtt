@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import type { Request } from 'express'
 import { describe, expect, it } from 'vitest'
-import { getClientIp, hashIp, validateTelemetryPayload } from '../src/utils.js'
+import { getClientIp, hashIp, isPreReleaseVersion, validateTelemetryPayload } from '../src/utils.js'
 
 // Build a minimal Express-like request for getClientIp tests. Includes socket
 // (for direct TCP address), ip (Express-populated when trust proxy is on), and
@@ -109,6 +109,52 @@ describe('validateTelemetryPayload', () => {
   it('rejects version with invalid characters', () => {
     expect(validateTelemetryPayload(validHash, '1.0.0 beta')).toMatch(/invalid characters/)
     expect(validateTelemetryPayload(validHash, '1.0.0;rm -rf')).toMatch(/invalid characters/)
+  })
+
+  it('accepts valid channel "stable"', () => {
+    expect(validateTelemetryPayload(validHash, validVersion, 'stable')).toBeNull()
+  })
+
+  it('accepts valid channel "beta"', () => {
+    expect(validateTelemetryPayload(validHash, validVersion, 'beta')).toBeNull()
+  })
+
+  it('accepts missing channel (legacy clients)', () => {
+    expect(validateTelemetryPayload(validHash, validVersion, undefined)).toBeNull()
+  })
+
+  it('rejects junk channel "nightly"', () => {
+    expect(validateTelemetryPayload(validHash, validVersion, 'nightly')).toMatch(/channel/)
+  })
+
+  it('rejects non-string channel (number)', () => {
+    expect(validateTelemetryPayload(validHash, validVersion, 123 as unknown as string)).toMatch(/channel/)
+  })
+})
+
+describe('isPreReleaseVersion', () => {
+  it('returns true for CalVer beta form 2026.6.5b1', () => {
+    expect(isPreReleaseVersion('2026.6.5b1')).toBe(true)
+  })
+
+  it('returns true for SemVer dash form 1.18.5-rc.4', () => {
+    expect(isPreReleaseVersion('1.18.5-rc.4')).toBe(true)
+  })
+
+  it('returns false for stable CalVer 2026.6.0', () => {
+    expect(isPreReleaseVersion('2026.6.0')).toBe(false)
+  })
+
+  it('returns false for stable SemVer 1.18.4', () => {
+    expect(isPreReleaseVersion('1.18.4')).toBe(false)
+  })
+
+  it('returns true for v-prefixed beta v2026.6.0b1', () => {
+    expect(isPreReleaseVersion('v2026.6.0b1')).toBe(true)
+  })
+
+  it('returns true for v-prefixed dash form v1.18.5-rc.1', () => {
+    expect(isPreReleaseVersion('v1.18.5-rc.1')).toBe(true)
   })
 })
 

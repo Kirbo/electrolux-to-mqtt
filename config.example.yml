@@ -97,7 +97,7 @@ healthCheck:
   # (Optional) Minutes of sustained API failure before the container exits for Docker to restart it. Default: 45 (range: 10–1440)
   unHealthyRestartMinutes: 45
 
-# (Optional) Send anonymous usage statistics (current version + installation hash) to help the
-# maintainer understand adoption. No personal data is collected. Default: true
-# Set to false to opt out entirely. Version checking still runs regardless.
+# (Optional) Send anonymous usage statistics (current version, update channel stable/beta, and
+# installation hash) to help the maintainer understand adoption. No personal data is collected.
+# Default: true. Set to false to opt out entirely. Version checking still runs regardless.
 telemetryEnabled: true

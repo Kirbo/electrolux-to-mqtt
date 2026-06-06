@@ -105,7 +105,11 @@ describe('generateBadge', () => {
 
     await generateBadge({ redis, config })
 
-    expect(await readJson(redis, 'cached:telemetry')).toEqual({ total: 0, versions: [] })
+    expect(await readJson(redis, 'cached:telemetry')).toEqual({
+      total: 0,
+      channels: { stable: 0, beta: 0 },
+      versions: [],
+    })
   })
 
   it('aggregates user versions and sorts them by version desc', async () => {
@@ -117,12 +121,13 @@ describe('generateBadge', () => {
 
     await generateBadge({ redis, config })
 
-    // Version desc: 2.3.1 before 1.0.0
+    // Version desc: 2.3.1 before 1.0.0; legacy plain values derive stable
     expect(await readJson(redis, 'cached:telemetry')).toEqual({
       total: 3,
+      channels: { stable: 3, beta: 0 },
       versions: [
-        { version: '2.3.1', count: 1 },
-        { version: '1.0.0', count: 2 },
+        { version: '2.3.1', count: 1, channels: { stable: 1, beta: 0 } },
+        { version: '1.0.0', count: 2, channels: { stable: 2, beta: 0 } },
       ],
     })
   })
@@ -236,7 +241,8 @@ describe('generateBadge', () => {
       await generateBadge({ redis, config })
       expect(await readJson(redis, 'cached:telemetry')).toEqual({
         total: 1,
-        versions: [{ version: '1.0.0', count: 1 }],
+        channels: { stable: 1, beta: 0 },
+        versions: [{ version: '1.0.0', count: 1, channels: { stable: 1, beta: 0 } }],
       })
     } finally {
       await fsp.rm(notADir, { force: true })
@@ -254,7 +260,8 @@ describe('generateBadge', () => {
 
     expect(await readJson(redis, 'cached:telemetry')).toEqual({
       total: 2,
-      versions: [{ version: '1.0.0', count: 1 }],
+      channels: { stable: 1, beta: 0 },
+      versions: [{ version: '1.0.0', count: 1, channels: { stable: 1, beta: 0 } }],
     })
   })
 })
@@ -286,7 +293,8 @@ describe('POST /telemetry', () => {
     expect(redis.ttls.get(`user:${HASH_A}`)).toBe(24 * 60 * 60)
     expect(await readJson(redis, 'cached:telemetry')).toEqual({
       total: 1,
-      versions: [{ version: '1.2.3', count: 1 }],
+      channels: { stable: 1, beta: 0 },
+      versions: [{ version: '1.2.3', count: 1, channels: { stable: 1, beta: 0 } }],
     })
   })
 
@@ -515,7 +523,7 @@ describe('GET /telemetry', () => {
     const res = await request(app).get('/telemetry')
 
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ total: 0, versions: [] })
+    expect(res.body).toEqual({ total: 0, channels: { stable: 0, beta: 0 }, versions: [] })
   })
 
   it('returns the cached aggregated data when present', async () => {
@@ -1274,5 +1282,187 @@ describe('generateBadge versions cap', () => {
     expect(cached.versions).toHaveLength(100)
 
     await fsp.rm(badgeDir, { recursive: true, force: true })
+  })
+})
+
+// ── Channel dimension ─────────────────────────────────────────────────────────
+describe('POST /telemetry — channel storage', () => {
+  let redis: FakeRedis
+  let config: AppConfig
+
+  beforeEach(() => {
+    redis = new FakeRedis()
+    config = buildConfig()
+  })
+
+  afterEach(async () => {
+    await fsp.rm(config.badgeDir, { recursive: true, force: true })
+  })
+
+  it('stores "version\\tchannel" when channel is present', async () => {
+    const app = createApp({ redis, config })
+
+    const res = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.1')
+      .send({ userHash: HASH_A, version: '2026.6.0b1', channel: 'beta' })
+
+    expect(res.status).toBe(200)
+    expect(await redis.get(`user:${HASH_A}`)).toBe('2026.6.0b1\tbeta')
+  })
+
+  it('stores plain version when channel is absent (legacy)', async () => {
+    const app = createApp({ redis, config })
+
+    const res = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.2')
+      .send({ userHash: HASH_B, version: '2026.6.0' })
+
+    expect(res.status).toBe(200)
+    expect(await redis.get(`user:${HASH_B}`)).toBe('2026.6.0')
+  })
+
+  it('returns 400 for an invalid channel value', async () => {
+    const app = createApp({ redis, config })
+
+    const res = await request(app)
+      .post('/telemetry')
+      .set('X-Real-IP', '203.0.113.3')
+      .send({ userHash: HASH_C, version: '2026.6.0', channel: 'nightly' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/channel/)
+  })
+})
+
+type CachedTelemetry = {
+  total: number
+  channels: { stable: number; beta: number }
+  versions: Array<{ version: string; count: number; channels: { stable: number; beta: number } }>
+}
+
+describe('generateBadge — channel aggregation', () => {
+  let badgeDir: string
+
+  beforeEach(() => {
+    badgeDir = path.join(os.tmpdir(), `telemetry-channels-${Math.random().toString(36).slice(2)}`)
+  })
+
+  afterEach(async () => {
+    await fsp.rm(badgeDir, { recursive: true, force: true })
+  })
+
+  it('builds top-level channels totals from stored channel values', async () => {
+    const redis = new FakeRedis()
+    await redis.set(`user:${HASH_A}`, '2026.6.0\tstable')
+    await redis.set(`user:${HASH_B}`, '2026.6.0b1\tbeta')
+    await redis.set(`user:${HASH_C}`, '2026.6.0\tstable')
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached.channels).toEqual({ stable: 2, beta: 1 })
+  })
+
+  it('builds per-version channels breakdown from stored channel values', async () => {
+    const redis = new FakeRedis()
+    await redis.set(`user:${HASH_A}`, '2026.6.0\tstable')
+    await redis.set(`user:${HASH_B}`, '2026.6.0b1\tbeta')
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    const stableEntry = cached.versions.find((v) => v.version === '2026.6.0')
+    const betaEntry = cached.versions.find((v) => v.version === '2026.6.0b1')
+    expect(stableEntry?.channels).toEqual({ stable: 1, beta: 0 })
+    expect(betaEntry?.channels).toEqual({ stable: 0, beta: 1 })
+  })
+
+  it('derives channel for legacy plain-version values (beta version → beta bucket)', async () => {
+    const redis = new FakeRedis()
+    // Legacy stored value: plain version string with no tab
+    await redis.set(`user:${HASH_A}`, '2026.6.0b1')
+    await redis.set(`user:${HASH_B}`, '1.18.5-rc.1')
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached.channels.beta).toBe(2)
+    expect(cached.channels.stable).toBe(0)
+  })
+
+  it('derives channel for legacy plain-version values (stable version → stable bucket)', async () => {
+    const redis = new FakeRedis()
+    await redis.set(`user:${HASH_A}`, '2026.6.0')
+    await redis.set(`user:${HASH_B}`, '1.18.5')
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached.channels.stable).toBe(2)
+    expect(cached.channels.beta).toBe(0)
+  })
+
+  it('trusts explicit channel over version-derived (beta channel on stable version counts as beta)', async () => {
+    const redis = new FakeRedis()
+    // A user on the beta channel but running a promoted-stable version
+    await redis.set(`user:${HASH_A}`, '2026.6.5\tbeta')
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached.channels.beta).toBe(1)
+    expect(cached.channels.stable).toBe(0)
+    const entry = cached.versions.find((v) => v.version === '2026.6.5')
+    expect(entry?.channels).toEqual({ stable: 0, beta: 1 })
+  })
+
+  it('includes channels:{stable:0,beta:0} in the empty state', async () => {
+    const redis = new FakeRedis()
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached).toEqual({ total: 0, channels: { stable: 0, beta: 0 }, versions: [] })
+  })
+
+  it('preserves descending sort and 100-entry cap with channel data', async () => {
+    const redis = new FakeRedis()
+    for (let i = 0; i < 110; i++) {
+      const hash = String(i).padStart(64, '0')
+      await redis.set(`user:${hash}`, `1.${i}.0\tstable`)
+    }
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached.total).toBe(110)
+    expect(cached.versions).toHaveLength(100)
+    // Each entry should have channels
+    for (const v of cached.versions) {
+      expect(v.channels).toBeDefined()
+    }
+  })
+
+  it('ignores empty stored values (counts in total, not in channels)', async () => {
+    const redis = new FakeRedis()
+    await redis.set(`user:${HASH_A}`, '1.0.0\tstable')
+    await redis.set(`user:${HASH_B}`, '')
+    const config = buildConfig({ badgeDir })
+
+    await generateBadge({ redis, config })
+
+    const cached = (await readJson(redis, 'cached:telemetry')) as CachedTelemetry
+    expect(cached.total).toBe(2)
+    expect(cached.channels).toEqual({ stable: 1, beta: 0 })
+    expect(cached.versions).toHaveLength(1)
   })
 })

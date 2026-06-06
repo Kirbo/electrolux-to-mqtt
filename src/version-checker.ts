@@ -272,13 +272,13 @@ async function sendNtfyNotification(currentVersion: string, latestVersion: strin
 /**
  * Send telemetry data to backend
  */
-async function sendTelemetry(userHash: string, version: string): Promise<void> {
+async function sendTelemetry(userHash: string, version: string, channel: 'stable' | 'beta'): Promise<void> {
   try {
     const telemetryUrl = 'https://e2m.devaus.eu/telemetry'
 
     await axios.post(
       telemetryUrl,
-      { userHash, version },
+      { userHash, version, channel },
       {
         timeout: 10000,
         headers: {
@@ -318,7 +318,7 @@ async function checkForUpdates(
 
   // Send telemetry (skipped when user has opted out)
   if (config.telemetryEnabled) {
-    await sendTelemetry(userHash, currentVersion)
+    await sendTelemetry(userHash, currentVersion, updateChannel)
   } else {
     logger.debug('Telemetry disabled, skipping')
   }

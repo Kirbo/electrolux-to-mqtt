@@ -125,10 +125,10 @@ describe('version-checker', () => {
         }),
       )
 
-      // Should send telemetry
+      // Should send telemetry with channel
       expect(mockAxiosPost).toHaveBeenCalledWith(
         'https://e2m.devaus.eu/telemetry',
-        { userHash: 'test-hash-123', version: 'v1.6.3' },
+        { userHash: 'test-hash-123', version: 'v1.6.3', channel: 'stable' },
         expect.any(Object),
       )
 
@@ -579,7 +579,7 @@ describe('version-checker', () => {
 
       expect(mockAxiosPost).toHaveBeenCalledWith(
         'https://e2m.devaus.eu/telemetry',
-        { userHash: 'test-hash-123', version: 'v1.6.3' },
+        { userHash: 'test-hash-123', version: 'v1.6.3', channel: 'stable' },
         expect.any(Object),
       )
 
@@ -598,11 +598,13 @@ describe('version-checker', () => {
 
       await vi.advanceTimersByTimeAsync(0)
 
+      // v1.6.3 is a stable version → resolved channel is 'stable'
       expect(mockAxiosPost).toHaveBeenCalledWith(
         'https://e2m.devaus.eu/telemetry',
         {
           userHash: 'test-hash-abc',
           version: 'v1.6.3',
+          channel: 'stable',
         },
         expect.objectContaining({
           timeout: 10000,
@@ -668,13 +670,14 @@ describe('version-checker', () => {
       // Should send both telemetry and ntfy notification
       expect(mockAxiosPost).toHaveBeenCalledTimes(2)
 
-      // First call should be telemetry
+      // First call should be telemetry (v1.6.3 is stable → channel: 'stable')
       expect(mockAxiosPost).toHaveBeenNthCalledWith(
         1,
         'https://e2m.devaus.eu/telemetry',
         {
           userHash: 'test-hash-123',
           version: 'v1.6.3',
+          channel: 'stable',
         },
         expect.objectContaining({
           timeout: 10000,

@@ -40,7 +40,16 @@ export function getClientIp(req: Request, behindProxy: boolean): string {
   return req.ip ?? req.get('X-Real-IP') ?? req.socket.remoteAddress ?? 'unknown'
 }
 
-export function validateTelemetryPayload(userHash: unknown, version: unknown): string | null {
+/**
+ * Returns true if the version string is a pre-release (beta or RC).
+ * Matches both CalVer beta form (e.g. "2026.6.0b1") and SemVer dash form
+ * (e.g. "1.18.5-rc.1"). An optional leading "v" is ignored.
+ */
+export function isPreReleaseVersion(version: string): boolean {
+  return version.includes('-') || /\db\d+$/.test(version)
+}
+
+export function validateTelemetryPayload(userHash: unknown, version: unknown, channel?: unknown): string | null {
   if (typeof userHash !== 'string' || typeof version !== 'string') {
     return 'userHash and version must be strings'
   }
@@ -65,6 +74,11 @@ export function validateTelemetryPayload(userHash: unknown, version: unknown): s
 
   if (version.length < 1 || version.length > 32) {
     return 'version length is invalid'
+  }
+
+  // channel is optional — when present it must be exactly 'stable' or 'beta'
+  if (channel !== undefined && channel !== 'stable' && channel !== 'beta') {
+    return 'channel must be "stable" or "beta"'
   }
 
   return null

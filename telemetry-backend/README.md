@@ -21,13 +21,14 @@ Store telemetry data for a user.
 ```json
 {
   "userHash": "unique-hash-here",
-  "version": "v1.6.3"
+  "version": "v1.6.3",
+  "channel": "beta"
 }
 ```
 
 `Content-Type: application/json` is required. Requests without it receive `415 Unsupported Media Type`.
 
-`userHash` must be exactly 64 lowercase hex characters (SHA-256 hex output). `version` must match `vX.Y.Z` or `X.Y.Z` with an optional pre-release suffix (e.g. `-rc.1`).
+`userHash` must be exactly 64 lowercase hex characters (SHA-256 hex output). `version` must match `vX.Y.Z` or `X.Y.Z` with an optional pre-release suffix (e.g. `-rc.1`). `channel` is optional — when present it must be exactly `"stable"` or `"beta"` (used to group users by update channel). Omitting `channel` is valid for legacy clients; the backend derives the channel from the version string in that case.
 
 **Response:**
 ```json
@@ -45,22 +46,28 @@ Redirects (302) to the GitLab release page for the latest stored beta tag. Falls
 ### GET /telemetry
 Get aggregated telemetry statistics. Versions are sorted by version descending, capped at 100 entries.
 
+The top-level `channels` object shows how many active users are on the `stable` vs `beta` update channel. Each version entry also carries a `channels` breakdown. When a stored payload carries no explicit channel (legacy clients), the channel is derived from the version string: a `-…` or `bN` suffix means `beta`, anything else means `stable`.
+
 **Response:**
 ```json
 {
   "total": 6,
+  "channels": { "stable": 4, "beta": 2 },
   "versions": [
     {
       "version": "v1.6.3",
-      "count": 2
+      "count": 2,
+      "channels": { "stable": 1, "beta": 1 }
     },
     {
       "version": "v1.6.2",
-      "count": 3
+      "count": 3,
+      "channels": { "stable": 3, "beta": 0 }
     },
     {
       "version": "v1.5.0",
-      "count": 1
+      "count": 1,
+      "channels": { "stable": 0, "beta": 1 }
     }
   ]
 }

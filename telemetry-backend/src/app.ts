@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import express, { type Express, type Request, type Response } from 'express'
 import helmet from 'helmet'
-import { getClientIp, hashIp, validateTelemetryPayload } from './utils.js'
+import { getClientIp, hashIp, isPreReleaseVersion, validateTelemetryPayload } from './utils.js'
 
 // Minimal Redis surface used by the telemetry backend. Defining it as an
 // interface keeps the app testable with a lightweight in-memory fake.
@@ -324,6 +324,46 @@ export async function generateReleaseBadges(opts: {
   }
 }
 
+/**
+ * Parse a stored user value, separating the version from the optional channel.
+ * Stored format: "version\tchannel" (with channel) or "version" (legacy, no tab).
+ * Derives channel from version string when no explicit channel is stored.
+ */
+function parseUserValue(raw: string): { version: string; channel: 'stable' | 'beta' } {
+  const tabIdx = raw.indexOf('\t')
+  if (tabIdx !== -1) {
+    const version = raw.slice(0, tabIdx)
+    const storedChannel = raw.slice(tabIdx + 1)
+    const channel: 'stable' | 'beta' = storedChannel === 'beta' ? 'beta' : 'stable'
+    return { version, channel }
+  }
+  // Legacy: no channel stored — derive from version string
+  const channel: 'stable' | 'beta' = isPreReleaseVersion(raw) ? 'beta' : 'stable'
+  return { version: raw, channel }
+}
+
+type VersionEntry = { count: number; channels: { stable: number; beta: number } }
+
+function accumulateVersions(rawValues: (string | null)[]): {
+  totalChannels: { stable: number; beta: number }
+  byVersion: Map<string, VersionEntry>
+} {
+  const totalChannels = { stable: 0, beta: 0 }
+  const byVersion = new Map<string, VersionEntry>()
+
+  for (const raw of rawValues) {
+    if (!raw) continue
+    const { version, channel } = parseUserValue(raw)
+    totalChannels[channel] += 1
+    const entry = byVersion.get(version) ?? { count: 0, channels: { stable: 0, beta: 0 } }
+    entry.count += 1
+    entry.channels[channel] += 1
+    byVersion.set(version, entry)
+  }
+
+  return { totalChannels, byVersion }
+}
+
 // Update the telemetry cache in Redis and write the badge SVG file.
 // The cache update runs first so GET /telemetry works even when the
 // badge file write fails (e.g. read-only filesystem / non-root user).
@@ -333,24 +373,21 @@ export async function generateBadge({ redis, config }: AppDependencies): Promise
     const total = keys.length
 
     if (total === 0) {
-      await redis.set(CACHED_TELEMETRY_KEY, JSON.stringify({ total: 0, versions: [] }))
-    } else {
-      const versions = await Promise.all(keys.map((key) => redis.get(key)))
-      const versionCounts = versions.reduce(
-        (acc, version) => {
-          if (version) {
-            acc[version] = (acc[version] || 0) + 1
-          }
-          return acc
-        },
-        {} as Record<string, number>,
+      await redis.set(
+        CACHED_TELEMETRY_KEY,
+        JSON.stringify({ total: 0, channels: { stable: 0, beta: 0 }, versions: [] }),
       )
+    } else {
+      const rawValues = await Promise.all(keys.map((key) => redis.get(key)))
+      const { totalChannels, byVersion } = accumulateVersions(rawValues)
+
       // Cap to top 100 entries: sort by version desc.
-      const versionsList = Object.entries(versionCounts)
-        .map(([version, count]) => ({ version, count }))
+      const versionsList = Array.from(byVersion.entries())
+        .map(([version, entry]) => ({ version, count: entry.count, channels: entry.channels }))
         .sort((a, b) => compareVersionsDescending(a.version, b.version))
         .slice(0, 100)
-      await redis.set(CACHED_TELEMETRY_KEY, JSON.stringify({ total, versions: versionsList }))
+
+      await redis.set(CACHED_TELEMETRY_KEY, JSON.stringify({ total, channels: totalChannels, versions: versionsList }))
     }
 
     // Write badge SVG file (best-effort — may fail on read-only filesystems)
@@ -565,7 +602,11 @@ export function createApp(deps: AppDependencies): Express {
   // Rate limiting runs BEFORE validation — malformed requests must still consume quota.
   app.post('/telemetry', rateLimitByIp, async (req: Request, res: Response) => {
     try {
-      const { userHash, version } = req.body as { userHash?: unknown; version?: unknown }
+      const { userHash, version, channel } = req.body as {
+        userHash?: unknown
+        version?: unknown
+        channel?: unknown
+      }
 
       // Test-hash bypass — only active when ALLOW_TEST_TELEMETRY=true (never in production by default).
       if (isTestHashBypass(req)) {
@@ -587,14 +628,18 @@ export function createApp(deps: AppDependencies): Express {
         return res.status(400).json({ error: 'userHash and version are required' })
       }
 
-      const validationError = validateTelemetryPayload(userHash, version)
+      const validationError = validateTelemetryPayload(userHash, version, channel)
       if (validationError) {
         return res.status(400).json({ error: validationError })
       }
 
+      // Encode channel into stored value: "version\tchannel" when channel present, plain version otherwise.
+      // Tabs never appear in version strings so splitting on \t is unambiguous.
+      const storedValue = channel === 'stable' || channel === 'beta' ? `${version}\t${channel}` : version
+
       // Store in Redis with 24-hour TTL
       const key = `user:${userHash}`
-      await redis.setEx(key, USER_TTL_SECONDS, version)
+      await redis.setEx(key, USER_TTL_SECONDS, storedValue)
 
       // Fire-and-forget badge regeneration — don't block the response path
       generateBadge(deps).catch((err: unknown) => {
@@ -612,7 +657,7 @@ export function createApp(deps: AppDependencies): Express {
   app.get('/telemetry', async (_req: Request, res: Response) => {
     try {
       const cached = await redis.get(CACHED_TELEMETRY_KEY)
-      res.json(cached ? JSON.parse(cached) : { total: 0, versions: [] })
+      res.json(cached ? JSON.parse(cached) : { total: 0, channels: { stable: 0, beta: 0 }, versions: [] })
     } catch (error) {
       console.error('Error fetching telemetry:', error)
       res.status(500).json({ error: 'Internal server error' })
