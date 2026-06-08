@@ -57,11 +57,15 @@ generate changelog:
       - CHANGELOG.md
   script:
     - |
+      # -unreleased (not -include): stamps the pending section as "now" so it always sorts above any
+      # release cut earlier the SAME day. git-cliff's heading carries only a date (→ midnight), which
+      # would otherwise lose to a same-day published release's real timestamp. Requires combine-changelogs
+      # with the -unreleased flag.
       if [ "$CI_COMMIT_BRANCH" = "main" ]; then
         # Production release: drop pre-release entries — old SemVer "-rc.N" and new
         # CalVer "bN" betas — so the public changelog stays clean.
-        combine-changelogs -include UNRELEASED-CHANGELOG.md -ignore-regex '-rc\.' -ignore-regex 'b[0-9]+$'
+        combine-changelogs -unreleased UNRELEASED-CHANGELOG.md -ignore-regex '-rc\.' -ignore-regex 'b[0-9]+$'
       else
         # next branch: include everything (pre-release entries are useful history).
-        combine-changelogs -include UNRELEASED-CHANGELOG.md
+        combine-changelogs -unreleased UNRELEASED-CHANGELOG.md
       fi
