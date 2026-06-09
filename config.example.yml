@@ -87,7 +87,7 @@ versionCheck:
   # Omit this field to use the image default. Set explicitly only to override:
   #   updateChannel: stable   — always track stable, even when running :next
   #   updateChannel: beta     — always track beta,   even when running :latest
-  updateChannel: stable
+  # updateChannel: stable
 
 healthCheck:
   # (Optional) Enable file-based health check for Docker HEALTHCHECK. Default: true

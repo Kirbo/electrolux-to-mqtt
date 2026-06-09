@@ -360,7 +360,7 @@ async function checkForUpdates(
     )
 
     // Send ntfy notification if configured and we haven't already notified about this version
-    const webhookUrl = config.versionCheck?.ntfyWebhookUrl
+    const webhookUrl = config.versionCheck.ntfyWebhookUrl
     if (webhookUrl && hasNotifiedVersion !== latestVersion) {
       await sendNtfyNotification(currentTag, versionTag, webhookUrl)
       hasNotifiedVersion = latestVersion
