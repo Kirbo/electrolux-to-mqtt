@@ -68,11 +68,11 @@ Before any change consult file checklist below for applicable change type + TDD 
 Run E2E snapshot validation (see `/audit` checklist § 10).
 
 ### Version-checker (`src/version-checker.ts`)
-`tests/version-checker.test.ts`, `HOME_ASSISTANT.md`*, `config.example.yml` + compose examples*
+`tests/version-checker.test.ts`, `docs/HOME_ASSISTANT.md`*, `config.example.yml` + compose examples*
 (*if payloads/config changed)
 
 ### MQTT / HA integration
-`src/mqtt.ts`, `src/types/homeassistant.ts`, relevant appliance `generateAutoDiscoveryConfig()`, `tests/mqtt.test.ts`, `tests/mqtt-events.test.ts`, `tests/electrolux.test.ts`*, `tests/state-differences.test.ts`*, `HOME_ASSISTANT.md`*
+`src/mqtt.ts`, `src/types/homeassistant.ts`, relevant appliance `generateAutoDiscoveryConfig()`, `tests/mqtt.test.ts`, `tests/mqtt-events.test.ts`, `tests/electrolux.test.ts`*, `tests/state-differences.test.ts`*, `docs/HOME_ASSISTANT.md`*
 (*if behavior changed)
 
 ### Docker

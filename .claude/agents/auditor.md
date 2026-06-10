@@ -72,8 +72,8 @@ Extra robustness checks beyond checklist:
 - [ ] Documented env vars match `envSchema`
 - [ ] `package.json` scripts/engines match README
 - [ ] README appliance list matches classes
-- [ ] `HOME_ASSISTANT.md` matches implementation
-- [ ] `CONTRIBUTING.md` thresholds/structure match codebase
+- [ ] `docs/HOME_ASSISTANT.md` matches implementation
+- [ ] `docs/CONTRIBUTING.md` thresholds/structure match codebase
 
 #### 7. Config files
 - [ ] `biome.jsonc` scope matches scripts

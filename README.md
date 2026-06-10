@@ -369,7 +369,7 @@ cat CHANGELOG.md
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines on:
+Contributions are welcome! Please see [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for detailed guidelines on:
 - Adding support for new appliance models
 - Development setup and workflow
 - Code style and testing requirements
@@ -377,7 +377,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for d
 
 ## Home Assistant automation examples
 
-Please read [HOME_ASSISTANT.md](./HOME_ASSISTANT.md) for more details.
+Please read [HOME_ASSISTANT.md](./docs/HOME_ASSISTANT.md) for more details.
 
 ## Epilogue
 

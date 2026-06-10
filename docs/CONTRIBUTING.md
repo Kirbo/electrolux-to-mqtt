@@ -177,7 +177,7 @@ The project maintains test coverage with the following requirements:
 - **Branches**: 90%
 - **Functions**: 96%
 
-Up-to-date thresholds can be found [here](./vitest.config.ts#L33)
+Up-to-date thresholds can be found [here](../vitest.config.ts#L33)
 
 **New Code Coverage:**
 - New code should maintain or improve the existing thresholds
@@ -363,7 +363,7 @@ This project supports AI-assisted development with [Claude Code](https://docs.an
 
 - **Issues**: [Open an issue](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues)
 - **Discussions**: Use GitLab discussions for questions
-- **Documentation**: Check the [README](./README.md)
+- **Documentation**: Check the [README](../README.md)
 
 ## License
 

@@ -46,13 +46,11 @@ vitest.setup.ts
 !CHANGELOG.md
 docs
 LICENSE
-CONTRIBUTING.md
 
 # CI/CD
 .gitlab-ci.yml
 .github
 sonar-project.properties
-SONARQUBE.md
 
 # Docker files (don't need these inside the image)
 docker

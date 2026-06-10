@@ -8,3 +8,4 @@
 - [Auto-update decision](project_auto_update_decision.md) — in-app image self-update rejected (Docker socket breaks hardening); Watchtower-via-compose-profile is the sanctioned path if revisited
 - [glab ci lint (merged)](reference_glab_ci_lint.md) — plain lint resolves includes server-side (stale for unpushed); merge root+includes into one file to validate local .gitlab/ci/ edits
 - [Write memory before commit](feedback_memory_before_commit.md) — capture pending learnings as memory files before the commit step so they ride in the same commit/push
+- [Repo layout](project_repo_layout.md) — standalone docs live in `docs/`; README/LICENSE + all config files stay at root for tool/platform auto-resolution (don't move config to tidy root)

@@ -64,7 +64,7 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
 - SonarQube Cloud: all code must pass — no bugs, vulnerabilities, security hotspots. Cognitive complexity ≤ 15.
 - Conventional Commits. **CalVer** versioning — `YYYY.M.MICRO` stable, `YYYY.M.MICRObN` beta — date-derived in CI (`scripts/compute-calver-*.sh`), **not** type-derived. Changelog format in `cliff.toml` (git-cliff generates per-release notes; `combine-changelogs` aggregates the full `CHANGELOG.md`).
 - **Commit type drives the changelog section, not the version** — CalVer has no minor/patch bump. `feat:`→Feature, `fix:`→Bug Fixes, `docs:`→Documentation, etc. (full mapping in `cliff.toml`).
-  - `<type>!:` (e.g. `feat!:`, `fix!:`) = **breaking change**, `!` **mandatory**. Routes to the top "Breaking Changes" changelog section; add a `MIGRATION.md` entry. `BREAKING CHANGE:` footer is nice-to-have (renders as a fenced note).
+  - `<type>!:` (e.g. `feat!:`, `fix!:`) = **breaking change**, `!` **mandatory**. Routes to the top "Breaking Changes" changelog section; add a `docs/MIGRATION.md` entry. `BREAKING CHANGE:` footer is nice-to-have (renders as a fenced note).
 - **A release is cut by file paths, not commit type** — the CI gate (`.rules_code_changes`) fires on `src/`, `tests/`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `docker/Dockerfile`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`. Pure docs / `.claude/` / CI-config / `telemetry-backend/`-only changes don't release. Still pick the conventional type that fits (it sets the changelog section).
 - Never `git push` — leave to human.
 - Never `git checkout` / switch branches — leave to human. Commit to whatever branch is currently checked out.
@@ -74,7 +74,7 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
 - **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in `.claude/agents/engineer.md § Config`.
 - Follow file checklists in `.claude/agents/engineer.md` for code changes.
 - `.nvmrc`, `package.json` `engines`, Docker build args must match Node.js version.
-- When `.claude/agents/` or `.claude/skills/` change, update `AI_DEVELOPMENT.md`.
+- When `.claude/agents/` or `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.
 
 ### Docker

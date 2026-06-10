@@ -15,4 +15,4 @@ SOPS encrypts the two plaintext env files (`/.env` → `SONAR_TOKEN`; `telemetry
 - `.sops.yaml` `input_type`/`output_type: binary` lines are **cosmetic** — sops ignores them and picks format from the filename. The scripts force binary via explicit `--input-type binary --output-type binary` flags (byte-exact, salt-safe). Don't "fix" the scripts to flagless — a `.env`-named source would then encrypt as dotenv and break the round-trip.
 - Usage: `pnpm sops:decrypt` / `pnpm sops:encrypt` / `pnpm sops:rotate` (needs `op` signed in). `sops:rotate` generates a fresh `-pq` key and re-stores it in 1Password.
 
-Optional: contributor docs for `pnpm sops:decrypt` in `CONTRIBUTING.md`/README were discussed but not added.
+Optional: contributor docs for `pnpm sops:decrypt` in `docs/CONTRIBUTING.md`/README were discussed but not added.
