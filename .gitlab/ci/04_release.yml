@@ -282,9 +282,9 @@ refresh telemetry badges:
   script:
     - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH}/telemetry-backend && docker compose exec -T telemetry-backend node dist/regenerate-badges.js"
 
-update dockerhub description:
+prepare dockerhub readme:
   stage: release
-  image: peterevans/dockerhub-description:4
+  image: alpine:latest
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -295,7 +295,37 @@ update dockerhub description:
       when: on_success
     - when: never
   cache: []
+  needs: []
+  script:
+    # Docker Hub hosts only the README — relative repo links (./docs/..., ./config.example.yml)
+    # 404 there. Rewrite them to absolute GitLab blob URLs so they resolve from Docker Hub.
+    # Intra-page #anchors and already-absolute http(s) links are left untouched.
+    - sed "s#](\./#](${CI_PROJECT_URL}/-/blob/${CI_DEFAULT_BRANCH}/#g" README.md > README.dockerhub.md
+  artifacts:
+    paths:
+      - README.dockerhub.md
+    expire_in: 1 hour
+
+update dockerhub description:
+  stage: release
+  image: peterevans/dockerhub-description:4
+  interruptible: true
+  variables:
+    # Push the link-rewritten copy from "prepare dockerhub readme", not the repo README,
+    # so the description shown on Docker Hub has working links.
+    README_FILEPATH: ${CI_PROJECT_DIR}/README.dockerhub.md
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - README.md
+      when: on_success
+    - when: never
+  cache: []
   needs:
+    - job: prepare dockerhub readme
+      artifacts: true
     - job: build and deploy docker images
       artifacts: false
       optional: true
