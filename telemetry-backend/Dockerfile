@@ -38,9 +38,13 @@ WORKDIR /app
 # Copy root package.json for package manager detection
 COPY ./package.json ./application.json
 
-# Copy package manifest and lock file from builder
+# Copy package manifest, lock file, and workspace config from builder.
+# pnpm-workspace.yaml carries the dependency `overrides`; without it the
+# frozen install fails ERR_PNPM_LOCKFILE_CONFIG_MISMATCH (the lockfile records
+# overrides the config would otherwise be missing).
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
 
 # Install only production dependencies
 ENV CI=true
