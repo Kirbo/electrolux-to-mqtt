@@ -406,12 +406,11 @@ export function startVersionChecker(
     currentVersion,
   })
 
-  const channelLogSuffix =
-    channelSource === 'explicit'
-      ? '(explicit override)'
-      : channelSource === 'image'
-        ? '(image default)'
-        : `(derived from version ${currentVersion})`
+  const channelLogSuffix = {
+    explicit: '(explicit override)',
+    image: '(image default)',
+    derived: `(derived from version ${currentVersion})`,
+  }[channelSource]
   logger.info(`Update channel: ${updateChannel} ${channelLogSuffix}`)
 
   logger.info(`Version check interval set to ${formatDuration(checkIntervalSeconds)}`)
