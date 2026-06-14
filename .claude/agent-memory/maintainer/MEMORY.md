@@ -4,3 +4,6 @@
 - [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
 - [redis v6 upgrade — no code changes needed](dep_redis_v6.md) — RESP3 default, RedisLike adapter unaffected; telemetry-only bumps use `chore:` not `chore(deps):`
+- [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
+- [esbuild vulns GHSA-gv7w-rqvm-qjhr + GHSA-g7r4-m6w7-qqqr](vuln_esbuild_GHSA-gv7w-rqvm-qjhr.md) — override esbuild>=0.28.1 in both pnpm-workspace.yaml; remove when vite/tsx/vitest bump floor
+- [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — catalog page 5-6 of 102; checked June 2026
