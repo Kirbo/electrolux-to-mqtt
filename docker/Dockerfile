@@ -14,7 +14,7 @@
 # Check the base images from: https://hub.docker.com/hardened-images/catalog/dhi/node/images
 
 # Define build arguments
-ARG NODE_VERSION=24-alpine3.23
+ARG NODE_VERSION=24-alpine3.24
 ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION}
 ARG VERSION=development
 ARG BUILD_DATE
