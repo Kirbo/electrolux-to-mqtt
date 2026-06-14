@@ -20,6 +20,14 @@ type: project
 - `normalizers.ts`: `rawState as unknown as Appliance['properties']['reported']` preceded by `'in'` checks three required fields — safe
 - Empty catches in `logger.ts` (timezone fallback), `mqtt.ts` (JSON.parse debug log), `electrolux.ts` (URL parse fallback), `health.ts` (read failure returns false), `config.ts` (write failure uses in-memory config) — all documented
 
+## Tooling-config migrations (verify activation, not just acceptance)
+
+When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.recommended: true` → `linter.rules.preset: "recommended"` in Biome 2.5.0), a passing `pnpm check` only proves the config *parsed* — not that rules are still *active*. An unknown/renamed key can be silently ignored. To confirm activation, lint a throwaway snippet that should trip a known recommended rule: `printf 'if (x == 1) {}' > /tmp/t.ts && pnpm biome lint /tmp/t.ts` should flag `lint/suspicious/noDoubleEquals`. If it doesn't, the preset isn't applied. (Verified correct in the 2026-06-14 audit — `preset: "recommended"` does activate the recommended set.)
+
+## Branch-gated SonarCloud skip (not a finding)
+
+`scripts/sonar.sh` exits 0 with "Skipping SonarCloud: branch X is not main (free tier limitation)" on any non-`main` branch. This is documented behavior, not a regression. BUT it means cognitive-complexity analysis does NOT run on non-main work — manually inspect any new/changed function for complexity > 15 when auditing a `next`-branch change set, since Sonar won't catch it.
+
 ## Defect-density areas
 
 - `src/electrolux.ts` — most complex; login tries two payload structures in sequence; watch for new code duplicating pattern
