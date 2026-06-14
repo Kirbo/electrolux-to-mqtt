@@ -72,6 +72,10 @@ export interface IMqtt {
   autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
   subscribe(topicSuffix: string, callback: (topic: string, message: Buffer) => void): Promise<void>
   unsubscribe(topicSuffix: string): void
+  /** Subscribe to an absolute topic (no prefix added). */
+  subscribeAbsolute(topic: string, callback: (topic: string, message: Buffer) => void): Promise<void>
+  /** Unsubscribe from an absolute topic (no prefix added). */
+  unsubscribeAbsolute(topic: string): void
   disconnect(): void
   /** Register a callback to be fired on every MQTT 'connect' event (initial + reconnects). */
   onReconnect(callback: () => void): void
@@ -174,6 +178,37 @@ class Mqtt implements IMqtt {
       // Delete after broker confirms (or errors) to preserve the handler
       // for any commands that arrive during the in-flight unsubscribe window.
       // Mirrors the subscribe pattern that adds the handler inside the callback.
+      topicHandlers.delete(topic)
+    })
+  }
+
+  public subscribeAbsolute(topic: string, callback: (topic: string, message: Buffer) => void): Promise<void> {
+    logger.debug('Subscribing to absolute topic:', topic)
+
+    return new Promise((resolve, reject) => {
+      this.client.subscribe(topic, (error) => {
+        if (error) {
+          logger.error('Error subscribing to absolute topic:', error)
+          reject(error)
+          return
+        }
+
+        logger.info(`Subscribed to absolute topic "${topic}" successfully`)
+        topicHandlers.set(topic, callback)
+        resolve()
+      })
+    })
+  }
+
+  public unsubscribeAbsolute(topic: string) {
+    logger.debug('Unsubscribing from absolute topic:', topic)
+
+    this.client.unsubscribe(topic, (error) => {
+      if (error) {
+        logger.error('Error unsubscribing from absolute topic:', error)
+      } else {
+        logger.info(`Unsubscribed from absolute topic "${topic}" successfully`)
+      }
       topicHandlers.delete(topic)
     })
   }

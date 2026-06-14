@@ -88,6 +88,8 @@ function createMockMqtt(): IMqtt {
     autoDiscovery: vi.fn(),
     subscribe: vi.fn(() => Promise.resolve()),
     unsubscribe: vi.fn(),
+    subscribeAbsolute: vi.fn(() => Promise.resolve()),
+    unsubscribeAbsolute: vi.fn(),
     disconnect: vi.fn(),
     onReconnect: vi.fn(),
     [Symbol.asyncDispose]: vi.fn(() => Promise.resolve()),
@@ -101,6 +103,9 @@ const defaultConfig: OrchestratorConfig = {
   apiFailureRestartThresholdMs: 2700000, // 45 minutes
   healthCheckEnabled: true,
   applianceRemovalGracePeriodMs: 1800000, // 30 minutes
+  haBirthRepublish: true,
+  haBirthTopic: 'homeassistant/status',
+  haBirthPayload: 'online',
 }
 
 const mockStub: ApplianceStub = {
@@ -1018,6 +1023,161 @@ describe('Orchestrator', () => {
       // Orchestrator must still be running
       expect(orchestrator.isShuttingDown).toBe(false)
       expect(loggerErrorSpy).toHaveBeenCalled()
+    })
+  })
+
+  describe('HA birth-message republish', () => {
+    it('should subscribe to haBirthTopic when haBirthRepublish is true after first appliance is initialized', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+
+      expect(mqtt.subscribeAbsolute).toHaveBeenCalledWith('homeassistant/status', expect.any(Function))
+    })
+
+    it('should subscribe to the birth topic only once across multiple appliances', async () => {
+      const anotherStub: ApplianceStub = {
+        applianceId: 'appliance-2',
+        applianceName: 'Another AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+
+      await orchestrator.initializeAppliance(mockStub)
+      await orchestrator.initializeAppliance(anotherStub)
+
+      expect(mqtt.subscribeAbsolute).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not subscribe to birth topic when haBirthRepublish is false', async () => {
+      const noBirthOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        haBirthRepublish: false,
+      })
+
+      await noBirthOrchestrator.initializeAppliance(mockStub)
+
+      expect(mqtt.subscribeAbsolute).not.toHaveBeenCalled()
+    })
+
+    it('should republish discovery AND cached state for each appliance when birth payload matches', async () => {
+      const { cache } = await import('@/cache.js')
+      const cachedState = { mode: 'cool', targetTemperature: 22 }
+      vi.mocked(cache.get).mockReturnValue(cachedState)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Capture the birth handler
+      const [, birthHandler] = vi.mocked(mqtt.subscribeAbsolute).mock.calls[0] as [
+        string,
+        (topic: string, message: Buffer) => void,
+      ]
+
+      vi.mocked(mqtt.publish).mockClear()
+      vi.mocked(mqtt.autoDiscovery).mockClear()
+
+      // Simulate HA coming online
+      birthHandler('homeassistant/status', Buffer.from('online'))
+
+      // Both discovery and state must be republished
+      expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
+    })
+
+    it('should not republish when birth payload does not match (e.g. offline)', async () => {
+      const { cache } = await import('@/cache.js')
+      vi.mocked(cache.get).mockReturnValue({ mode: 'cool' })
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      const [, birthHandler] = vi.mocked(mqtt.subscribeAbsolute).mock.calls[0] as [
+        string,
+        (topic: string, message: Buffer) => void,
+      ]
+
+      vi.mocked(mqtt.publish).mockClear()
+      vi.mocked(mqtt.autoDiscovery).mockClear()
+
+      // HA going offline — must not trigger republish
+      birthHandler('homeassistant/status', Buffer.from('offline'))
+
+      expect(mqtt.autoDiscovery).not.toHaveBeenCalled()
+      expect(mqtt.publish).not.toHaveBeenCalled()
+    })
+
+    it('should skip appliances with no cached state during birth republish', async () => {
+      const { cache } = await import('@/cache.js')
+      vi.mocked(cache.get).mockReturnValue(undefined)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      const [, birthHandler] = vi.mocked(mqtt.subscribeAbsolute).mock.calls[0] as [
+        string,
+        (topic: string, message: Buffer) => void,
+      ]
+
+      vi.mocked(mqtt.publish).mockClear()
+      vi.mocked(mqtt.autoDiscovery).mockClear()
+
+      birthHandler('homeassistant/status', Buffer.from('online'))
+
+      // Discovery still fires (no dependency on cached state), but state publish skipped
+      expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
+      expect(mqtt.publish).not.toHaveBeenCalled()
+    })
+
+    it('should republish for all appliances on birth', async () => {
+      const { cache } = await import('@/cache.js')
+      const state1 = { mode: 'cool' }
+      const state2 = { mode: 'heat' }
+      const anotherStub: ApplianceStub = {
+        applianceId: 'appliance-2',
+        applianceName: 'Another AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
+
+      vi.mocked(cache.get).mockImplementation((key: string) => {
+        if (key === 'appliance-1:state') return state1
+        if (key === 'appliance-2:state') return state2
+        return undefined
+      })
+
+      await orchestrator.initializeAppliance(mockStub)
+      await orchestrator.initializeAppliance(anotherStub)
+
+      const [, birthHandler] = vi.mocked(mqtt.subscribeAbsolute).mock.calls[0] as [
+        string,
+        (topic: string, message: Buffer) => void,
+      ]
+
+      vi.mocked(mqtt.publish).mockClear()
+      vi.mocked(mqtt.autoDiscovery).mockClear()
+
+      birthHandler('homeassistant/status', Buffer.from('online'))
+
+      expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
+      expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-2', expect.any(String), { retain: true, qos: 2 })
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(state1))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify(state2))
+    })
+
+    it('should unsubscribe from birth topic on shutdown', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+
+      orchestrator.shutdown()
+
+      expect(mqtt.unsubscribeAbsolute).toHaveBeenCalledWith('homeassistant/status')
+    })
+
+    it('should not call unsubscribeAbsolute on shutdown when haBirthRepublish is false', async () => {
+      const noBirthOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        haBirthRepublish: false,
+      })
+
+      await noBirthOrchestrator.initializeAppliance(mockStub)
+      noBirthOrchestrator.shutdown()
+
+      expect(mqtt.unsubscribeAbsolute).not.toHaveBeenCalled()
     })
   })
 

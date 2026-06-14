@@ -87,6 +87,9 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES`   | Minutes an appliance must be continuously absent before cleanup (1–1440) | `30`                    | No       |
 | `HOME_ASSISTANT_AUTO_DISCOVERY`                       | Enable HA MQTT auto-discovery                                            | `true`                  | No       |
 | `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION`            | Immediately revert HA state on rejected commands                         | `false`                 | No       |
+| `HA_BIRTH_REPUBLISH`                                  | Re-publish discovery config + state when HA comes online (birth message) | `true`                  | No       |
+| `HA_STATUS_TOPIC`                                     | MQTT topic HA publishes its birth/will message to                        | `homeassistant/status`  | No       |
+| `HA_BIRTH_PAYLOAD`                                    | Payload that signals HA is online                                        | `online`                | No       |
 | `LOG_LEVEL`                                           | Log level (silent/fatal/error/warn/info/debug/trace)                     | `info`                  | No       |
 | `LOGGING_SHOW_CHANGES`                                | Log state changes                                                        | `true`                  | No       |
 | `LOGGING_IGNORED_KEYS`                                | Comma-separated keys to ignore in change logs                            | —                       | No       |
@@ -155,6 +158,9 @@ docker run --rm \
   # -e ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false \
+  # -e HA_BIRTH_REPUBLISH=true \
+  # -e HA_STATUS_TOPIC=homeassistant/status \
+  # -e HA_BIRTH_PAYLOAD=online \
   # -e LOG_LEVEL=info \
   # -e LOGGING_SHOW_CHANGES=true \
   # -e LOGGING_IGNORED_KEYS=networkInterface,totalRuntime \
@@ -231,6 +237,9 @@ services:
       # - ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false
+      # - HA_BIRTH_REPUBLISH=true
+      # - HA_STATUS_TOPIC=homeassistant/status
+      # - HA_BIRTH_PAYLOAD=online
       # - LOG_LEVEL=info
       # - LOGGING_SHOW_CHANGES=true
       # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime

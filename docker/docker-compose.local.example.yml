@@ -35,6 +35,9 @@ services:
       # - ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30               # Minutes an appliance must be continuously absent before cleanup (default: 30, min: 1, max: 1440)
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true                                  # Enable Home Assistant auto discovery
       # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false                      # Revert HA state immediately on rejected commands (default: false)
+      # - HA_BIRTH_REPUBLISH=true                                             # Re-publish discovery + state when HA comes online (default: true)
+      # - HA_STATUS_TOPIC=homeassistant/status                                # HA birth/will topic (default: homeassistant/status)
+      # - HA_BIRTH_PAYLOAD=online                                             # Payload meaning HA is online (default: online)
       # - LOGGING_SHOW_CHANGES=true                                           # Log appliance state changes
       # - LOGGING_IGNORED_KEYS=networkInterface,totalRuntime                  # Comma-separated list of keys to ignore in state change logs
       # - LOGGING_SHOW_VERSION_NUMBER=true                                    # Show version number in logs

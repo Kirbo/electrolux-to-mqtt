@@ -9,3 +9,4 @@
 - [glab ci lint (merged)](reference_glab_ci_lint.md) — plain lint resolves includes server-side (stale for unpushed); merge root+includes into one file to validate local .gitlab/ci/ edits
 - [Write memory before commit](feedback_memory_before_commit.md) — capture pending learnings as memory files before the commit step so they ride in the same commit/push
 - [Repo layout](project_repo_layout.md) — standalone docs live in `docs/`; README/LICENSE + all config files stay at root for tool/platform auto-resolution (don't move config to tidy root)
+- [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it

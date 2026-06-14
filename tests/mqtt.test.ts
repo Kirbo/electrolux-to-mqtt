@@ -600,6 +600,80 @@ describe('Mqtt', () => {
     })
   })
 
+  describe('subscribeAbsolute', () => {
+    it('should subscribe to the exact topic without prefixing', async () => {
+      const callback = vi.fn()
+      await mqttInstance.subscribeAbsolute('homeassistant/status', callback)
+
+      expect(mqttInstance.client.subscribe).toHaveBeenCalledWith('homeassistant/status', expect.any(Function))
+    })
+
+    it('should route messages to handler by absolute topic', async () => {
+      const callback = vi.fn()
+      await mqttInstance.subscribeAbsolute('homeassistant/status', callback)
+
+      mockClient.emit('message', 'homeassistant/status', Buffer.from('online'))
+
+      expect(callback).toHaveBeenCalledWith('homeassistant/status', Buffer.from('online'))
+    })
+
+    it('should not match prefixed topics when subscribed absolutely', async () => {
+      const callback = vi.fn()
+      await mqttInstance.subscribeAbsolute('homeassistant/status', callback)
+
+      // A prefixed topic must NOT trigger the absolute handler
+      mockClient.emit('message', 'test_appliances/homeassistant/status', Buffer.from('online'))
+
+      expect(callback).not.toHaveBeenCalled()
+    })
+
+    it('should reject when broker subscription fails', async () => {
+      const mockClientTyped = mqttInstance.client as unknown as {
+        subscribe: ReturnType<typeof vi.fn>
+      }
+      mockClientTyped.subscribe = vi.fn((_topic, callback) => {
+        if (callback) callback(new Error('Broker refused'))
+      })
+
+      await expect(mqttInstance.subscribeAbsolute('homeassistant/status', vi.fn())).rejects.toThrow('Broker refused')
+    })
+  })
+
+  describe('unsubscribeAbsolute', () => {
+    it('should unsubscribe from the exact absolute topic', async () => {
+      const callback = vi.fn()
+      await mqttInstance.subscribeAbsolute('homeassistant/status', callback)
+
+      mqttInstance.unsubscribeAbsolute('homeassistant/status')
+
+      expect(mqttInstance.client.unsubscribe).toHaveBeenCalledWith('homeassistant/status', expect.any(Function))
+    })
+
+    it('should stop routing messages after successful unsubscribe confirmation', async () => {
+      const callback = vi.fn()
+      await mqttInstance.subscribeAbsolute('homeassistant/status', callback)
+
+      let capturedCb: ((err: Error | null) => void) | undefined
+      mqttInstance.client.unsubscribe = vi.fn((_topic, cb) => {
+        capturedCb = cb as (err: Error | null) => void
+      }) as unknown as typeof mqttInstance.client.unsubscribe
+
+      mqttInstance.unsubscribeAbsolute('homeassistant/status')
+
+      // Before broker confirms: handler still active
+      mockClient.emit('message', 'homeassistant/status', Buffer.from('online'))
+      expect(callback).toHaveBeenCalledTimes(1)
+
+      // Broker confirms unsubscribe
+      capturedCb?.(null)
+
+      // After confirmation: handler removed
+      callback.mockClear()
+      mockClient.emit('message', 'homeassistant/status', Buffer.from('online'))
+      expect(callback).not.toHaveBeenCalled()
+    })
+  })
+
   describe('[Symbol.asyncDispose]', () => {
     it('should call disconnect when Symbol.asyncDispose is invoked', async () => {
       const disconnectSpy = vi.spyOn(mqttInstance, 'disconnect')

@@ -33,6 +33,9 @@ const orchestrator = new Orchestrator(client, mqtt, {
   apiFailureRestartThresholdMs: config.healthCheck.unHealthyRestartMinutes * 60_000,
   healthCheckEnabled: config.healthCheck.enabled,
   applianceRemovalGracePeriodMs: config.electrolux.applianceRemovalGracePeriodMinutes * 60_000,
+  haBirthRepublish: config.homeAssistant.birthRepublish,
+  haBirthTopic: config.homeAssistant.statusTopic,
+  haBirthPayload: config.homeAssistant.birthPayload,
 })
 
 let discoveryIntervalDisposable: Disposable | null = null

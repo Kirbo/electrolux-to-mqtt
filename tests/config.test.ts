@@ -1987,5 +1987,174 @@ homeAssistant:
 
       errorSpy.mockRestore()
     })
+
+    // HA birth-message recovery config options
+    it('should default homeAssistant.statusTopic to homeassistant/status', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.homeAssistant.statusTopic).toBe('homeassistant/status')
+    })
+
+    it('should default homeAssistant.birthPayload to online', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.homeAssistant.birthPayload).toBe('online')
+    })
+
+    it('should default homeAssistant.birthRepublish to true', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.homeAssistant.birthRepublish).toBe(true)
+    })
+
+    it('should accept custom statusTopic from config file', async () => {
+      const configWithStatus = `${defaultValidConfig}
+  statusTopic: custom/ha/status`
+      fs.writeFileSync(configPath, configWithStatus, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.homeAssistant.statusTopic).toBe('custom/ha/status')
+    })
+
+    it('should accept birthRepublish: false from config file', async () => {
+      const configWithOff = `${defaultValidConfig}
+  birthRepublish: false`
+      fs.writeFileSync(configPath, configWithOff, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.homeAssistant.birthRepublish).toBe(false)
+    })
+
+    it('should reject empty statusTopic', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+homeAssistant:
+  autoDiscovery: true
+  statusTopic: ''`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('homeAssistant.statusTopic'))).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+  })
+
+  describe('HA birth-message env vars', () => {
+    it('should set homeAssistant.statusTopic from HA_STATUS_TOPIC', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.HA_STATUS_TOPIC = 'ha/birth/status'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('statusTopic: ha/birth/status')
+
+      infoSpy.mockRestore()
+      delete process.env.HA_STATUS_TOPIC
+    })
+
+    it('should set homeAssistant.birthPayload from HA_BIRTH_PAYLOAD', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.HA_BIRTH_PAYLOAD = 'started'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('birthPayload: started')
+
+      infoSpy.mockRestore()
+      delete process.env.HA_BIRTH_PAYLOAD
+    })
+
+    it('should set homeAssistant.birthRepublish to false from HA_BIRTH_REPUBLISH=false', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.HA_BIRTH_REPUBLISH = 'false'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('birthRepublish: false')
+
+      infoSpy.mockRestore()
+      delete process.env.HA_BIRTH_REPUBLISH
+    })
+
+    it('should default birthRepublish to true when HA_BIRTH_REPUBLISH is not set', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      delete process.env.HA_BIRTH_REPUBLISH
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('birthRepublish: true')
+
+      infoSpy.mockRestore()
+    })
   })
 })

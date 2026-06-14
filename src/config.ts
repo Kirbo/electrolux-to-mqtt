@@ -71,6 +71,9 @@ const configSchema = z.object({
   homeAssistant: z.object({
     autoDiscovery: z.boolean().default(true),
     revertStateOnRejection: z.boolean().default(false),
+    statusTopic: z.string().min(1, 'must be a non-empty MQTT topic string').default('homeassistant/status'),
+    birthPayload: z.string().default('online'),
+    birthRepublish: z.boolean().default(true),
   }),
   logging: z
     .object({
@@ -154,6 +157,12 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
+  HA_STATUS_TOPIC: z.string().optional(),
+  HA_BIRTH_PAYLOAD: z.string().optional(),
+  HA_BIRTH_REPUBLISH: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   LOG_LEVEL: z.string().optional(),
   LOGGING_SHOW_CHANGES: z
     .string()
@@ -211,6 +220,9 @@ const configPathToEnvVar: Record<string, string> = {
   'electrolux.applianceRemovalGracePeriodMinutes': 'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
   'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
   'homeAssistant.revertStateOnRejection': 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
+  'homeAssistant.statusTopic': 'HA_STATUS_TOPIC',
+  'homeAssistant.birthPayload': 'HA_BIRTH_PAYLOAD',
+  'homeAssistant.birthRepublish': 'HA_BIRTH_REPUBLISH',
   'logging.logLevel': 'LOG_LEVEL',
   'logging.showChanges': 'LOGGING_SHOW_CHANGES',
   'logging.ignoredKeys': 'LOGGING_IGNORED_KEYS',
@@ -295,6 +307,9 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
     homeAssistant: stripUndefined({
       autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,
       revertStateOnRejection: envConfig.HOME_ASSISTANT_REVERT_STATE_ON_REJECTION,
+      statusTopic: envConfig.HA_STATUS_TOPIC,
+      birthPayload: envConfig.HA_BIRTH_PAYLOAD,
+      birthRepublish: envConfig.HA_BIRTH_REPUBLISH,
     }),
     logging: stripUndefined({
       logLevel: envConfig.LOG_LEVEL,

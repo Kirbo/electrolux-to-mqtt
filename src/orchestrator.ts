@@ -16,6 +16,9 @@ export interface OrchestratorConfig {
   apiFailureRestartThresholdMs: number
   healthCheckEnabled: boolean
   applianceRemovalGracePeriodMs: number
+  haBirthRepublish: boolean
+  haBirthTopic: string
+  haBirthPayload: string
 }
 
 export class Orchestrator implements AsyncDisposable {
@@ -28,6 +31,7 @@ export class Orchestrator implements AsyncDisposable {
   private readonly applianceMissingSince = new Map<string, number>()
   private lastSuccessfulApiCall = Date.now()
   private _reconnectRegistered = false
+  private _birthRegistered = false
   public isShuttingDown = false
 
   constructor(client: ElectroluxClient, mqtt: IMqtt, config: OrchestratorConfig) {
@@ -83,6 +87,58 @@ export class Orchestrator implements AsyncDisposable {
         this.mqtt.publish(`${applianceId}/state`, JSON.stringify(state))
       }
     })
+  }
+
+  /**
+   * Unconditionally republish discovery config and cached state for every active
+   * appliance. Used by the MQTT reconnect handler and the HA birth-message handler.
+   *
+   * Discovery is only emitted when autoDiscovery is enabled.
+   * State is only emitted when there is a non-null cached value.
+   */
+  private republishAll(): void {
+    for (const [applianceId, appliance] of this.applianceInstances) {
+      if (this.config.autoDiscovery) {
+        const discoveryConfig = appliance.generateAutoDiscoveryConfig(this.mqtt.topicPrefix)
+        this.mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), { retain: true, qos: 2 })
+      }
+
+      const stateKey = cache.cacheKey(applianceId).state
+      const state = cache.get(stateKey)
+      if (state === undefined || state === null) {
+        logger.debug(`No cached state for appliance ${applianceId} — skipping state republish`)
+        continue
+      }
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(state))
+    }
+  }
+
+  /**
+   * Subscribe to the HA status topic once to listen for birth messages.
+   * When HA comes online (payload matches birthPayload), republish discovery
+   * config + cached state for all active appliances so HA recovers entity
+   * state without needing MQTT retain.
+   *
+   * Guarded by _birthRegistered so it runs at most once per Orchestrator.
+   */
+  private _registerBirthHandler(): void {
+    if (this._birthRegistered) return
+    if (!this.config.haBirthRepublish) return
+    this._birthRegistered = true
+
+    this.mqtt
+      .subscribeAbsolute(this.config.haBirthTopic, (_topic, message) => {
+        const payload = message.toString()
+        if (payload !== this.config.haBirthPayload) {
+          logger.debug(`HA status message received with payload "${payload}" — ignoring (not a birth message)`)
+          return
+        }
+        logger.info('Home Assistant came online — republishing discovery config and cached state for all appliances')
+        this.republishAll()
+      })
+      .catch((err: unknown) => {
+        logger.error('Failed to subscribe to HA status topic:', err)
+      })
   }
 
   /**
@@ -195,6 +251,9 @@ export class Orchestrator implements AsyncDisposable {
 
       // Register the MQTT reconnect handler (once per orchestrator instance)
       this._registerReconnectHandler()
+
+      // Register the HA birth-message handler (once per orchestrator instance)
+      this._registerBirthHandler()
 
       // Start state polling after optional delay
       this._startPolling(applianceId, appliance, applianceDiscoveryCallback, delayMs)
@@ -381,6 +440,11 @@ export class Orchestrator implements AsyncDisposable {
 
     // Cleanup client timeouts
     this.client.cleanup()
+
+    // Unsubscribe from HA birth topic
+    if (this._birthRegistered) {
+      this.mqtt.unsubscribeAbsolute(this.config.haBirthTopic)
+    }
 
     // Disconnect MQTT
     this.mqtt.disconnect()
