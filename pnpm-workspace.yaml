@@ -4,5 +4,8 @@ allowBuilds:
 
 # ws>=8.20.1: fixes GHSA-58qx-3vcg-4xpx (uninitialized memory disclosure,
 # transitive via mqtt>ws). Remove once mqtt bumps its own dep floor past 8.20.0.
+# esbuild>=0.28.1: fixes GHSA-gv7w-rqvm-qjhr (high) + GHSA-g7r4-m6w7-qqqr (low),
+# transitive via vite/tsx/vitest. Remove once upstream deps bump their floor.
 overrides:
   ws: ">=8.20.1"
+  esbuild: ">=0.28.1"

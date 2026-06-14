@@ -1,2 +1,7 @@
 allowBuilds:
   esbuild: true
+
+# esbuild>=0.28.1: fixes GHSA-gv7w-rqvm-qjhr (high) + GHSA-g7r4-m6w7-qqqr (low),
+# transitive via vite/tsx/vitest. Remove once upstream deps bump their floor.
+overrides:
+  esbuild: ">=0.28.1"
