@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # post-checkout hook
-# When switching TO the `next` branch, automatically rebase it on top of `main`.
+# When switching TO the `next` branch, automatically rebase it on top of `main`
+# (or `origin/main` on machines that keep only `next` locally).
 #
 # Hook arguments:
 #   $1 = previous HEAD ref
@@ -27,9 +28,14 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # shellcheck disable=SC1091
 source "${REPO_ROOT}/.githooks/common.sh"
 
-# Verify main branch exists
-if ! git rev-parse --verify main > /dev/null 2>&1; then
-  step_skip "auto-rebase skipped: 'main' branch not found"
+# Determine the base ref: prefer a local `main`, fall back to `origin/main`
+# (supports machines that keep only `next` locally).
+if git rev-parse --verify main > /dev/null 2>&1; then
+  BASE_REF=main
+elif git rev-parse --verify origin/main > /dev/null 2>&1; then
+  BASE_REF=origin/main
+else
+  step_skip "auto-rebase skipped: neither 'main' nor 'origin/main' found"
   exit 0
 fi
 
@@ -39,13 +45,13 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 0
 fi
 
-step_exec "Rebasing 'next' on top of 'main'..."
-if git rebase main > /dev/null 2>&1; then
-  step_done "Rebased 'next' on top of 'main'"
+step_exec "Rebasing 'next' on top of '${BASE_REF}'..."
+if git rebase "$BASE_REF" > /dev/null 2>&1; then
+  step_done "Rebased 'next' on top of '${BASE_REF}'"
 else
   printf '%s' "$CLEAR_LINE"
   git rebase --abort > /dev/null 2>&1
-  print_status "$YELLOW" " WARN " "auto-rebase failed (conflicts?) — aborted. Rebase manually: git rebase main"
+  print_status "$YELLOW" " WARN " "auto-rebase failed (conflicts?) — aborted. Rebase manually: git rebase ${BASE_REF}"
 fi
 
 exit 0
