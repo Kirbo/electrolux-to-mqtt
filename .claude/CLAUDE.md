@@ -66,7 +66,7 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
 - **Commit type drives the changelog section, not the version** — CalVer has no minor/patch bump. `feat:`→Feature, `fix:`→Bug Fixes, `docs:`→Documentation, etc. (full mapping in `cliff.toml`).
   - `<type>!:` (e.g. `feat!:`, `fix!:`) = **breaking change**, `!` **mandatory**. Routes to the top "Breaking Changes" changelog section; add a `docs/MIGRATION.md` entry. `BREAKING CHANGE:` footer is nice-to-have (renders as a fenced note).
 - **A release is cut by file paths, not commit type** — the CI gate (`.rules_code_changes`) fires on `src/`, `tests/`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `docker/Dockerfile`, `tsconfig.json`, `vitest.config.ts`, `vitest.setup.ts`. Pure docs / `.claude/` / CI-config / `telemetry-backend/`-only changes don't release. Still pick the conventional type that fits (it sets the changelog section).
-- Never `git push` — leave to human.
+- `git push` only when the user explicitly tells you to push. Never push on your own — not after a commit, not to "finish up". No explicit push instruction → leave it to the human.
 - Never `git checkout` / switch branches — leave to human. Commit to whatever branch is currently checked out.
 
 ### Sync

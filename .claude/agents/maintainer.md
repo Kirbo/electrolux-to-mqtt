@@ -56,7 +56,7 @@ Follow in order.
 5. **Commit**:
    - Conventional Commits. Use `chore(deps): ...` for dep bumps — a labeling convention only (groups under Chores in the changelog). No version/release rule depends on the commit type: CalVer is date-derived, and CI keys off the changed `package.json`/`pnpm-lock.yaml` paths regardless of type.
    - One logical change per commit. Majors separate from minors where practical.
-   - **Never `git push`** — human pushes.
+   - **`git push` only on explicit user instruction** — never on your own (see `.claude/CLAUDE.md` § Tooling).
 
 ## Decision Framework
 
