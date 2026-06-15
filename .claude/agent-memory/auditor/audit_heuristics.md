@@ -19,6 +19,7 @@ type: project
 - `electrolux.ts`: `tokenPayload as { exp: number; iat: number }` preceded by `typeof` checks both fields — safe
 - `normalizers.ts`: `rawState as unknown as Appliance['properties']['reported']` preceded by `'in'` checks three required fields — safe
 - Empty catches in `logger.ts` (timezone fallback), `mqtt.ts` (JSON.parse debug log), `electrolux.ts` (URL parse fallback), `health.ts` (read failure returns false), `config.ts` (write failure uses in-memory config) — all documented
+- `orchestrator.ts`: the MQTT-reconnect handler (`_registerReconnectHandler`) republishes **state only**, while the HA-birth handler (`_registerBirthHandler` → `republishAll`) republishes **discovery + state**. This asymmetry is INTENTIONAL, not duplicated-logic-gone-wrong — documented in shared memory `project_ha_birth_republish.md`. Do not flag the reconnect handler for "missing" discovery republish, and do not suggest collapsing the two into one. (Re-verified 2026-06-15 audit.)
 
 ## Tooling-config migrations (verify activation, not just acceptance)
 
