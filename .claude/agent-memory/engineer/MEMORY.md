@@ -1,1 +1,3 @@
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
+- [LivestreamClient SSE transport design](project_livestream_sse_transport.md) — detached loop testability, AbortController+reader race, abortable backoff, refreshSubscription vs stop
+- [Phase 4 SSE cutover complete](project_phase4_cutover.md) — polling removed, stream wired, config renamed; StreamEvent shape; reconnect hook + fake timer patterns
