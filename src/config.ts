@@ -52,6 +52,12 @@ const configSchema = z.object({
         .min(1, 'must be at least 1 minute')
         .max(1440, 'should not exceed 1440 minutes (24 hours)')
         .default(30),
+      apiTimeoutSeconds: z
+        .number()
+        .int()
+        .min(1, 'must be at least 1 second')
+        .max(120, 'should not exceed 120 seconds')
+        .default(25),
     })
     .check((ctx) => {
       const renewMinutes = ctx.value.renewTokenBeforeExpiry
@@ -149,6 +155,7 @@ const envSchema = z.object({
   ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
   ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: z.coerce.number().optional(),
+  ELECTROLUX_API_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(120).optional(),
   HOME_ASSISTANT_AUTO_DISCOVERY: z
     .string()
     .optional()
@@ -218,6 +225,7 @@ const configPathToEnvVar: Record<string, string> = {
   'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
   'electrolux.commandStateDelaySeconds': 'ELECTROLUX_COMMAND_STATE_DELAY_SECONDS',
   'electrolux.applianceRemovalGracePeriodMinutes': 'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
+  'electrolux.apiTimeoutSeconds': 'ELECTROLUX_API_TIMEOUT_SECONDS',
   'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
   'homeAssistant.revertStateOnRejection': 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
   'homeAssistant.statusTopic': 'HA_STATUS_TOPIC',
@@ -303,6 +311,7 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       renewTokenBeforeExpiry: envConfig.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY,
       commandStateDelaySeconds: envConfig.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS,
       applianceRemovalGracePeriodMinutes: envConfig.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES,
+      apiTimeoutSeconds: envConfig.ELECTROLUX_API_TIMEOUT_SECONDS,
     }),
     homeAssistant: stripUndefined({
       autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,

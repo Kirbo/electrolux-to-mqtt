@@ -20,6 +20,14 @@
  * - appliance-info.json and appliance-state.json are saved under
  *   a model-specific directory (e.g. snapshots/comfort600/) using
  *   the lowercase model name from applianceInfo.model
+ *
+ * SLOW STATE ENDPOINT:
+ * - The Electrolux GET /appliances/{id}/state endpoint can return HTTP 500
+ *   after ~15.5 s for some appliances. The default apiTimeoutSeconds of 25 s
+ *   is deliberately longer than ~15.5 s so the real upstream error surfaces in
+ *   logs by default — no config.yml override needed.
+ *   The Vitest per-test timeout on the state tests is 30 s so Vitest itself
+ *   does not abort before the API error arrives.
  */
 
 import fs from 'node:fs'
@@ -149,6 +157,8 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
       }
     })
 
+    // 30 s Vitest timeout: GET /state can take ~15.5 s before HTTP 500 on some appliances.
+    // The default apiTimeoutSeconds of 25 s exceeds 15.5 s, so the real error surfaces by default.
     it('should fetch appliance state for each appliance', async () => {
       if (!appliances || appliances.length === 0) {
         log.warn('Skipping: No appliances available')
@@ -177,10 +187,12 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
           )
         }
       }
-    })
+    }, 30_000)
   })
 
   describe('Snapshot Management', () => {
+    // 30 s Vitest timeout: GET /state calls inside this test can take ~15.5 s.
+    // The default apiTimeoutSeconds of 25 s exceeds 15.5 s, so the real HTTP 500 error surfaces by default.
     it('should save snapshots organized by model', async () => {
       if (!appliances || appliances.length === 0) {
         log.warn('Skipping: No appliances available')
@@ -209,7 +221,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
         log.info(`Saved ${modelDir}/appliance-info.json and appliance-state.json`)
       }
-    })
+    }, 30_000)
 
     it('should compare with previous snapshots if they exist', async () => {
       if (!appliances || appliances.length === 0) return

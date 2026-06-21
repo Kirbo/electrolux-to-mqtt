@@ -914,6 +914,23 @@ describe('electrolux', () => {
       expect(axiosCreateSpy).toHaveBeenCalled()
     })
 
+    it('should pass apiTimeoutSeconds * 1000 as axios timeout', async () => {
+      const axiosCreateSpy = vi.spyOn(axios, 'create').mockReturnValue({
+        interceptors: {
+          request: { use: vi.fn() },
+          response: { use: vi.fn() },
+        },
+      } as unknown as ReturnType<typeof axios.create>)
+
+      await client.initialize()
+
+      expect(axiosCreateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeout: config.electrolux.apiTimeoutSeconds * 1000,
+        }),
+      )
+    })
+
     it('should handle API client not initialized error', () => {
       // The client initializes lazily, so we just verify it doesn't throw during construction
       const uninitializedClient = new ElectroluxClient(mockMqtt)

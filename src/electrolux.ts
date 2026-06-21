@@ -69,7 +69,6 @@ const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (double
 const LOGIN_RETRY_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
 const TOKEN_REFRESH_BASE_DELAY_MS = 5_000 // Initial retry delay for token refresh
 const TOKEN_REFRESH_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
-const API_TIMEOUT_MS = 10_000 // Default timeout for API requests
 
 // Decorrelated jitter prevents coordinated retry storms across instances.
 // Returns a value in [baseDelay/2, baseDelay] using full-jitter within the upper half.
@@ -320,7 +319,7 @@ export class ElectroluxClient implements AsyncDisposable {
     this.client = axios.create({
       baseURL: baseUrl,
       headers,
-      timeout: API_TIMEOUT_MS,
+      timeout: config.electrolux.apiTimeoutSeconds * 1000,
     })
 
     this.client.interceptors.request.use(async (request) => {

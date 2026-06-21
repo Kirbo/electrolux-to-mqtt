@@ -2069,6 +2069,193 @@ homeAssistant:
     })
   })
 
+  describe('electrolux.apiTimeoutSeconds', () => {
+    it('should default apiTimeoutSeconds to 25 when not specified', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.electrolux.apiTimeoutSeconds).toBe(25)
+    })
+
+    it('should accept a valid custom apiTimeoutSeconds', async () => {
+      const configWithTimeout = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  apiTimeoutSeconds: 30
+homeAssistant:
+  autoDiscovery: true`
+      fs.writeFileSync(configPath, configWithTimeout, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.electrolux.apiTimeoutSeconds).toBe(30)
+    })
+
+    it('should reject apiTimeoutSeconds below 1', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  apiTimeoutSeconds: 0
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.apiTimeoutSeconds'))).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
+    it('should reject apiTimeoutSeconds above 120', async () => {
+      const invalidConfig = `mqtt:
+  url: mqtt://localhost
+  username: test
+  password: test
+electrolux:
+  apiKey: test
+  username: test
+  password: test
+  countryCode: FI
+  apiTimeoutSeconds: 121
+homeAssistant:
+  autoDiscovery: true`
+
+      fs.writeFileSync(configPath, invalidConfig, 'utf8')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        await import('../src/config.js')
+      } catch {
+        // Expected to fail
+      }
+
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.apiTimeoutSeconds'))).toBe(true)
+
+      errorSpy.mockRestore()
+    })
+
+    it('should set apiTimeoutSeconds from ELECTROLUX_API_TIMEOUT_SECONDS env var', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_API_TIMEOUT_SECONDS = '20'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('apiTimeoutSeconds: 20')
+
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
+    })
+
+    it('should default apiTimeoutSeconds to 25 when ELECTROLUX_API_TIMEOUT_SECONDS is not set', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('apiTimeoutSeconds: 25')
+
+      infoSpy.mockRestore()
+    })
+
+    it('should reject ELECTROLUX_API_TIMEOUT_SECONDS=0 via env vars', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_API_TIMEOUT_SECONDS = '0'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_API_TIMEOUT_SECONDS'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
+    })
+
+    it('should reject ELECTROLUX_API_TIMEOUT_SECONDS=121 via env vars', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_API_TIMEOUT_SECONDS = '121'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_API_TIMEOUT_SECONDS'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
+    })
+  })
+
   describe('HA birth-message env vars', () => {
     it('should set homeAssistant.statusTopic from HA_STATUS_TOPIC', async () => {
       process.env.MQTT_URL = 'mqtt://test'

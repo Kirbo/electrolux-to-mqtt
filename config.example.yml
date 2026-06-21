@@ -45,6 +45,12 @@ electrolux:
   # removed if it stays absent across successive successful responses for this many minutes.
   # Default: 30, Min: 1, Max: 1440.
   applianceRemovalGracePeriodMinutes: 30
+  # (Optional) HTTP request timeout in seconds for Electrolux API calls.
+  # The Electrolux GET /appliances/{id}/state endpoint can return HTTP 500 after ~15.5 s for
+  # some appliances. The default 25 s is deliberately longer than that so the real upstream
+  # error surfaces in logs instead of a premature client-side timeout. Reduce only if you
+  # want faster failure detection and don't need the upstream error reason. Default: 25, Min: 1, Max: 120.
+  apiTimeoutSeconds: 25
 
 homeAssistant:
   # (Optional) Automatically discover the device in Home Assistant. Default: true

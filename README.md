@@ -85,6 +85,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY`                | Minutes before token expiry to refresh (5–715)                           | `60`                    | No       |
 | `ELECTROLUX_COMMAND_STATE_DELAY_SECONDS`              | Seconds to wait after a command before re-polling state (5–300)          | `30`                    | No       |
 | `ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES`   | Minutes an appliance must be continuously absent before cleanup (1–1440) | `30`                    | No       |
+| `ELECTROLUX_API_TIMEOUT_SECONDS`                      | HTTP request timeout in seconds for Electrolux API calls (1–120)         | `25`                    | No       |
 | `HOME_ASSISTANT_AUTO_DISCOVERY`                       | Enable HA MQTT auto-discovery                                            | `true`                  | No       |
 | `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION`            | Immediately revert HA state on rejected commands                         | `false`                 | No       |
 | `HA_BIRTH_REPUBLISH`                                  | Re-publish discovery config + state when HA comes online (birth message) | `true`                  | No       |
@@ -156,6 +157,7 @@ docker run --rm \
   # -e ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60 \
   # -e ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30 \
   # -e ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30 \
+  # -e ELECTROLUX_API_TIMEOUT_SECONDS=25 \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false \
   # -e HA_BIRTH_REPUBLISH=true \
@@ -235,6 +237,7 @@ services:
       # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60
       # - ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30
       # - ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30
+      # - ELECTROLUX_API_TIMEOUT_SECONDS=25
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false
       # - HA_BIRTH_REPUBLISH=true
