@@ -3,7 +3,7 @@
  * These are used for mocking in tests and can be compared against real API responses
  */
 
-import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
+import type { Appliance, ApplianceInfo, ApplianceStub, LivestreamConfig, StreamEvent } from '@/types.js'
 
 export const mockAppliancesResponse: ApplianceStub[] = [
   {
@@ -238,3 +238,29 @@ export const mockCommandResponse = {
     status: 'OK',
   },
 }
+
+export const mockLivestreamConfigResponse: LivestreamConfig = {
+  url: 'https://livestream.developer.electrolux.one/api/v1/livestream/appliances',
+  appliances: [
+    {
+      applianceId: 'test-appliance-123',
+      properties: ['mode', 'targetTemperatureC', 'connectionState'],
+    },
+  ],
+}
+
+/**
+ * Representative StreamEvent samples for unit tests.
+ * Covers: mode delta, temperature delta, nested-path delta, and connection-state delta.
+ * The applianceId mirrors mockAppliancesResponse[0].applianceId so tests can combine fixtures.
+ */
+export const mockStreamEvents: StreamEvent[] = [
+  // Simple scalar mode change
+  { applianceId: 'test-appliance-123', property: 'mode', value: 'heat' },
+  // Temperature delta
+  { applianceId: 'test-appliance-123', property: 'targetTemperatureC', value: 23 },
+  // Nested path (slash-separated) — mirrors the userSelections sub-object pattern
+  { applianceId: 'test-appliance-123', property: 'userSelections/displayTemperatureUnit', value: 'celsius' },
+  // Connection-state delta — value confirmed provisional; update after Phase-6 E2E capture
+  { applianceId: 'test-appliance-123', property: 'connectionState', value: 'Connected' },
+]

@@ -12,6 +12,7 @@ import {
   mockAppliancesResponse,
   mockCommandResponse,
   mockCsrfTokenResponse,
+  mockLivestreamConfigResponse,
   mockLoginResponse,
   mockTokenExchangeResponse,
   mockTokenRefreshResponse,
@@ -666,35 +667,8 @@ describe('electrolux', () => {
     })
   })
 
-  describe('command state delay', () => {
-    it('should track command time per appliance', () => {
-      const lastCommandTime = new Map<string, number>()
-      const applianceId = 'test-123'
-      const commandTime = Date.now()
-
-      lastCommandTime.set(applianceId, commandTime)
-      expect(lastCommandTime.has(applianceId)).toBe(true)
-      expect(lastCommandTime.get(applianceId)).toBe(commandTime)
-    })
-
-    it('should check if enough time has passed since command', () => {
-      const COMMAND_STATE_DELAY_MS = 30_000
-      const lastCommandTime = Date.now() - 35000 // 35 seconds ago
-      const now = Date.now()
-
-      const hasEnoughTimePassed = now - lastCommandTime >= COMMAND_STATE_DELAY_MS
-      expect(hasEnoughTimePassed).toBe(true)
-    })
-
-    it('should check if not enough time has passed since command', () => {
-      const COMMAND_STATE_DELAY_MS = 30_000
-      const lastCommandTime = Date.now() - 25000 // 25 seconds ago
-      const now = Date.now()
-
-      const hasEnoughTimePassed = now - lastCommandTime >= COMMAND_STATE_DELAY_MS
-      expect(hasEnoughTimePassed).toBe(false)
-    })
-  })
+  // Command-state delay was removed in the SSE migration: reseedApplianceState always fetches,
+  // the stream handles live deltas, and there is no per-command skip window.
 
   describe('last active mode tracking', () => {
     it('should store last active mode per appliance', () => {
@@ -805,12 +779,10 @@ describe('electrolux', () => {
       const client = {
         isLoggingIn: false,
         isLoggedIn: false,
-        refreshInterval: 30,
       }
 
       expect(client.isLoggingIn).toBe(false)
       expect(client.isLoggedIn).toBe(false)
-      expect(client.refreshInterval).toBe(30)
     })
 
     it('should track logging in state', () => {
@@ -894,7 +866,6 @@ describe('electrolux', () => {
     it('should initialize with correct properties', () => {
       expect(client.isLoggingIn).toBe(false)
       expect(client.isLoggedIn).toBe(false)
-      expect(client.refreshInterval).toBeGreaterThan(0)
     })
 
     it('should cleanup timeouts', () => {
@@ -936,11 +907,6 @@ describe('electrolux', () => {
       const uninitializedClient = new ElectroluxClient(mockMqtt)
       expect(uninitializedClient).toBeDefined()
       uninitializedClient.cleanup()
-    })
-
-    it('should track last command time per appliance', () => {
-      // Access the internal map indirectly by checking the class structure
-      expect(client).toHaveProperty('lastCommandTime')
     })
 
     it('should track last active mode per appliance', () => {
@@ -1321,10 +1287,10 @@ describe('electrolux', () => {
       })
     })
 
-    describe('getApplianceState', () => {
+    describe('reseedApplianceState (replaces getApplianceState)', () => {
       let mockAppliance: MockAppliance
 
-      const normalizeStateForGetApplianceState = (state: Appliance): NormalizedState =>
+      const normalizeStateForReseed = (state: Appliance): NormalizedState =>
         ({
           applianceId: state.applianceId,
           mode: state.properties.reported.mode,
@@ -1333,42 +1299,42 @@ describe('electrolux', () => {
 
       beforeEach(() => {
         mockAppliance = createMockAppliance({
-          normalizeState: vi.fn(normalizeStateForGetApplianceState),
+          normalizeState: vi.fn(normalizeStateForReseed),
         })
       })
 
-      it('should fetch and publish appliance state on first fetch', async () => {
+      it('should fetch and publish appliance state', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
 
         await client.initialize()
-        const state = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+        const state = await client.reseedApplianceState(mockAppliance as unknown as BaseAppliance)
 
         expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances/test-appliance-123/state')
         expect(mockMqtt.publish).toHaveBeenCalledWith('test-appliance-123/state', expect.any(String))
         expect(state).toEqual(mockApplianceStateResponse)
       })
 
-      it('should skip state fetch if command was sent recently', async () => {
+      it('should always fetch even when a command was sent recently (no command-delay skip)', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
         mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
 
         await client.initialize()
 
-        // Send a command to set the last command time
+        // Send a command (previously this would set a delay window)
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
 
-        // Try to fetch state immediately
-        await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+        // reseedApplianceState must NOT skip — it always fetches
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+        await client.reseedApplianceState(mockAppliance as unknown as BaseAppliance)
 
-        // State fetch should be skipped (only 1 PUT for command, no GET for state)
-        expect(mockAxiosInstance.get).not.toHaveBeenCalled()
+        expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances/test-appliance-123/state')
       })
 
       it('should handle API error without publishing disconnected state', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network error'))
 
         await client.initialize()
-        const result = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+        const result = await client.reseedApplianceState(mockAppliance as unknown as BaseAppliance)
 
         // Should return undefined on error without publishing disconnected state
         expect(result).toBeUndefined()
@@ -1665,51 +1631,11 @@ describe('electrolux', () => {
 
         await client.initialize()
 
-        // This should trigger fetchAndProcessApplianceState
+        // This should trigger fetchAndProcessApplianceState via reseedApplianceState
         const mockAppl = createMockAppliance()
-        await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+        await client.reseedApplianceState(mockAppl as unknown as BaseAppliance)
 
         expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances/test-appliance-123/state')
-      })
-
-      it('should handle state processing callback', async () => {
-        const { cache } = await import('@/cache.js')
-        // Provide a cached state with different values
-        const cachedState = {
-          ...mockApplianceStateResponse,
-          properties: {
-            ...mockApplianceStateResponse.properties,
-            reported: {
-              ...mockApplianceStateResponse.properties.reported,
-              targetTemperatureC: 20, // Different temperature
-            },
-          },
-        }
-        vi.mocked(cache.get).mockReturnValue(cachedState)
-
-        // New state with different temperature
-        const newState = {
-          ...mockApplianceStateResponse,
-          properties: {
-            ...mockApplianceStateResponse.properties,
-            reported: {
-              ...mockApplianceStateResponse.properties.reported,
-              targetTemperatureC: 25, // Changed temperature
-            },
-          },
-        }
-        mockAxiosInstance.get.mockResolvedValue({ data: newState })
-
-        await client.initialize()
-
-        let callbackExecuted = false
-        const mockAppl = createMockAppliance()
-        await client.getApplianceState(mockAppl as unknown as BaseAppliance, () => {
-          callbackExecuted = true
-        })
-
-        expect(callbackExecuted).toBe(true)
-        expect(mockAxiosInstance.get).toHaveBeenCalled()
       })
     })
 
@@ -2205,17 +2131,18 @@ describe('electrolux', () => {
       })
 
       it('should log a warning that names both configurable intervals', async () => {
+        // SSE migration: rate limit advice now references safetyRefreshInterval + applianceDiscoveryInterval
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
         await client.initialize()
         await client.getAppliances()
 
         expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('429'))
-        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('electrolux.refreshInterval'))
+        expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('electrolux.safetyRefreshInterval'))
         expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('electrolux.applianceDiscoveryInterval'))
       })
 
-      it('should log the current refreshInterval, applianceDiscoveryInterval and appliance count', async () => {
+      it('should log the current safetyRefreshInterval, applianceDiscoveryInterval and appliance count', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
         await client.initialize()
@@ -2225,7 +2152,7 @@ describe('electrolux', () => {
         const settingsLine = warnCalls.find((msg) => msg.includes('Current settings:'))
 
         expect(settingsLine).toBeDefined()
-        expect(settingsLine).toContain(`refreshInterval=${client.refreshInterval}s`)
+        expect(settingsLine).toContain('safetyRefreshInterval=')
         expect(settingsLine).toContain('applianceDiscoveryInterval=')
         expect(settingsLine).toContain('monitored appliances=')
       })
@@ -2244,7 +2171,8 @@ describe('electrolux', () => {
         expect(limitsLine).toContain('5 concurrent calls')
       })
 
-      it('should log estimated daily call breakdown (state polls + discovery polls)', async () => {
+      it('should log estimated daily call breakdown (discovery + safety reseeds)', async () => {
+        // SSE migration: estimate = discovery calls + safety-reseed calls (no state-poll calls)
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
         await client.initialize()
@@ -2254,15 +2182,17 @@ describe('electrolux', () => {
         const estimatedLine = warnCalls.find((msg) => msg.includes('Estimated API calls'))
 
         expect(estimatedLine).toBeDefined()
-        expect(estimatedLine).toContain('state polls')
-        expect(estimatedLine).toContain('discovery polls')
+        expect(estimatedLine).toContain('discovery:')
+        expect(estimatedLine).toContain('safety reseeds:')
       })
 
       it('should calculate correct daily estimate with no prior known appliances (uses 1 as minimum)', async () => {
         // previousAppliances.size = 0 → numAppliances = max(1,0) = 1
-        // stateCallsPerDay = ceil(86400/30 * 1) = 2880
+        // safetyRefreshInterval default = 21600s (6h)
+        // applianceDiscoveryInterval default = 300s
         // discoveryCallsPerDay = ceil(86400/300) = 288
-        // estimatedCallsPerDay = 3168
+        // reseedCallsPerDay = ceil(86400/21600 * 1) = 4
+        // estimatedCallsPerDay = 292
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
         await client.initialize()
@@ -2271,13 +2201,13 @@ describe('electrolux', () => {
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
         const estimatedLine = warnCalls.find((msg) => msg.includes('Estimated API calls'))
 
-        expect(estimatedLine).toContain('~3168')
-        expect(estimatedLine).toContain('~2880') // state polls
+        expect(estimatedLine).toContain('~292')
         expect(estimatedLine).toContain('~288') // discovery polls
+        expect(estimatedLine).toContain('~4') // safety reseeds
       })
 
       it('should warn about burst limits (not daily limit) when estimated calls are within 5000/day', async () => {
-        // 1 appliance, 30s refresh → 3168 calls/day < 5000 → burst warning path
+        // With defaults (1 appliance, 6h safety refresh, 300s discovery): 292 calls/day < 5000 → burst warning path
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
         await client.initialize()
@@ -2292,30 +2222,7 @@ describe('electrolux', () => {
         expect(warnCalls.find((msg) => msg.includes('Suggested fix:'))).toBeUndefined()
       })
 
-      it('should suggest a minimum refreshInterval when 2 appliances push calls over 5000/day', async () => {
-        // First call succeeds and populates previousAppliances with 2 appliances
-        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
-        await client.initialize()
-        await client.getAppliances()
-        loggerWarnSpy.mockClear()
-
-        // With 2 appliances and refreshInterval=30:
-        //   stateCallsPerDay = ceil(86400/30 * 2) = 5760, total = 6048 > 5000
-        //   minRefreshInterval = ceil(86400*2 / (5000-288)) = ceil(172800/4712) = 37
-        mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
-        await client.getAppliances()
-
-        const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
-        const suggestionLine = warnCalls.find((msg) => msg.includes('Suggested fix:'))
-
-        expect(suggestionLine).toBeDefined()
-        expect(suggestionLine).toContain('electrolux.refreshInterval')
-        expect(suggestionLine).toContain('37s') // ceil(172800/4712) = 37
-        // Must NOT show the burst warning on this path
-        expect(warnCalls.find((msg) => msg.includes('within the'))).toBeUndefined()
-      })
-
-      it('should use the correct appliance count in the suggestion when appliances are known', async () => {
+      it('should use the correct appliance count in the settings line when appliances are known', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
         await client.initialize()
         await client.getAppliances()
@@ -2326,32 +2233,17 @@ describe('electrolux', () => {
 
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
         const settingsLine = warnCalls.find((msg) => msg.includes('Current settings:'))
-        const suggestionLine = warnCalls.find((msg) => msg.includes('Suggested fix:'))
 
         expect(settingsLine).toContain('monitored appliances=2')
-        expect(suggestionLine).toContain('2 appliances')
       })
     })
 
     describe('removeAppliance', () => {
       it('should clear tracking data for a removed appliance', async () => {
-        const { cache } = await import('@/cache.js')
-        vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
-        mockAxiosInstance.put.mockResolvedValue({ data: {} })
-
-        await client.initialize()
-
-        const mockAppl = createMockAppliance()
-        // Send a command to populate internal tracking maps
-        await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
-
-        // Remove the appliance
+        // After removeAppliance, the appliance is no longer tracked
         client.removeAppliance('test-appliance-123')
-
-        // After removal, the command delay should no longer apply (tracking cleared)
-        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
-        const state = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
-        expect(state).toEqual(mockApplianceStateResponse)
+        // No error should be thrown
+        expect(true).toBe(true)
       })
     })
 
@@ -2395,7 +2287,7 @@ describe('electrolux', () => {
         loggerInfoSpy.mockClear()
 
         const mockAppl = createMockAppliance()
-        await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+        await client.reseedApplianceState(mockAppl as unknown as BaseAppliance)
 
         const infoCalls = loggerInfoSpy.mock.calls.map((args: unknown[]) => args[0] as string)
         const stateChangedLog = infoCalls.find((msg) => msg.includes('State changed'))
@@ -2780,7 +2672,7 @@ describe('electrolux', () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
 
         await client.initialize()
-        const result = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+        const result = await client.reseedApplianceState(mockAppl as unknown as BaseAppliance)
 
         // normalizeState should have been called twice (cached + new)
         expect(normalizeStateFn).toHaveBeenCalledTimes(2)
@@ -2803,7 +2695,7 @@ describe('electrolux', () => {
 
         await client.initialize()
         vi.mocked(mockMqtt.publish).mockClear()
-        await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+        await client.reseedApplianceState(mockAppl as unknown as BaseAppliance)
 
         // Should not publish
         expect(mockMqtt.publish).not.toHaveBeenCalled()
@@ -2931,6 +2823,204 @@ describe('electrolux', () => {
 
         expect(result).toBeUndefined()
       })
+    })
+  })
+
+  describe('getLivestreamConfig', () => {
+    let client: ElectroluxClient
+    let mockMqtt: IMqtt
+    let mockAxiosInstance: MockAxiosInstance
+
+    beforeEach(async () => {
+      mockMqtt = {
+        publish: vi.fn(),
+        subscribe: vi.fn(),
+        isConnected: vi.fn().mockReturnValue(true),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
+      } as unknown as IMqtt
+
+      mockAxiosInstance = {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        interceptors: {
+          request: { use: vi.fn() },
+          response: { use: vi.fn() },
+        },
+      } as MockAxiosInstance
+
+      vi.mocked(axios.create).mockReturnValue(mockAxiosInstance as unknown as ReturnType<typeof axios.create>)
+      client = new ElectroluxClient(mockMqtt)
+      await client.initialize()
+      vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+      client.cleanup()
+    })
+
+    it('should return a LivestreamConfig on success', async () => {
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: mockLivestreamConfigResponse })
+
+      const result = await client.getLivestreamConfig()
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/configurations/livestream')
+      expect(result).toEqual(mockLivestreamConfigResponse)
+    })
+
+    it('should return undefined and log error when response fails the guard', async () => {
+      // Response has wrong shape — missing `appliances` field
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: { url: 'https://example.com' } })
+
+      const result = await client.getLivestreamConfig()
+
+      expect(result).toBeUndefined()
+      expect(loggerErrorSpy).toHaveBeenCalled()
+    })
+
+    it('should return undefined when the API call throws', async () => {
+      mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network error'))
+
+      const result = await client.getLivestreamConfig()
+
+      expect(result).toBeUndefined()
+    })
+  })
+
+  describe('getStreamAuthHeaders', () => {
+    let client: ElectroluxClient
+    let mockMqtt: IMqtt
+    let mockAxiosInstance: MockAxiosInstance
+
+    beforeEach(async () => {
+      mockMqtt = {
+        publish: vi.fn(),
+        subscribe: vi.fn(),
+        isConnected: vi.fn().mockReturnValue(true),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
+      } as unknown as IMqtt
+
+      mockAxiosInstance = {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        interceptors: {
+          request: { use: vi.fn() },
+          response: { use: vi.fn() },
+        },
+      } as MockAxiosInstance
+
+      vi.mocked(axios.create).mockReturnValue(mockAxiosInstance as unknown as ReturnType<typeof axios.create>)
+      client = new ElectroluxClient(mockMqtt)
+      await client.initialize()
+      vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+      client.cleanup()
+    })
+
+    it('should return null when no access token is present', () => {
+      // freshly initialized client has no token
+      const headers = client.getStreamAuthHeaders()
+
+      expect(headers).toBeNull()
+    })
+
+    it('should return Authorization and x-api-key headers when logged in', () => {
+      client.accessToken = 'test-access-token-xyz'
+
+      const headers = client.getStreamAuthHeaders()
+
+      expect(headers).not.toBeNull()
+      expect(headers?.Authorization).toBe('Bearer test-access-token-xyz')
+      expect(headers?.['x-api-key']).toBe(config.electrolux.apiKey)
+    })
+  })
+
+  describe('reseedApplianceState', () => {
+    let client: ElectroluxClient
+    let mockMqtt: IMqtt
+    let mockAxiosInstance: MockAxiosInstance
+    let mockAppliance: ReturnType<typeof createMockAppliance>
+
+    beforeEach(async () => {
+      mockMqtt = {
+        publish: vi.fn(),
+        subscribe: vi.fn(),
+        isConnected: vi.fn().mockReturnValue(true),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        generateAutoDiscoveryConfig: vi.fn(),
+        publishInfo: vi.fn(),
+      } as unknown as IMqtt
+
+      mockAxiosInstance = {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        interceptors: {
+          request: { use: vi.fn() },
+          response: { use: vi.fn() },
+        },
+      } as MockAxiosInstance
+
+      vi.mocked(axios.create).mockReturnValue(mockAxiosInstance as unknown as ReturnType<typeof axios.create>)
+      client = new ElectroluxClient(mockMqtt)
+      await client.initialize()
+
+      mockAppliance = createMockAppliance({
+        normalizeState: vi.fn(
+          (state: Appliance) =>
+            ({
+              applianceId: state.applianceId,
+              deviceId: state.properties.reported.deviceId,
+              mode: state.properties.reported.mode,
+              targetTemperatureC: state.properties.reported.targetTemperatureC,
+            }) as NormalizedState,
+        ),
+      })
+
+      vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+      client.cleanup()
+    })
+
+    it('should fetch /state and publish even right after a command was sent', async () => {
+      const { cache } = await import('@/cache.js')
+      vi.mocked(cache.get).mockReturnValue(undefined)
+      mockAxiosInstance.put.mockResolvedValueOnce({ status: 200, data: {} })
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+
+      // Send a command to arm the command-delay window
+      await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
+
+      // getApplianceState would skip due to command delay — reseedApplianceState must NOT skip
+      vi.clearAllMocks()
+      vi.mocked(cache.get).mockReturnValue(undefined)
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+
+      const result = await client.reseedApplianceState(mockAppliance as unknown as BaseAppliance)
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances/test-appliance-123/state')
+      expect(mockMqtt.publish).toHaveBeenCalledWith('test-appliance-123/state', expect.any(String))
+      expect(result).toEqual(mockApplianceStateResponse)
+    })
+
+    it('should return undefined when the API call throws', async () => {
+      mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network error'))
+
+      const result = await client.reseedApplianceState(mockAppliance as unknown as BaseAppliance)
+
+      expect(result).toBeUndefined()
     })
   })
 

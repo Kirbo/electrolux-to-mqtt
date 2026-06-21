@@ -23,21 +23,27 @@ electrolux:
   password: your_password_here
   # (Required) Two-letter uppercase country code (e.g. FI, SE, NO, DK)
   countryCode: your_country_code_here
-  # (Optional) Appliance state polling interval in seconds. Default: 30, Min: 10, Max: 3600
-  refreshInterval: 30
+  # (Optional) Full-state safety resync interval in seconds. The bridge receives real-time
+  # state updates via SSE (server-sent events); this interval is a belt-and-suspenders periodic
+  # resync that catches any state drift if the SSE stream missed an event. 6 hours is the
+  # default because SSE delivers state changes immediately — this is not a polling frequency.
+  # Default: 21600 (6h), Min: 600 (10 min), Max: 86400 (24h).
+  safetyRefreshInterval: 21600
   # (Optional) Appliance discovery interval in seconds (how often to check for added/removed appliances). Default: 300, Min: 60, Max: 3600
   applianceDiscoveryInterval: 300
   # (Optional) How many minutes before expiration should the token be refreshed.
   # E.g. 60 means: refresh the token when it has 60 minutes or less until it expires.
   # API tokens have a 12-hour (720 min) lifetime. Default: 60, Min: 5, Max: 715.
   renewTokenBeforeExpiry: 60
-  # (Optional) Seconds to wait after sending a command before re-polling appliance state.
-  # The Electrolux API caches appliance state server-side; without this delay, the first
-  # poll after a command returns the pre-command state (cache not yet invalidated), which
-  # would overwrite the correct HA state with stale data and then self-correct only on the
-  # next full poll cycle. 30 s gives the API cache time to reflect the new state.
-  # Increase if your appliance is slow to apply commands. Default: 30, Min: 5, Max: 300.
-  commandStateDelaySeconds: 30
+  # (Optional) Seconds of SSE stream silence before the bridge considers the stream stale
+  # and reconnects. The Electrolux SSE endpoint sends a heartbeat roughly every 60 s;
+  # 120 s (2 missed heartbeats) is a safe threshold. Increase only if your network has
+  # unusually high latency. Default: 120, Min: 30, Max: 600.
+  livestreamIdleTimeoutSeconds: 120
+  # (Optional) Maximum back-off ceiling (seconds) for SSE reconnect attempts after a
+  # stream failure. The bridge uses exponential back-off from 5 s up to this cap.
+  # Default: 300 (5 min), Min: 30, Max: 3600 (1h).
+  livestreamReconnectMaxSeconds: 300
   # (Optional) Minutes an appliance must be continuously absent from successful discovery
   # responses before the bridge treats it as removed and cleans up its HA entity/subscription.
   # API failures (4xx/5xx, network errors, malformed responses) are ignored entirely and never
@@ -56,7 +62,7 @@ homeAssistant:
   # (Optional) Automatically discover the device in Home Assistant. Default: true
   autoDiscovery: true
   # (Optional) Immediately revert HA state when a command is rejected by validation. Default: false
-  # When false, the UI stays on the invalid value until the next poll corrects it (~30s).
+  # When false, the UI stays on the invalid value until the next SSE state update corrects it.
   # When true, the state snaps back immediately but may cause UI flicker.
   revertStateOnRejection: false
   # (Optional) Re-publish discovery config + cached state when Home Assistant comes online.

@@ -22,12 +22,12 @@ const configSchema = z.object({
       username: z.string(),
       password: z.string(),
       countryCode: z.string().regex(/^[A-Z]{2}$/i, 'must be a two-letter country code (e.g. FI, SE)'),
-      refreshInterval: z
+      safetyRefreshInterval: z
         .number()
         .int()
-        .min(10, 'must be at least 10 seconds')
-        .max(3600, 'should not exceed 3600 seconds')
-        .default(30),
+        .min(600, 'must be at least 600 seconds (10 minutes)')
+        .max(86400, 'should not exceed 86400 seconds (24 hours)')
+        .default(21600),
       applianceDiscoveryInterval: z
         .number()
         .int()
@@ -40,12 +40,6 @@ const configSchema = z.object({
         .min(5, 'must be at least 5 minutes')
         .max(715, 'should not exceed 715 minutes (API tokens last 720 minutes)')
         .default(60),
-      commandStateDelaySeconds: z
-        .number()
-        .int()
-        .min(5, 'must be at least 5 seconds (API needs time to register the command)')
-        .max(300, 'should not exceed 300 seconds (5 minutes)')
-        .default(30),
       applianceRemovalGracePeriodMinutes: z
         .number()
         .int()
@@ -58,18 +52,36 @@ const configSchema = z.object({
         .min(1, 'must be at least 1 second')
         .max(120, 'should not exceed 120 seconds')
         .default(25),
+      // Optional livestream tuning knobs — overridden from defaults in LivestreamClient constructor.
+      // Reconnect base delay stays a module constant in livestream.ts (5s); only the cap is configurable here.
+      livestreamIdleTimeoutSeconds: z
+        .number()
+        .int()
+        .min(30, 'must be at least 30 seconds')
+        .max(600, 'should not exceed 600 seconds (10 minutes)')
+        .default(120),
+      livestreamReconnectMaxSeconds: z
+        .number()
+        .int()
+        .min(30, 'must be at least 30 seconds')
+        .max(3600, 'should not exceed 3600 seconds (1 hour)')
+        .default(300),
     })
     .check((ctx) => {
+      // Cross-field guard: the token must remain valid long enough to cover at least one
+      // full appliance-discovery cycle. Discovery is the most frequent recurring API activity
+      // now that state polling is replaced by SSE. safetyRefreshInterval is intentionally
+      // excluded — at its minimum (10 min) it would still be within discovery's max (60 min),
+      // and its default (6h) far exceeds discovery's default (5 min), so it does not drive
+      // the "token may expire between intervals" concern.
       const renewMinutes = ctx.value.renewTokenBeforeExpiry
-      const refreshSeconds = ctx.value.refreshInterval
       const discoverySeconds = ctx.value.applianceDiscoveryInterval
-      const longestSeconds = Math.max(refreshSeconds, discoverySeconds)
-      const longestIntervalMinutes = longestSeconds / 60
-      if (renewMinutes < longestIntervalMinutes) {
+      const discoveryMinutes = discoverySeconds / 60
+      if (renewMinutes < discoveryMinutes) {
         ctx.issues.push({
           code: 'custom',
           input: ctx.value,
-          message: `must be at least ${Math.ceil(longestIntervalMinutes)} minutes (the longest polling interval is ${longestSeconds} seconds). Otherwise the token may expire between polls.`,
+          message: `must be at least ${Math.ceil(discoveryMinutes)} minutes (the appliance discovery interval is ${discoverySeconds} seconds). Otherwise the token may expire between discovery runs.`,
           path: ['renewTokenBeforeExpiry'],
         })
       }
@@ -150,12 +162,13 @@ const envSchema = z.object({
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   MQTT_QOS: z.coerce.number().optional(),
-  ELECTROLUX_REFRESH_INTERVAL: z.coerce.number().optional(),
+  ELECTROLUX_SAFETY_REFRESH_INTERVAL: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: z.coerce.number().optional(),
   ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
-  ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: z.coerce.number().optional(),
   ELECTROLUX_API_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(120).optional(),
+  ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS: z.coerce.number().optional(),
+  ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS: z.coerce.number().optional(),
   HOME_ASSISTANT_AUTO_DISCOVERY: z
     .string()
     .optional()
@@ -220,12 +233,13 @@ const configPathToEnvVar: Record<string, string> = {
   'electrolux.username': 'ELECTROLUX_USERNAME',
   'electrolux.password': 'ELECTROLUX_PASSWORD',
   'electrolux.countryCode': 'ELECTROLUX_COUNTRY_CODE',
-  'electrolux.refreshInterval': 'ELECTROLUX_REFRESH_INTERVAL',
+  'electrolux.safetyRefreshInterval': 'ELECTROLUX_SAFETY_REFRESH_INTERVAL',
   'electrolux.applianceDiscoveryInterval': 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL',
   'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
-  'electrolux.commandStateDelaySeconds': 'ELECTROLUX_COMMAND_STATE_DELAY_SECONDS',
   'electrolux.applianceRemovalGracePeriodMinutes': 'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
   'electrolux.apiTimeoutSeconds': 'ELECTROLUX_API_TIMEOUT_SECONDS',
+  'electrolux.livestreamIdleTimeoutSeconds': 'ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS',
+  'electrolux.livestreamReconnectMaxSeconds': 'ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS',
   'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
   'homeAssistant.revertStateOnRejection': 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
   'homeAssistant.statusTopic': 'HA_STATUS_TOPIC',
@@ -306,12 +320,13 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       username: envConfig.ELECTROLUX_USERNAME,
       password: envConfig.ELECTROLUX_PASSWORD,
       countryCode: envConfig.ELECTROLUX_COUNTRY_CODE,
-      refreshInterval: envConfig.ELECTROLUX_REFRESH_INTERVAL,
+      safetyRefreshInterval: envConfig.ELECTROLUX_SAFETY_REFRESH_INTERVAL,
       applianceDiscoveryInterval: envConfig.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL,
       renewTokenBeforeExpiry: envConfig.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY,
-      commandStateDelaySeconds: envConfig.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS,
       applianceRemovalGracePeriodMinutes: envConfig.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES,
       apiTimeoutSeconds: envConfig.ELECTROLUX_API_TIMEOUT_SECONDS,
+      livestreamIdleTimeoutSeconds: envConfig.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS,
+      livestreamReconnectMaxSeconds: envConfig.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS,
     }),
     homeAssistant: stripUndefined({
       autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,

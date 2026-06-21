@@ -4,15 +4,16 @@ import type { BaseAppliance } from './appliances/base.js'
 import { normalizeClimateMode, normalizeFanSpeed, normalizeOnOffState } from './appliances/normalizers.js'
 import { cache } from './cache.js'
 import config from './config.js'
+import { isLivestreamConfig } from './livestream-events.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
 import type { NormalizedClimateMode, NormalizedState } from './types/normalized.js'
-import type { Appliance, ApplianceInfo, ApplianceStub } from './types.js'
+import type { Appliance, ApplianceInfo, ApplianceStub, LivestreamConfig } from './types.js'
 
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
 
-function isAppliance(value: unknown): value is Appliance {
+export function isAppliance(value: unknown): value is Appliance {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -63,7 +64,6 @@ function isTokenRefreshResponse(value: unknown): value is { accessToken: string;
 
 // Configuration constants
 const RENEW_TOKEN_BEFORE_EXPIRY_MS = config.electrolux.renewTokenBeforeExpiry * 60 * 1000
-const COMMAND_STATE_DELAY_MS = config.electrolux.commandStateDelaySeconds * 1000
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (doubles each attempt)
 const LOGIN_RETRY_MAX_DELAY_MS = 300_000 // Max retry delay: 5 minutes
@@ -237,7 +237,6 @@ export class ElectroluxClient implements AsyncDisposable {
   eat?: Date
   iat?: Date
   private readonly mqtt: IMqtt
-  private readonly lastCommandTime: Map<string, number> = new Map() // Track when commands were sent per appliance
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
   private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
   private loginRetryCount = 0
@@ -246,7 +245,6 @@ export class ElectroluxClient implements AsyncDisposable {
 
   public isLoggingIn = false
   public isLoggedIn = false
-  public refreshInterval: number = config.electrolux.refreshInterval
 
   constructor(mqtt: IMqtt) {
     this.mqtt = mqtt
@@ -300,7 +298,6 @@ export class ElectroluxClient implements AsyncDisposable {
    * Should be called when an appliance is removed
    */
   public removeAppliance(applianceId: string) {
-    this.lastCommandTime.delete(applianceId)
     this.lastActiveMode.delete(applianceId)
     this.previousAppliances.delete(applianceId)
   }
@@ -653,46 +650,44 @@ export class ElectroluxClient implements AsyncDisposable {
     const RATE_LIMIT_CALLS_PER_DAY = 5000
     const SECONDS_PER_DAY = 86400
     const numAppliances = Math.max(1, this.previousAppliances.size)
-    const currentRefreshInterval = this.refreshInterval
-    const currentDiscoveryInterval = config.electrolux.applianceDiscoveryInterval
+    const discoveryInterval = config.electrolux.applianceDiscoveryInterval
+    const safetyRefreshInterval = config.electrolux.safetyRefreshInterval
 
-    // Recurring calls per day:
-    // - State polling: numAppliances × (86400 / refreshInterval)
+    // Recurring calls per day (SSE replaces per-appliance state polling):
     // - Appliance discovery: 86400 / applianceDiscoveryInterval
-    const stateCallsPerDay = Math.ceil((SECONDS_PER_DAY / currentRefreshInterval) * numAppliances)
-    const discoveryCallsPerDay = Math.ceil(SECONDS_PER_DAY / currentDiscoveryInterval)
-    const estimatedCallsPerDay = stateCallsPerDay + discoveryCallsPerDay
-
-    // Minimum refreshInterval so that state + discovery calls stay within the daily limit
-    const availableForStatePolls = RATE_LIMIT_CALLS_PER_DAY - discoveryCallsPerDay
-    const minRefreshInterval = Math.ceil((SECONDS_PER_DAY * numAppliances) / availableForStatePolls)
+    // - Safety reseeds: numAppliances × (86400 / safetyRefreshInterval)
+    // - On-reconnect reseeds are not counted here (they are infrequent and burst-limited)
+    const discoveryCallsPerDay = Math.ceil(SECONDS_PER_DAY / discoveryInterval)
+    const reseedCallsPerDay = Math.ceil((SECONDS_PER_DAY / safetyRefreshInterval) * numAppliances)
+    const estimatedCallsPerDay = discoveryCallsPerDay + reseedCallsPerDay
 
     logger.warn(
       'Received 429 Too Many Requests from the Electrolux API — you are being rate limited. ' +
-        'Please increase `electrolux.refreshInterval` or `electrolux.applianceDiscoveryInterval` in your configuration.',
+        'Please increase `electrolux.applianceDiscoveryInterval` or `electrolux.safetyRefreshInterval` in your configuration.',
     )
     logger.warn(
-      `Current settings: refreshInterval=${currentRefreshInterval}s, ` +
-        `applianceDiscoveryInterval=${currentDiscoveryInterval}s, ` +
+      `Current settings: applianceDiscoveryInterval=${discoveryInterval}s, ` +
+        `safetyRefreshInterval=${safetyRefreshInterval}s, ` +
         `monitored appliances=${numAppliances}`,
     )
     logger.warn(
       `Estimated API calls per day with current settings: ~${estimatedCallsPerDay} ` +
-        `(state polls: ~${stateCallsPerDay}, discovery polls: ~${discoveryCallsPerDay})`,
+        `(discovery: ~${discoveryCallsPerDay}, safety reseeds: ~${reseedCallsPerDay})`,
     )
     logger.warn(
       `Electrolux API rate limits: ${RATE_LIMIT_CALLS_PER_DAY} calls/day · 10 calls/second · 5 concurrent calls`,
     )
     if (estimatedCallsPerDay > RATE_LIMIT_CALLS_PER_DAY) {
       logger.warn(
-        `Suggested fix: set electrolux.refreshInterval to at least ${minRefreshInterval}s ` +
-          `(with ${numAppliances} appliance${numAppliances === 1 ? '' : 's'} and applianceDiscoveryInterval=${currentDiscoveryInterval}s)`,
+        `Estimated daily calls (~${estimatedCallsPerDay}) exceed the limit. ` +
+          `Consider increasing applianceDiscoveryInterval above ${discoveryInterval}s ` +
+          `or safetyRefreshInterval above ${safetyRefreshInterval}s.`,
       )
     } else {
       logger.warn(
         `Your estimated daily calls (~${estimatedCallsPerDay}) are within the ${RATE_LIMIT_CALLS_PER_DAY}/day limit — ` +
           `the 429 may be due to bursting (10 calls/second or 5 concurrent calls). ` +
-          `Consider increasing refreshInterval above ${currentRefreshInterval}s as a precaution.`,
+          `Consider staggering reseeds or increasing applianceDiscoveryInterval above ${discoveryInterval}s as a precaution.`,
       )
     }
   }
@@ -931,28 +926,6 @@ export class ElectroluxClient implements AsyncDisposable {
     return response.data
   }
 
-  public async getApplianceState(appliance: BaseAppliance, callback?: () => void): Promise<Appliance | undefined> {
-    const applianceId = appliance.getApplianceId()
-    const cacheKey = cache.cacheKey(applianceId).state
-
-    // Skip fetching state if a command was sent recently
-    const lastCommandTime = this.lastCommandTime.get(applianceId) ?? 0
-    const timeSinceCommand = Date.now() - lastCommandTime
-
-    if (timeSinceCommand < COMMAND_STATE_DELAY_MS) {
-      logger.debug(
-        `Skipping state fetch for ${applianceId}: only ${Math.round(timeSinceCommand / 1000)}s since command was sent (waiting ${Math.round((COMMAND_STATE_DELAY_MS - timeSinceCommand) / 1000)}s more)`,
-      )
-      const cached = cache.get(cacheKey)
-      return isAppliance(cached) ? cached : undefined
-    }
-
-    return this.handleApiRequest(async () => {
-      await this.ensureValidToken()
-      return this.fetchAndProcessApplianceState(appliance, applianceId, cacheKey, callback)
-    }, 'Error getting appliance state')
-  }
-
   private revertStateFromCache(appliance: BaseAppliance, applianceId: string, cacheKey: string): void {
     const cached = cache.get(cacheKey)
     let cachedNormalizedState: NormalizedState | null = null
@@ -998,8 +971,6 @@ export class ElectroluxClient implements AsyncDisposable {
       const payload = appliance.transformMqttCommandToApi(rawCommand)
       logger.info('Sending command to appliance:', applianceId, 'Command:', payload)
 
-      this.lastCommandTime.set(applianceId, Date.now())
-
       const response = await this.client.put(`/api/v1/appliances/${applianceId}/command`, payload)
       logger.debug('Command response', response.status, response.data)
 
@@ -1014,5 +985,56 @@ export class ElectroluxClient implements AsyncDisposable {
     }
 
     return result
+  }
+
+  /**
+   * Fetch the SSE livestream configuration from the Electrolux API.
+   * Mirrors getApplianceInfo: wraps in handleApiRequest, calls ensureValidToken, validates
+   * the response with isLivestreamConfig, and degrades gracefully (returns undefined) on
+   * guard failure or API error.
+   */
+  public async getLivestreamConfig(): Promise<LivestreamConfig | undefined> {
+    return this.handleApiRequest(async () => {
+      await this.ensureValidToken()
+      if (!this.client) {
+        throw new Error('API client is not initialized')
+      }
+      const response = await this.client.get('/api/v1/configurations/livestream')
+      const data: unknown = response.data
+      if (!isLivestreamConfig(data)) {
+        logger.error('Invalid livestream config response', data)
+        return undefined
+      }
+      return data
+    }, 'Error getting livestream config')
+  }
+
+  /**
+   * Snapshot the current in-memory credentials as SSE request headers.
+   * Returns null if the client has not yet obtained an access token.
+   * Does NOT refresh — callers must invoke ensureValidToken() before connecting.
+   */
+  public getStreamAuthHeaders(): { Authorization: string; 'x-api-key': string } | null {
+    if (!this.accessToken) {
+      return null
+    }
+    return {
+      Authorization: `Bearer ${this.accessToken}`,
+      'x-api-key': config.electrolux.apiKey,
+    }
+  }
+
+  /**
+   * Fetch /state for an appliance, normalize, diff-vs-cache, publish to MQTT, and update cache.
+   * This is the single consolidated method for obtaining and publishing appliance state —
+   * used for initial seeding at startup, on-reconnect reseeds, and periodic safety resyncs.
+   */
+  public async reseedApplianceState(appliance: BaseAppliance): Promise<Appliance | undefined> {
+    const applianceId = appliance.getApplianceId()
+    const cacheKey = cache.cacheKey(applianceId).state
+    return this.handleApiRequest(async () => {
+      await this.ensureValidToken()
+      return this.fetchAndProcessApplianceState(appliance, applianceId, cacheKey)
+    }, 'Error reseeding appliance state')
   }
 }

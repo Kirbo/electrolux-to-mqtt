@@ -137,7 +137,7 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
-    it('should validate refresh interval with Zod - value too low', async () => {
+    it('should validate safetyRefreshInterval with env var - value too low', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'
       process.env.MQTT_PASSWORD = 'pass'
@@ -145,7 +145,7 @@ homeAssistant:
       process.env.ELECTROLUX_USERNAME = 'euser'
       process.env.ELECTROLUX_PASSWORD = 'epass'
       process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_REFRESH_INTERVAL = '5' // Too low
+      process.env.ELECTROLUX_SAFETY_REFRESH_INTERVAL = '599' // Too low (min 600)
 
       vi.resetModules()
       const { createConfigFromEnv } = await import('../src/config.js')
@@ -156,10 +156,280 @@ homeAssistant:
       createConfigFromEnv()
 
       expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_REFRESH_INTERVAL'))).toBe(true)
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_SAFETY_REFRESH_INTERVAL'))).toBe(true)
 
       errorSpy.mockRestore()
       infoSpy.mockRestore()
+    })
+
+    it('should validate safetyRefreshInterval with env var - value too high', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_SAFETY_REFRESH_INTERVAL = '86401' // Too high (max 86400)
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_SAFETY_REFRESH_INTERVAL'))).toBe(true)
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
+    it('should not accept deprecated ELECTROLUX_REFRESH_INTERVAL env var', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_REFRESH_INTERVAL = '30' // old env var — must be ignored
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      // Old env var is ignored; safetyRefreshInterval must fall back to its default (21600)
+      expect(result).toContain('safetyRefreshInterval: 21600')
+      expect(result).not.toContain('refreshInterval:')
+
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_REFRESH_INTERVAL
+    })
+
+    it('should not accept ELECTROLUX_COMMAND_STATE_DELAY_SECONDS env var', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS = '60' // removed field
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      // Removed field must not appear in the generated config
+      expect(result).not.toContain('commandStateDelaySeconds')
+
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS
+    })
+
+    it('should accept ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS and include in config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS = '60'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('livestreamIdleTimeoutSeconds: 60')
+
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS
+    })
+
+    it('should reject ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS below 30', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS = '29'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS'))).toBe(
+        true,
+      )
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS
+    })
+
+    it('should reject ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS above 600', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS = '601'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS'))).toBe(
+        true,
+      )
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS
+    })
+
+    it('should accept ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS and include in config', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS = '600'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const result = createConfigFromEnv()
+
+      expect(result).toContain('livestreamReconnectMaxSeconds: 600')
+
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS
+    })
+
+    it('should reject ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS below 30', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS = '29'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS'))).toBe(
+        true,
+      )
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS
+    })
+
+    it('should reject ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS above 3600', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS = '3601'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      createConfigFromEnv()
+
+      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS'))).toBe(
+        true,
+      )
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+      delete process.env.ELECTROLUX_LIVESTREAM_RECONNECT_MAX_SECONDS
+    })
+
+    it('should default livestreamIdleTimeoutSeconds to 120', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+      expect(config.default.electrolux.livestreamIdleTimeoutSeconds).toBe(120)
+    })
+
+    it('should default livestreamReconnectMaxSeconds to 300', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+      expect(config.default.electrolux.livestreamReconnectMaxSeconds).toBe(300)
+    })
+
+    it('should default safetyRefreshInterval to 21600', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+      expect(config.default.electrolux.safetyRefreshInterval).toBe(21600)
     })
 
     it('should validate appliance discovery interval with Zod - value too high', async () => {
@@ -291,7 +561,7 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
-    it('should reject renewTokenBeforeExpiry shorter than refreshInterval', async () => {
+    it('should reject renewTokenBeforeExpiry shorter than applianceDiscoveryInterval (cross-field check)', async () => {
       if (fs.existsSync(configPath)) fs.unlinkSync(configPath)
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'
@@ -300,39 +570,6 @@ homeAssistant:
       process.env.ELECTROLUX_USERNAME = 'euser'
       process.env.ELECTROLUX_PASSWORD = 'epass'
       process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_REFRESH_INTERVAL = '600' // 10 minutes
-      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '5' // 5 minutes — shorter than refresh interval
-
-      vi.resetModules()
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected — config validation fails at module load
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      warnSpy.mockRestore()
-    })
-
-    it('should reject renewTokenBeforeExpiry shorter than applianceDiscoveryInterval', async () => {
-      if (fs.existsSync(configPath)) fs.unlinkSync(configPath)
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_REFRESH_INTERVAL = '30' // 30 seconds — fine
       process.env.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL = '3600' // 60 minutes
       process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '30' // 30 minutes — shorter than discovery interval
 
@@ -1165,21 +1402,19 @@ homeAssistant:
       expect(() => qosSchema.parse(10)).toThrow()
     })
 
-    it('should validate refresh interval range - valid values', () => {
-      const intervalSchema = z.number().int().min(10).max(3600)
+    it('should validate safetyRefreshInterval range - valid values', () => {
+      const intervalSchema = z.number().int().min(600).max(86400)
 
-      expect(() => intervalSchema.parse(10)).not.toThrow()
-      expect(() => intervalSchema.parse(30)).not.toThrow()
-      expect(() => intervalSchema.parse(3600)).not.toThrow()
-      expect(() => intervalSchema.parse(100)).not.toThrow()
+      expect(() => intervalSchema.parse(600)).not.toThrow()
+      expect(() => intervalSchema.parse(21600)).not.toThrow()
+      expect(() => intervalSchema.parse(86400)).not.toThrow()
     })
 
-    it('should validate refresh interval range - invalid values', () => {
-      const intervalSchema = z.number().int().min(10).max(3600)
+    it('should validate safetyRefreshInterval range - invalid values', () => {
+      const intervalSchema = z.number().int().min(600).max(86400)
 
-      expect(() => intervalSchema.parse(5)).toThrow()
-      expect(() => intervalSchema.parse(9)).toThrow()
-      expect(() => intervalSchema.parse(4000)).toThrow()
+      expect(() => intervalSchema.parse(599)).toThrow()
+      expect(() => intervalSchema.parse(86401)).toThrow()
     })
 
     it('should validate appliance discovery interval range - valid values', () => {
@@ -1258,7 +1493,7 @@ homeAssistant:
         }),
         electrolux: z.object({
           apiKey: z.string(),
-          refreshInterval: z.number().min(10).optional(),
+          safetyRefreshInterval: z.number().min(600).optional(),
         }),
       })
 
@@ -1350,12 +1585,12 @@ homeAssistant:
       }
     })
 
-    it('should provide helpful error messages for invalid intervals', () => {
+    it('should provide helpful error messages for invalid safetyRefreshInterval', () => {
       const schema = z
         .number()
         .int()
-        .min(10, 'electrolux.refreshInterval must be at least 10 seconds')
-        .max(3600, 'electrolux.refreshInterval should not exceed 3600 seconds')
+        .min(600, 'electrolux.safetyRefreshInterval must be at least 600 seconds')
+        .max(86400, 'electrolux.safetyRefreshInterval should not exceed 86400 seconds')
 
       try {
         schema.parse(5)
@@ -1364,7 +1599,7 @@ homeAssistant:
         expect(error).toBeInstanceOf(z.ZodError)
         if (error instanceof z.ZodError) {
           const firstIssue = error.issues[0]
-          expect(firstIssue?.message).toContain('must be at least 10 seconds')
+          expect(firstIssue?.message).toContain('must be at least 600 seconds')
         }
       }
     })
@@ -1485,7 +1720,7 @@ homeAssistant:
       errorSpy.mockRestore()
     })
 
-    it('should validate config file and catch invalid refresh interval', async () => {
+    it('should validate config file and catch invalid safetyRefreshInterval', async () => {
       const invalidConfig = `mqtt:
   url: mqtt://localhost
   username: test
@@ -1495,7 +1730,7 @@ electrolux:
   username: test
   password: test
   countryCode: FI
-  refreshInterval: 5
+  safetyRefreshInterval: 599
 homeAssistant:
   autoDiscovery: true`
 
@@ -1512,7 +1747,7 @@ homeAssistant:
       expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
       expect(
         errorSpy.mock.calls.some(
-          (call) => call[0].includes('electrolux.refreshInterval') || call[0].includes('10 seconds'),
+          (call) => call[0].includes('electrolux.safetyRefreshInterval') || call[0].includes('600 seconds'),
         ),
       ).toBe(true)
 
@@ -1587,7 +1822,7 @@ homeAssistant:
       errorSpy.mockRestore()
     })
 
-    it('should validate config file and catch renewTokenBeforeExpiry shorter than polling intervals', async () => {
+    it('should validate config file and catch renewTokenBeforeExpiry shorter than applianceDiscoveryInterval', async () => {
       const invalidConfig = `mqtt:
   url: mqtt://localhost
   username: test
@@ -1597,8 +1832,8 @@ electrolux:
   username: test
   password: test
   countryCode: FI
-  refreshInterval: 600
-  renewTokenBeforeExpiry: 5
+  applianceDiscoveryInterval: 3600
+  renewTokenBeforeExpiry: 30
 homeAssistant:
   autoDiscovery: true`
 
@@ -1658,7 +1893,7 @@ electrolux:
   username: test
   password: test
   countryCode: FI
-  refreshInterval: 5
+  safetyRefreshInterval: 1
   applianceDiscoveryInterval: 5000
 homeAssistant:
   autoDiscovery: true`
@@ -1725,7 +1960,7 @@ electrolux:
   username: test@example.com
   password: test-pass
   countryCode: FI
-  refreshInterval: 30
+  safetyRefreshInterval: 21600
   applianceDiscoveryInterval: 300
 homeAssistant:
   autoDiscovery: true
@@ -1804,17 +2039,17 @@ telemetryEnabled: false`
       expect(config.default.telemetryEnabled).toBe(false)
     })
 
-    it('should default commandStateDelaySeconds to 30 when not specified', async () => {
+    it('should default safetyRefreshInterval to 21600 when not specified', async () => {
       fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
 
       vi.resetModules()
       const config = await import('../src/config.js')
 
-      expect(config.default.electrolux.commandStateDelaySeconds).toBe(30)
+      expect(config.default.electrolux.safetyRefreshInterval).toBe(21600)
     })
 
-    it('should accept a valid custom commandStateDelaySeconds', async () => {
-      const configWithDelay = `mqtt:
+    it('should accept a valid custom safetyRefreshInterval from config file', async () => {
+      const configWithRefresh = `mqtt:
   url: mqtt://localhost
   username: test
   password: test
@@ -1823,18 +2058,18 @@ electrolux:
   username: test
   password: test
   countryCode: FI
-  commandStateDelaySeconds: 60
+  safetyRefreshInterval: 3600
 homeAssistant:
   autoDiscovery: true`
-      fs.writeFileSync(configPath, configWithDelay, 'utf8')
+      fs.writeFileSync(configPath, configWithRefresh, 'utf8')
 
       vi.resetModules()
       const config = await import('../src/config.js')
 
-      expect(config.default.electrolux.commandStateDelaySeconds).toBe(60)
+      expect(config.default.electrolux.safetyRefreshInterval).toBe(3600)
     })
 
-    it('should reject commandStateDelaySeconds below 5', async () => {
+    it('should reject safetyRefreshInterval below 600 in config file', async () => {
       const invalidConfig = `mqtt:
   url: mqtt://localhost
   username: test
@@ -1844,7 +2079,7 @@ electrolux:
   username: test
   password: test
   countryCode: FI
-  commandStateDelaySeconds: 4
+  safetyRefreshInterval: 599
 homeAssistant:
   autoDiscovery: true`
 
@@ -1859,12 +2094,12 @@ homeAssistant:
       }
 
       expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.commandStateDelaySeconds'))).toBe(true)
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.safetyRefreshInterval'))).toBe(true)
 
       errorSpy.mockRestore()
     })
 
-    it('should reject commandStateDelaySeconds above 300', async () => {
+    it('should reject safetyRefreshInterval above 86400 in config file', async () => {
       const invalidConfig = `mqtt:
   url: mqtt://localhost
   username: test
@@ -1874,7 +2109,7 @@ electrolux:
   username: test
   password: test
   countryCode: FI
-  commandStateDelaySeconds: 301
+  safetyRefreshInterval: 86401
 homeAssistant:
   autoDiscovery: true`
 
@@ -1889,9 +2124,37 @@ homeAssistant:
       }
 
       expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.commandStateDelaySeconds'))).toBe(true)
+      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.safetyRefreshInterval'))).toBe(true)
 
       errorSpy.mockRestore()
+    })
+
+    it('should default livestreamIdleTimeoutSeconds to 120 when not specified in config file', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.electrolux.livestreamIdleTimeoutSeconds).toBe(120)
+    })
+
+    it('should default livestreamReconnectMaxSeconds to 300 when not specified in config file', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      expect(config.default.electrolux.livestreamReconnectMaxSeconds).toBe(300)
+    })
+
+    it('should not include commandStateDelaySeconds in config (field removed)', async () => {
+      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
+
+      vi.resetModules()
+      const config = await import('../src/config.js')
+
+      // commandStateDelaySeconds must not exist on the schema output
+      expect((config.default.electrolux as Record<string, unknown>).commandStateDelaySeconds).toBeUndefined()
     })
 
     it('should default applianceRemovalGracePeriodMinutes to 30 when not specified', async () => {

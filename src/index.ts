@@ -3,6 +3,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import config from './config.js'
 import { disposableInterval, disposableTimeout } from './disposable.js'
 import { ElectroluxClient } from './electrolux.js'
+import { LivestreamClient } from './livestream.js'
 import createLogger from './logger.js'
 import { runStartupMigrations } from './migrate.js'
 import Mqtt from './mqtt.js'
@@ -23,12 +24,18 @@ const telemetrySalt = crypto
   .digest('hex')
 const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
 
-const refreshInterval = client.refreshInterval * 1000
-const applianceDiscoveryInterval = config.electrolux.applianceDiscoveryInterval * 1000
+const safetyRefreshIntervalMs = config.electrolux.safetyRefreshInterval * 1000
+const applianceDiscoveryIntervalMs = config.electrolux.applianceDiscoveryInterval * 1000
+const idleTimeoutMs = config.electrolux.livestreamIdleTimeoutSeconds * 1000
+const reconnectMaxMs = config.electrolux.livestreamReconnectMaxSeconds * 1000
+
+const livestream = new LivestreamClient(client, {
+  idleTimeoutMs,
+  reconnectMaxMs,
+})
 
 const orchestrator = new Orchestrator(client, mqtt, {
-  refreshInterval,
-  applianceDiscoveryInterval,
+  applianceDiscoveryInterval: applianceDiscoveryIntervalMs,
   autoDiscovery: config.homeAssistant.autoDiscovery,
   apiFailureRestartThresholdMs: config.healthCheck.unHealthyRestartMinutes * 60_000,
   healthCheckEnabled: config.healthCheck.enabled,
@@ -36,9 +43,11 @@ const orchestrator = new Orchestrator(client, mqtt, {
   haBirthRepublish: config.homeAssistant.birthRepublish,
   haBirthTopic: config.homeAssistant.statusTopic,
   haBirthPayload: config.homeAssistant.birthPayload,
+  idleTimeoutMs,
 })
 
 let discoveryIntervalDisposable: Disposable | null = null
+let safetyRefreshIntervalDisposable: Disposable | null = null
 let stopVersionChecker: (() => void) | null = null
 let restartTimeoutDisposable: Disposable | null = null
 
@@ -48,7 +57,11 @@ const shutdown = async () => {
   restartTimeoutDisposable = null
   discoveryIntervalDisposable?.[Symbol.dispose]()
   discoveryIntervalDisposable = null
+  safetyRefreshIntervalDisposable?.[Symbol.dispose]()
+  safetyRefreshIntervalDisposable = null
   if (stopVersionChecker) stopVersionChecker()
+  // Stop the stream before shutting down the orchestrator so cleanup is orderly
+  await livestream[Symbol.asyncDispose]()
   orchestrator.shutdown()
   process.exit(0)
 }
@@ -66,7 +79,7 @@ const waitForLogin = async () => {
 
 export const main = async () => {
   await runStartupMigrations()
-  logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
+  logger.info(`Safety refresh interval set to: ${safetyRefreshIntervalMs / 1000} seconds`)
 
   // Initialize the client
   await client.initialize()
@@ -77,39 +90,56 @@ export const main = async () => {
 
   if (!appliances) {
     // API call failed (network error, DNS failure, etc.)
-    logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshInterval / 1000} seconds...`)
+    logger.error(
+      `Failed to fetch appliances due to API error. Retrying in ${safetyRefreshIntervalMs / 1000} seconds...`,
+    )
     if (!orchestrator.isShuttingDown) {
       restartTimeoutDisposable = disposableTimeout(() => {
         restartTimeoutDisposable = null
         main().catch((err: unknown) => logger.error('Error in restart:', err))
-      }, refreshInterval)
+      }, safetyRefreshIntervalMs)
     }
     return
   }
 
   if (appliances.length === 0) {
     logger.error(
-      `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
+      `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${safetyRefreshIntervalMs / 1000} seconds...`,
     )
     if (!orchestrator.isShuttingDown) {
       restartTimeoutDisposable = disposableTimeout(() => {
         restartTimeoutDisposable = null
         main().catch((err: unknown) => logger.error('Error in restart:', err))
-      }, refreshInterval)
+      }, safetyRefreshIntervalMs)
     }
     return
   }
 
   logger.info(`Found ${appliances.length} appliance(s), initializing...`)
 
-  const totalAppliances = appliances.length
-  const intervalDelay = refreshInterval / totalAppliances
-
-  // Initialize all appliances with staggered delays
-  for (const [i, appliance] of appliances.entries()) {
-    const delay = i * intervalDelay
-    await orchestrator.initializeAppliance(appliance, delay)
+  // Initialize all appliances (no stagger delay needed — initial seeds fire async)
+  for (const appliance of appliances) {
+    await orchestrator.initializeAppliance(appliance)
   }
+
+  // Wire and start the SSE livestream
+  orchestrator.initializeLivestream(livestream)
+
+  // Periodic safety refresh: re-seed all appliances to close drift regardless of stream activity.
+  // This is independent of stream reconnects (which also trigger reseeds) and runs infrequently
+  // (default 6h) as a backstop for any state drift that accumulates over long idle periods.
+  safetyRefreshIntervalDisposable = disposableInterval(() => {
+    if (orchestrator.isShuttingDown) {
+      safetyRefreshIntervalDisposable?.[Symbol.dispose]()
+      safetyRefreshIntervalDisposable = null
+      return
+    }
+    for (const appliance of orchestrator.getApplianceInstances().values()) {
+      client
+        .reseedApplianceState(appliance)
+        .catch((err: unknown) => logger.error('Error in safety refresh reseed:', err))
+    }
+  }, safetyRefreshIntervalMs)
 
   // Start periodic appliance discovery
   discoveryIntervalDisposable = disposableInterval(() => {
@@ -119,9 +149,9 @@ export const main = async () => {
       return
     }
     orchestrator.discoverAppliances()
-  }, applianceDiscoveryInterval)
+  }, applianceDiscoveryIntervalMs)
 
-  logger.info(`Appliance discovery running every ${applianceDiscoveryInterval / 1000 / 60} minutes to detect changes`)
+  logger.info(`Appliance discovery running every ${applianceDiscoveryIntervalMs / 1000 / 60} minutes to detect changes`)
 
   // Start version checker.
   // process.env.E2M_IMAGE_CHANNEL is baked into the Docker image at build time (UPDATE_CHANNEL ARG).

@@ -3,7 +3,9 @@ import type { BaseAppliance } from '@/appliances/base.js'
 import type { ElectroluxClient } from '@/electrolux.js'
 import type { IMqtt } from '@/mqtt.js'
 import { Orchestrator, type OrchestratorConfig } from '@/orchestrator.js'
+import type { NormalizedState } from '@/types/normalized.js'
 import type { ApplianceInfo, ApplianceStub } from '@/types.js'
+import { mockApplianceStateResponse } from './fixtures/api-responses.js'
 
 // Hoisted spy so we can assert on logger.error in m11 tests without recreating
 // the module. The orchestrator module captures its logger reference at import
@@ -32,6 +34,7 @@ vi.mock('@/cache.js', () => ({
     })),
     matchByValue: vi.fn(() => false),
     get: vi.fn(() => undefined),
+    set: vi.fn(),
     delete: vi.fn(),
   },
 }))
@@ -70,7 +73,7 @@ function createMockClient(): ElectroluxClient {
         capabilities: {},
       }),
     ),
-    getApplianceState: vi.fn(() => Promise.resolve()),
+    reseedApplianceState: vi.fn(() => Promise.resolve()),
     getAppliances: vi.fn(() => Promise.resolve([])),
     sendApplianceCommand: vi.fn(() => Promise.resolve()),
     removeAppliance: vi.fn(),
@@ -97,7 +100,7 @@ function createMockMqtt(): IMqtt {
 }
 
 const defaultConfig: OrchestratorConfig = {
-  refreshInterval: 30000,
+  idleTimeoutMs: 120000,
   applianceDiscoveryInterval: 300000,
   autoDiscovery: true,
   apiFailureRestartThresholdMs: 2700000, // 45 minutes
@@ -156,27 +159,21 @@ describe('Orchestrator', () => {
         autoDiscovery: false,
       })
 
-      await noDiscoveryOrchestrator.initializeAppliance(mockStub, 0)
+      await noDiscoveryOrchestrator.initializeAppliance(mockStub)
 
-      // No pre-poll on the non-auto-discovery path — state fetch comes from _startPolling
       expect(mqtt.autoDiscovery).not.toHaveBeenCalled()
-      expect(client.getApplianceState).not.toHaveBeenCalled()
-
-      // Advance past initial delay — polling starts as usual
-      await vi.advanceTimersByTimeAsync(0)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
     })
 
-    it('should start state polling after delay', async () => {
-      await orchestrator.initializeAppliance(mockStub, 100)
+    it('should seed initial state via setTimeout(0) after initialization', async () => {
+      await orchestrator.initializeAppliance(mockStub)
 
-      // Before delay, getApplianceState should not have been called (aside from auto-discovery path)
-      expect(client.getApplianceState).not.toHaveBeenCalled()
+      // Before timeout fires, reseed should not have been called
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
 
-      // Advance past delay
-      await vi.advanceTimersByTimeAsync(100)
+      // Advance past setTimeout(0)
+      await vi.advanceTimersByTimeAsync(0)
 
-      expect(client.getApplianceState).toHaveBeenCalled()
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(1)
     })
 
     it('should handle errors during initialization', async () => {
@@ -236,76 +233,46 @@ describe('Orchestrator', () => {
       expect(client.sendApplianceCommand).not.toHaveBeenCalled()
     })
 
-    it('should poll state on interval after delay', async () => {
-      await orchestrator.initializeAppliance(mockStub, 0)
+    it('should log error when sendApplianceCommand rejects', async () => {
+      let capturedHandler: (topic: string, message: Buffer) => void = () => {}
+      vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {
+        capturedHandler = callback
+        return Promise.resolve()
+      })
 
-      // Advance past initial delay
+      vi.mocked(client.sendApplianceCommand).mockRejectedValueOnce(new Error('Command failed'))
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      loggerErrorSpy.mockClear()
+
+      // Simulate MQTT command — sendApplianceCommand will reject
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{"mode":"cool"}'))
+
+      // Let the rejection settle
       await vi.advanceTimersByTimeAsync(0)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
 
-      // Advance past one refresh interval
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+      expect(loggerErrorSpy).toHaveBeenCalled()
     })
 
-    it('should stop polling when shutting down', async () => {
-      await orchestrator.initializeAppliance(mockStub, 0)
-
-      // Advance past delay to start polling
-      await vi.advanceTimersByTimeAsync(0)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
-
-      // Set shutting down
-      orchestrator.isShuttingDown = true
-
-      // Advance another interval — should not poll again
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
-    })
-
-    it('should not start polling if shutting down before delay fires', async () => {
-      await orchestrator.initializeAppliance(mockStub, 1000)
+    it('should skip initial seed when shutting down before timeout fires', async () => {
+      await orchestrator.initializeAppliance(mockStub)
 
       orchestrator.isShuttingDown = true
 
-      await vi.advanceTimersByTimeAsync(1000)
-      expect(client.getApplianceState).not.toHaveBeenCalled()
-    })
-
-    it('should republish auto-discovery config when it changes', async () => {
-      const { cache } = await import('@/cache.js')
-
-      // Mock getApplianceState to invoke its callback
-      vi.mocked(client.getApplianceState).mockImplementation(async (_appliance, callback) => {
-        if (callback) callback()
-      })
-
-      vi.mocked(cache.matchByValue).mockReturnValue(false)
-      await orchestrator.initializeAppliance(mockStub, 0)
-
-      // Advance past delay — this triggers getApplianceState with the discovery callback
       await vi.advanceTimersByTimeAsync(0)
-
-      // Auto-discovery should have been republished via the callback
-      // Initial publish + callback publish
-      expect(mqtt.autoDiscovery).toHaveBeenCalledTimes(2)
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
     })
 
-    it('should skip auto-discovery republish when config unchanged', async () => {
-      const { cache } = await import('@/cache.js')
+    it('should skip initial seed if appliance was removed before timeout fires', async () => {
+      await orchestrator.initializeAppliance(mockStub)
 
-      // Mock getApplianceState to invoke its callback
-      vi.mocked(client.getApplianceState).mockImplementation(async (_appliance, callback) => {
-        if (callback) callback()
-      })
-
-      vi.mocked(cache.matchByValue).mockReturnValue(true)
-      await orchestrator.initializeAppliance(mockStub, 0)
+      // Remove the appliance before the timeout fires
+      orchestrator.cleanupAppliance('appliance-1')
 
       await vi.advanceTimersByTimeAsync(0)
 
-      // Only initial publish, no callback republish (cache matched)
-      expect(mqtt.autoDiscovery).toHaveBeenCalledTimes(1)
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
     })
   })
 
@@ -366,24 +333,6 @@ describe('Orchestrator', () => {
       // autoDiscovery key uses the capabilitiesHash from the appliance mock ('mockhash000')
       expect(cache.delete).toHaveBeenCalledWith('appliance-1:auto-discovery:mockhash000')
       expect(cache.delete).toHaveBeenCalledTimes(2)
-    })
-
-    it('should not start polling if appliance was removed while stagger timeout was pending', async () => {
-      // Initialize with a stagger delay so the timeout is pending
-      await orchestrator.initializeAppliance(mockStub, 1000)
-
-      // Remove the appliance before the stagger timeout fires
-      orchestrator.cleanupAppliance('appliance-1')
-
-      // Advance past the stagger delay — timeout fires but appliance is gone
-      await vi.advanceTimersByTimeAsync(1000)
-
-      // No polling should have started
-      expect(client.getApplianceState).not.toHaveBeenCalled()
-
-      // Advance a full refresh interval to confirm no interval was created
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-      expect(client.getApplianceState).not.toHaveBeenCalled()
     })
   })
 
@@ -635,259 +584,261 @@ describe('Orchestrator', () => {
       expect(shortGraceOrchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
       expect(mqtt.unsubscribe).not.toHaveBeenCalledWith('appliance-1/command')
     })
-  })
 
-  describe('MQTT publish failure during state update', () => {
-    it('should not crash the polling loop when publish throws on the first poll', async () => {
-      // The orchestrator calls getApplianceState which internally publishes.
-      // If publish throws, the orchestrator must not crash and the loop must continue.
-      vi.mocked(client.getApplianceState).mockImplementation(async (_appliance, callback) => {
-        // Simulate publish throwing inside getApplianceState
-        vi.mocked(mqtt.publish).mockImplementationOnce(() => {
-          throw new Error('MQTT broker unreachable')
-        })
-        if (callback) callback()
-        return undefined
-      })
+    it('should call refreshSubscription when appliance set changes', async () => {
+      const mockLivestream = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        onReconnect: vi.fn(),
+        onEvent: vi.fn(),
+        refreshSubscription: vi.fn(),
+        isStreamConnected: vi.fn(() => false),
+      }
 
-      await orchestrator.initializeAppliance(mockStub, 0)
-      await vi.advanceTimersByTimeAsync(0)
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
 
-      // The polling interval should still be running (no crash)
-      expect(orchestrator.isShuttingDown).toBe(false)
-    })
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub])
+      await orchestrator.discoverAppliances()
 
-    it('should not crash the polling loop when publish throws on subsequent poll', async () => {
-      let publishCallCount = 0
-      vi.mocked(mqtt.publish).mockImplementation(() => {
-        publishCallCount++
-        if (publishCallCount > 1) {
-          throw new Error('MQTT disconnected')
-        }
-      })
-
-      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
-
-      await orchestrator.initializeAppliance(mockStub, 0)
-      await vi.advanceTimersByTimeAsync(0)
-
-      // Advance another interval — the polling loop must survive
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-
-      // getApplianceState should have been called twice
-      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
-      expect(orchestrator.isShuttingDown).toBe(false)
+      // New appliance appeared → set changed → refreshSubscription called
+      expect(mockLivestream.refreshSubscription).toHaveBeenCalled()
     })
   })
 
-  describe('polling cycle interrupted by shutdown mid-flight', () => {
-    it('should not poll again after shutdown is called between intervals', async () => {
-      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+  describe('handleStreamEvent', () => {
+    it('should trigger reseed when cache is not a raw Appliance', async () => {
+      const { cache } = await import('@/cache.js')
 
-      await orchestrator.initializeAppliance(mockStub, 0)
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Cache holds normalized state (not raw Appliance)
+      vi.mocked(cache.get).mockReturnValue({ applianceId: 'appliance-1', deviceId: 'x', mode: 'cool' })
+
+      orchestrator.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'WorkMode',
+        value: 1,
+      })
+
+      // Reseed should be triggered to self-heal the cache
       await vi.advanceTimersByTimeAsync(0)
-
-      const callsAfterFirstPoll = vi.mocked(client.getApplianceState).mock.calls.length
-
-      // Shut down before next interval fires
-      orchestrator.shutdown()
-
-      // Advance past the next refresh interval
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-
-      // No additional state fetches should have happened
-      expect(vi.mocked(client.getApplianceState).mock.calls.length).toBe(callsAfterFirstPoll)
-      expect(orchestrator.isShuttingDown).toBe(true)
+      expect(client.reseedApplianceState).toHaveBeenCalled()
     })
 
-    it('should not throw when shutdown is called while a getApplianceState call is in-flight', async () => {
-      let resolveStateCall: () => void = () => {}
+    it('should apply delta and publish when cache holds raw Appliance and state differs', async () => {
+      const { cache } = await import('@/cache.js')
+      const { createAppliance } = await import('@/appliances/factory.js')
 
-      vi.mocked(client.getApplianceState).mockReturnValue(
-        new Promise<undefined>((resolve) => {
-          resolveStateCall = () => resolve(undefined)
-        }),
-      )
+      // Mock raw Appliance in cache
+      const rawAppliance = {
+        applianceId: 'appliance-1',
+        properties: {
+          reported: { WorkMode: 1, targetTemperatureC: 20 },
+        },
+      }
+      vi.mocked(cache.get).mockReturnValue(rawAppliance)
 
-      await orchestrator.initializeAppliance(mockStub, 0)
+      await orchestrator.initializeAppliance(mockStub)
 
-      // Advance timer to trigger the polling call (now in-flight)
-      vi.advanceTimersByTime(0)
+      // Get the appliance instance and make normalizeState return different values
+      const applianceInstance = orchestrator.getApplianceInstances().get('appliance-1')
+      if (applianceInstance) {
+        vi.mocked(applianceInstance.normalizeState)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+          } as unknown as import('@/types/normalized.js').NormalizedState)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'heat',
+          } as unknown as import('@/types/normalized.js').NormalizedState)
+      }
 
-      // Shut down while the call is pending
-      orchestrator.shutdown()
+      // Suppress unused variable warning
+      void createAppliance
 
-      // Resolve the pending call
-      resolveStateCall()
+      orchestrator.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'WorkMode',
+        value: 2,
+      })
 
-      // Let microtasks drain
-      await vi.advanceTimersByTimeAsync(0)
-
-      expect(orchestrator.isShuttingDown).toBe(true)
-      // No unhandled rejection — test would fail if one was thrown
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', expect.any(String))
     })
 
-    it('should not leak a polling interval when shutdown completes before the initial poll resolves', async () => {
-      let resolveStateCall: () => void = () => {}
+    it('should not publish when delta produces no differences', async () => {
+      const { cache } = await import('@/cache.js')
 
-      vi.mocked(client.getApplianceState).mockReturnValue(
-        new Promise<undefined>((resolve) => {
-          resolveStateCall = () => resolve(undefined)
-        }),
-      )
+      const rawAppliance = {
+        applianceId: 'appliance-1',
+        properties: { reported: { WorkMode: 1 } },
+      }
+      vi.mocked(cache.get).mockReturnValue(rawAppliance)
 
-      await orchestrator.initializeAppliance(mockStub, 0)
+      await orchestrator.initializeAppliance(mockStub)
 
-      // Trigger the initial poll (in-flight)
-      vi.advanceTimersByTime(0)
+      // Same normalized state before and after — no diff
+      const applianceInstance = orchestrator.getApplianceInstances().get('appliance-1')
+      if (applianceInstance) {
+        const sameState = {
+          applianceId: 'appliance-1',
+          deviceId: 'x',
+          mode: 'cool',
+        } as unknown as import('@/types/normalized.js').NormalizedState
+        vi.mocked(applianceInstance.normalizeState).mockReturnValue(sameState)
+      }
 
-      // Shutdown completes — clears applianceStateIntervals sweep
-      orchestrator.shutdown()
+      vi.mocked(mqtt.publish).mockClear()
 
-      // Initial poll resolves after shutdown — .finally() must not create an interval
-      resolveStateCall()
+      orchestrator.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'WorkMode',
+        value: 1,
+      })
+
+      expect(mqtt.publish).not.toHaveBeenCalled()
+    })
+
+    it('should do nothing for unknown appliance', () => {
+      orchestrator.handleStreamEvent({
+        applianceId: 'unknown-appliance',
+        property: 'WorkMode',
+        value: 0,
+      })
+
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
+      expect(mqtt.publish).not.toHaveBeenCalled()
+    })
+
+    it('should log error when self-heal reseed rejects', async () => {
+      const { cache } = await import('@/cache.js')
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Cache holds normalized state — triggers self-heal path
+      vi.mocked(cache.get).mockReturnValue({ applianceId: 'appliance-1', deviceId: 'x', mode: 'cool' })
+
+      // Make the reseed reject
+      vi.mocked(client.reseedApplianceState).mockRejectedValueOnce(new Error('Network error'))
+
+      loggerErrorSpy.mockClear()
+
+      orchestrator.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'WorkMode',
+        value: 2,
+      })
+
+      // Let the promise rejection settle
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(orchestrator.isShuttingDown).toBe(true)
-      // If an interval leaked, advancing time would trigger getApplianceState again
-      const callsAtShutdown = vi.mocked(client.getApplianceState).mock.calls.length
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-      expect(vi.mocked(client.getApplianceState).mock.calls.length).toBe(callsAtShutdown)
+      expect(loggerErrorSpy).toHaveBeenCalled()
     })
   })
 
-  describe('API failure tracking and restart', () => {
-    let exitSpy: ReturnType<typeof vi.spyOn>
+  describe('initializeLivestream', () => {
+    function createMockLivestream() {
+      return {
+        start: vi.fn(),
+        stop: vi.fn(),
+        onReconnect: vi.fn(),
+        onEvent: vi.fn(),
+        refreshSubscription: vi.fn(),
+        isStreamConnected: vi.fn(() => false),
+      }
+    }
 
-    beforeEach(() => {
-      exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number | string | null | undefined) => {
-        // Intentionally does not throw — the spy records the call.
-        // Throwing here would escape the async interval boundary and become
-        // an unhandled rejection, causing false failures in other tests.
-        return undefined as never
-      })
+    it('should register reconnect and event hooks then call start', () => {
+      const mockLivestream = createMockLivestream()
+
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
+
+      expect(mockLivestream.onReconnect).toHaveBeenCalledWith(expect.any(Function))
+      expect(mockLivestream.onEvent).toHaveBeenCalledWith(expect.any(Function))
+      expect(mockLivestream.start).toHaveBeenCalled()
     })
 
-    afterEach(() => {
-      exitSpy.mockRestore()
+    it('should be idempotent — second call does nothing', () => {
+      const mockLivestream = createMockLivestream()
+
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
+
+      expect(mockLivestream.start).toHaveBeenCalledTimes(1)
     })
 
-    it('should call process.exit(1) after sustained API failure exceeding threshold', async () => {
-      const thresholdMs = 500
-      const shortThresholdOrchestrator = new Orchestrator(client, mqtt, {
-        ...defaultConfig,
-        refreshInterval: 100,
-        apiFailureRestartThresholdMs: thresholdMs,
-        healthCheckEnabled: true,
-      })
+    it('should forward stream events to handleStreamEvent via onEvent callback', async () => {
+      const { cache } = await import('@/cache.js')
+      const mockLivestream = createMockLivestream()
 
-      // getApplianceState returns undefined = API failure
-      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.runAllTimersAsync()
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
 
-      await shortThresholdOrchestrator.initializeAppliance(mockStub, 0)
+      // Capture the onEvent callback
+      const eventHook = vi.mocked(mockLivestream.onEvent).mock.calls[0]?.[0]
+      expect(eventHook).toBeDefined()
 
-      // Advance past initial delay — first poll fires (no exit yet, just started)
+      // Set cache to normalized state to trigger self-heal path (simplest observable effect)
+      vi.mocked(cache.get).mockReturnValue({ applianceId: 'appliance-1', deviceId: 'x', mode: 'cool' })
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      // Invoke the callback — should route through handleStreamEvent
+      if (eventHook) {
+        eventHook({ applianceId: 'appliance-1', property: 'WorkMode', value: 2 })
+      }
+
       await vi.advanceTimersByTimeAsync(0)
-
-      // Advance time so the failure duration exceeds threshold, triggering exit on next poll
-      vi.setSystemTime(Date.now() + thresholdMs + 100)
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(exitSpy).toHaveBeenCalledWith(1)
+      expect(client.reseedApplianceState).toHaveBeenCalled()
     })
 
-    it('should not call process.exit on transient failure under threshold', async () => {
-      const thresholdMs = 5000
-      const orchestratorWithThreshold = new Orchestrator(client, mqtt, {
-        ...defaultConfig,
-        refreshInterval: 100,
-        apiFailureRestartThresholdMs: thresholdMs,
-        healthCheckEnabled: true,
-      })
+    it('should reseed all appliances on reconnect', async () => {
+      const mockLivestream = createMockLivestream()
 
-      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
+      await orchestrator.initializeAppliance(mockStub)
+      // Drain the initial seed setTimeout(0) before wiring the livestream
+      await vi.runAllTimersAsync()
 
-      await orchestratorWithThreshold.initializeAppliance(mockStub, 0)
-      await vi.advanceTimersByTimeAsync(0)
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
 
-      // Advance time but stay under threshold
-      vi.setSystemTime(Date.now() + thresholdMs - 1000)
-      await vi.advanceTimersByTimeAsync(100)
+      // Capture the reconnect hook
+      const reconnectHook = vi.mocked(mockLivestream.onReconnect).mock.calls[0]?.[0]
+      expect(reconnectHook).toBeDefined()
 
-      expect(exitSpy).not.toHaveBeenCalled()
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      // Run all timers concurrently so the 100ms stagger setTimeout resolves
+      const reconnectPromise = reconnectHook ? reconnectHook() : Promise.resolve()
+      await vi.runAllTimersAsync()
+      await reconnectPromise
+
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(1)
     })
 
-    it('should reset failure tracking after a successful API call', async () => {
-      const thresholdMs = 500
-      const orchestratorWithThreshold = new Orchestrator(client, mqtt, {
-        ...defaultConfig,
-        refreshInterval: 100,
-        apiFailureRestartThresholdMs: thresholdMs,
-        healthCheckEnabled: true,
-      })
+    it('should stop reseeding on reconnect when shutting down', async () => {
+      const mockLivestream = createMockLivestream()
 
-      // First: return undefined (failure), then a defined value (success)
-      vi.mocked(client.getApplianceState)
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValue({} as Awaited<ReturnType<typeof client.getApplianceState>>)
+      const anotherStub: ApplianceStub = {
+        applianceId: 'appliance-2',
+        applianceName: 'Another AC',
+        applianceType: 'PORTABLE_AIR_CONDITIONER',
+        created: '2024-01-01T00:00:00Z',
+      }
 
-      await orchestratorWithThreshold.initializeAppliance(mockStub, 0)
+      await orchestrator.initializeAppliance(mockStub)
+      await orchestrator.initializeAppliance(anotherStub)
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
 
-      // First poll — failure, but timer resets on next success
-      await vi.advanceTimersByTimeAsync(0)
+      orchestrator.isShuttingDown = true
 
-      // Advance system time past threshold
-      vi.setSystemTime(Date.now() + thresholdMs + 100)
+      const reconnectHook = vi.mocked(mockLivestream.onReconnect).mock.calls[0]?.[0]
+      vi.mocked(client.reseedApplianceState).mockClear()
+      if (reconnectHook) await reconnectHook()
 
-      // Second poll — success, resets lastSuccessfulApiCall
-      await vi.advanceTimersByTimeAsync(100)
-
-      // Third poll — should NOT exit because timer was reset
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(exitSpy).not.toHaveBeenCalled()
-    })
-
-    it('should not call process.exit when isShuttingDown is true', async () => {
-      const thresholdMs = 100
-      const orchestratorWithThreshold = new Orchestrator(client, mqtt, {
-        ...defaultConfig,
-        refreshInterval: 50,
-        apiFailureRestartThresholdMs: thresholdMs,
-        healthCheckEnabled: true,
-      })
-
-      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
-
-      await orchestratorWithThreshold.initializeAppliance(mockStub, 0)
-
-      // Mark as shutting down before first poll fires
-      orchestratorWithThreshold.isShuttingDown = true
-
-      vi.setSystemTime(Date.now() + thresholdMs + 100)
-      await vi.advanceTimersByTimeAsync(thresholdMs + 100)
-
-      expect(exitSpy).not.toHaveBeenCalled()
-    })
-
-    it('should not call process.exit when healthCheckEnabled is false', async () => {
-      const thresholdMs = 100
-      const orchestratorNoHealth = new Orchestrator(client, mqtt, {
-        ...defaultConfig,
-        refreshInterval: 50,
-        apiFailureRestartThresholdMs: thresholdMs,
-        healthCheckEnabled: false,
-      })
-
-      vi.mocked(client.getApplianceState).mockResolvedValue(undefined)
-
-      await orchestratorNoHealth.initializeAppliance(mockStub, 0)
-      await vi.advanceTimersByTimeAsync(0)
-
-      vi.setSystemTime(Date.now() + thresholdMs + 100)
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(exitSpy).not.toHaveBeenCalled()
+      // Should stop early — at most 0 reseeds (shutting down before first iteration)
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
     })
   })
 
@@ -982,17 +933,77 @@ describe('Orchestrator', () => {
       expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify(cachedState2))
       expect(mqtt.publish).toHaveBeenCalledTimes(2)
     })
+
+    it('should normalize a raw Appliance from cache before republishing on reconnect', async () => {
+      const { cache } = await import('@/cache.js')
+
+      // Cache holds a raw Appliance (the shape stored after reseed/stream-delta)
+      vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Make normalizeState return a realistic normalized object
+      const expectedNormalized: NormalizedState = {
+        applianceId: 'appliance-1',
+        deviceId: 'device-123',
+        mode: 'cool',
+        applianceState: 'on',
+        targetTemperatureC: 22,
+        ambientTemperatureC: 24,
+        fanSpeedSetting: 'auto',
+        verticalSwing: 'on',
+        sleepMode: 'off',
+      } as unknown as NormalizedState
+
+      const applianceInstance = orchestrator.getApplianceInstances().get('appliance-1')
+      expect(applianceInstance).toBeDefined()
+      if (applianceInstance) {
+        vi.mocked(applianceInstance.normalizeState).mockReturnValue(expectedNormalized)
+      }
+
+      const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
+      vi.mocked(mqtt.publish).mockClear()
+
+      reconnectCb?.()
+
+      // Must publish the normalized form, NOT the raw Appliance with nested properties
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(expectedNormalized))
+      // Verify the published payload has top-level normalized fields and no `properties` key
+      const publishedPayload = JSON.parse((vi.mocked(mqtt.publish).mock.calls[0] as [string, string])[1]) as Record<
+        string,
+        unknown
+      >
+      expect(publishedPayload).not.toHaveProperty('properties')
+      expect(publishedPayload).toHaveProperty('mode', 'cool')
+    })
+
+    it('should publish already-normalized state as-is on reconnect (not an Appliance shape)', async () => {
+      const { cache } = await import('@/cache.js')
+
+      // An already-normalized state object (from command feedback path)
+      const normalizedState = { applianceId: 'appliance-1', deviceId: 'x', mode: 'heat', targetTemperatureC: 24 }
+      vi.mocked(cache.get).mockReturnValue(normalizedState)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
+      vi.mocked(mqtt.publish).mockClear()
+
+      reconnectCb?.()
+
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(normalizedState))
+    })
   })
 
-  describe('polling loop rejection guard (m11)', () => {
-    it('should not cause unhandled rejection and should log error when getApplianceState rejects on initial poll', async () => {
+  describe('seed rejection guard', () => {
+    it('should not cause unhandled rejection and should log error when reseedApplianceState rejects', async () => {
       loggerErrorSpy.mockClear()
 
-      vi.mocked(client.getApplianceState).mockRejectedValue(new Error('Network timeout'))
+      vi.mocked(client.reseedApplianceState).mockRejectedValue(new Error('Network timeout'))
 
-      await orchestrator.initializeAppliance(mockStub, 0)
+      await orchestrator.initializeAppliance(mockStub)
 
-      // Advance past delay to fire the setTimeout callback
+      // Advance past setTimeout(0) to fire the seed
       await vi.advanceTimersByTimeAsync(0)
 
       // The orchestrator must not have crashed
@@ -1001,28 +1012,103 @@ describe('Orchestrator', () => {
       // Error should have been logged
       expect(loggerErrorSpy).toHaveBeenCalled()
     })
+  })
 
-    it('should not cause unhandled rejection and should log error when getApplianceState rejects in interval', async () => {
-      loggerErrorSpy.mockClear()
+  describe('API failure tracking and restart', () => {
+    let exitSpy: ReturnType<typeof vi.spyOn>
 
-      // First call succeeds, subsequent calls reject
-      vi.mocked(client.getApplianceState)
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValue(new Error('MQTT broker went away'))
+    beforeEach(() => {
+      exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number | string | null | undefined) => {
+        // Intentionally does not throw — the spy records the call.
+        return undefined as never
+      })
+    })
 
-      await orchestrator.initializeAppliance(mockStub, 0)
+    afterEach(() => {
+      exitSpy.mockRestore()
+    })
 
-      // Fire initial poll
+    it('should call process.exit(1) when stream signal exceeds failure threshold', async () => {
+      const thresholdMs = 500
+      const mockLivestream = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        onReconnect: vi.fn(),
+        onEvent: vi.fn(),
+        refreshSubscription: vi.fn(),
+        isStreamConnected: vi.fn(() => true),
+      }
+
+      const shortThresholdOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        idleTimeoutMs: 100,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: true,
+      })
+
+      shortThresholdOrchestrator.initializeLivestream(
+        mockLivestream as unknown as import('@/livestream.js').LivestreamClient,
+      )
+
+      await shortThresholdOrchestrator.initializeAppliance(mockStub)
+
+      // reseedApplianceState returns undefined = API failure
+      vi.mocked(client.reseedApplianceState).mockResolvedValue(undefined)
+
+      // Advance past timeout(0) to trigger the initial seed (which returns undefined)
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
       await vi.advanceTimersByTimeAsync(0)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
 
-      // Fire one interval — rejection should be caught, not crash
-      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    })
 
-      // Orchestrator must still be running
-      expect(orchestrator.isShuttingDown).toBe(false)
-      expect(loggerErrorSpy).toHaveBeenCalled()
+    it('should not call process.exit when healthCheckEnabled is false', async () => {
+      const thresholdMs = 100
+      const mockLivestream = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        onReconnect: vi.fn(),
+        onEvent: vi.fn(),
+        refreshSubscription: vi.fn(),
+        isStreamConnected: vi.fn(() => true),
+      }
+
+      const orchestratorNoHealth = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: false,
+      })
+
+      orchestratorNoHealth.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
+      vi.mocked(client.reseedApplianceState).mockResolvedValue(undefined)
+
+      await orchestratorNoHealth.initializeAppliance(mockStub)
+
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(exitSpy).not.toHaveBeenCalled()
+    })
+
+    it('should not call process.exit when isShuttingDown is true', async () => {
+      const thresholdMs = 100
+      const shortThresholdOrchestrator = new Orchestrator(client, mqtt, {
+        ...defaultConfig,
+        apiFailureRestartThresholdMs: thresholdMs,
+        healthCheckEnabled: true,
+      })
+
+      vi.mocked(client.reseedApplianceState).mockResolvedValue(undefined)
+
+      await shortThresholdOrchestrator.initializeAppliance(mockStub)
+
+      // Mark as shutting down before seed fires
+      shortThresholdOrchestrator.isShuttingDown = true
+
+      vi.setSystemTime(Date.now() + thresholdMs + 100)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(exitSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -1179,11 +1265,79 @@ describe('Orchestrator', () => {
 
       expect(mqtt.unsubscribeAbsolute).not.toHaveBeenCalled()
     })
+
+    it('should normalize a raw Appliance from cache before republishing on birth', async () => {
+      const { cache } = await import('@/cache.js')
+
+      // Cache holds a raw Appliance (shape stored after reseed)
+      vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      const expectedNormalized: NormalizedState = {
+        applianceId: 'appliance-1',
+        deviceId: 'device-123',
+        mode: 'cool',
+        applianceState: 'on',
+        targetTemperatureC: 22,
+        ambientTemperatureC: 24,
+        fanSpeedSetting: 'auto',
+        verticalSwing: 'on',
+        sleepMode: 'off',
+      } as unknown as NormalizedState
+
+      const applianceInstance = orchestrator.getApplianceInstances().get('appliance-1')
+      expect(applianceInstance).toBeDefined()
+      if (applianceInstance) {
+        vi.mocked(applianceInstance.normalizeState).mockReturnValue(expectedNormalized)
+      }
+
+      const [, birthHandler] = vi.mocked(mqtt.subscribeAbsolute).mock.calls[0] as [
+        string,
+        (topic: string, message: Buffer) => void,
+      ]
+
+      vi.mocked(mqtt.publish).mockClear()
+      vi.mocked(mqtt.autoDiscovery).mockClear()
+
+      birthHandler('homeassistant/status', Buffer.from('online'))
+
+      // Must publish the normalized form, NOT the raw Appliance with nested properties
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(expectedNormalized))
+      const publishedPayload = JSON.parse((vi.mocked(mqtt.publish).mock.calls[0] as [string, string])[1]) as Record<
+        string,
+        unknown
+      >
+      expect(publishedPayload).not.toHaveProperty('properties')
+      expect(publishedPayload).toHaveProperty('mode', 'cool')
+    })
+
+    it('should publish already-normalized state as-is on birth (not an Appliance shape)', async () => {
+      const { cache } = await import('@/cache.js')
+
+      // Already-normalized state (from command feedback path)
+      const normalizedState = { applianceId: 'appliance-1', deviceId: 'x', mode: 'dry', targetTemperatureC: 20 }
+      vi.mocked(cache.get).mockReturnValue(normalizedState)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      const [, birthHandler] = vi.mocked(mqtt.subscribeAbsolute).mock.calls[0] as [
+        string,
+        (topic: string, message: Buffer) => void,
+      ]
+
+      vi.mocked(mqtt.publish).mockClear()
+      vi.mocked(mqtt.autoDiscovery).mockClear()
+
+      birthHandler('homeassistant/status', Buffer.from('online'))
+
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(normalizedState))
+    })
   })
 
   describe('shutdown', () => {
     it('should clean up orchestrator-owned resources', async () => {
-      // Initialize an appliance first to create intervals
+      // Initialize an appliance first
       await orchestrator.initializeAppliance(mockStub)
 
       orchestrator.shutdown()
@@ -1191,6 +1345,22 @@ describe('Orchestrator', () => {
       expect(orchestrator.isShuttingDown).toBe(true)
       expect(client.cleanup).toHaveBeenCalled()
       expect(mqtt.disconnect).toHaveBeenCalled()
+    })
+
+    it('should stop the livestream on shutdown', () => {
+      const mockLivestream = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        onReconnect: vi.fn(),
+        onEvent: vi.fn(),
+        refreshSubscription: vi.fn(),
+        isStreamConnected: vi.fn(() => false),
+      }
+
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
+      orchestrator.shutdown()
+
+      expect(mockLivestream.stop).toHaveBeenCalled()
     })
 
     it('should be idempotent', () => {

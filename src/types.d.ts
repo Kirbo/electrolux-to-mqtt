@@ -1,3 +1,10 @@
+export type LivestreamConfig = {
+  url: string
+  appliances: Array<{ applianceId: string; properties: string[] }>
+}
+
+export type StreamEvent = { applianceId: string; property: string; value: unknown }
+
 export type ApplianceStub = {
   applianceId: string
   applianceName: string

@@ -170,7 +170,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
         if (!info) continue
 
         const appliance = createAppliance(stub, info)
-        const state = await client.getApplianceState(appliance)
+        const state = await client.reseedApplianceState(appliance)
 
         expect(state).toBeDefined()
 
@@ -214,7 +214,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
         writeSnapshot(path.join(modelPath, 'appliance-info.json'), info)
 
         const appliance = createAppliance(stub, info)
-        const state = await client.getApplianceState(appliance)
+        const state = await client.reseedApplianceState(appliance)
         if (state) {
           writeSnapshot(path.join(modelPath, 'appliance-state.json'), state)
         }
