@@ -3,6 +3,7 @@
 - [Run Biome before committing](feedback_biome_before_commit.md) — pnpm check before every commit; stage Biome's formatting changes and include in the same commit
 - [Deferred review items (2026-06-01)](project_review_deferred.md) — optional/scope items left undone after the F1–F6 review: PORT NaN guard, exactOptionalPropertyTypes, mqtt import side-effect, factory single-model fallback
 - [Delegate by default](feedback_delegate_by_default.md) — propose engineer/subagent delegation for code work by default; only handle directly when explicitly told, and that's one-time per task
+- [Apply fixes directly](feedback_apply_fixes_directly.md) — when asked to fix, edit the working tree + prove it; don't paste code and ask "apply this?"
 - [CalVer migration](project_calver_migration.md) — SemVer→CalVer (HA-style `YYYY.M.MICRO`/`bN`) complete: git-cliff generates per-release notes, combine-changelogs aggregates; only the 1.19.0→2026.6.0 release-notes announcement is left (human, at release)
 - [SOPS env-file encryption](project_sops_secrets.md) — age PQ (ML-KEM-768) key in 1Password "electrolux-to-mqtt age key"; needs age ≥ 1.3.0; `pnpm sops:*`; pending: rotate exposed SONAR_TOKEN
 - [Auto-update decision](project_auto_update_decision.md) — in-app image self-update rejected (Docker socket breaks hardening); Watchtower-via-compose-profile is the sanctioned path if revisited
