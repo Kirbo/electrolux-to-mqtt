@@ -155,7 +155,7 @@ const envSchema = z.object({
   ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
   ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: z.coerce.number().optional(),
-  ELECTROLUX_API_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(120).optional(),
+  ELECTROLUX_API_TIMEOUT_SECONDS: z.coerce.number().optional(),
   HOME_ASSISTANT_AUTO_DISCOVERY: z
     .string()
     .optional()
