@@ -32,7 +32,8 @@ vi.mock('@/config.js', () => ({
       username: 'test@example.com',
       password: 'test-pass',
       countryCode: 'US',
-      safetyRefreshInterval: 21600,
+      refreshInterval: 60,
+      commandStateDelaySeconds: 30,
       applianceDiscoveryInterval: 300,
       renewTokenBeforeExpiry: 60,
       livestreamIdleTimeoutSeconds: 120,
@@ -258,8 +259,9 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
       await indexModule.main()
 
-      // Appliance was passed to orchestrator.initializeAppliance
-      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(fakeAppliance)
+      // Appliance was passed to orchestrator.initializeAppliance with staggered delay
+      // (1 appliance → delay=0 for the first/only appliance)
+      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(fakeAppliance, 0)
 
       vi.useRealTimers()
     })
@@ -339,51 +341,18 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       vi.useRealTimers()
     })
 
-    it('should call reseedApplianceState for each appliance on safety refresh interval tick', async () => {
-      const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
-
-      // Mock getApplianceInstances to return the appliance
-      const fakeApplianceInstance = { getApplianceId: () => 'appliance-1' }
-      mockOrchestratorInstance.getApplianceInstances = vi
-        .fn()
-        .mockReturnValue(new Map([['appliance-1', fakeApplianceInstance]]))
-
-      const reseedSpy = vi.fn().mockResolvedValue(undefined)
-      ;(mockClientInstance as unknown as Record<string, unknown>).reseedApplianceState = reseedSpy
-
-      vi.useFakeTimers()
-      mockOrchestratorInstance.isShuttingDown = false
+    it('should call initializeAppliance with staggered delay for each appliance', async () => {
+      const fakeAppliance1 = { applianceId: 'appliance-1', applianceName: 'AC 1', applianceType: 'AC' }
+      const fakeAppliance2 = { applianceId: 'appliance-2', applianceName: 'AC 2', applianceType: 'AC' }
+      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance1, fakeAppliance2])
 
       await indexModule.main()
 
-      // Advance by safetyRefreshInterval (21600s) to trigger the safety refresh interval
-      vi.advanceTimersByTime(21_600_000)
-
-      expect(reseedSpy).toHaveBeenCalledTimes(1)
-      expect(reseedSpy).toHaveBeenCalledWith(fakeApplianceInstance)
-
-      vi.useRealTimers()
-    })
-
-    it('should clear safety refresh interval when orchestrator is shutting down on tick', async () => {
-      const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
-      mockOrchestratorInstance.isShuttingDown = true
-
-      const reseedSpy = vi.fn().mockResolvedValue(undefined)
-      ;(mockClientInstance as unknown as Record<string, unknown>).reseedApplianceState = reseedSpy
-
-      vi.useFakeTimers()
-
-      await indexModule.main()
-
-      vi.advanceTimersByTime(21_600_000)
-
-      // Should not reseed when shutting down
-      expect(reseedSpy).not.toHaveBeenCalled()
-
-      vi.useRealTimers()
+      // With refreshInterval=60 and 2 appliances, stagger = 30000ms per appliance
+      // First appliance: delay=0, second: delay=30000
+      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledTimes(2)
+      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(fakeAppliance1, 0)
+      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(fakeAppliance2, 30_000)
     })
   })
 

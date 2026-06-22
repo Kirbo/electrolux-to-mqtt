@@ -11,14 +11,16 @@ import { LivestreamClient } from '@/livestream.js'
 import type { LivestreamConfig, StreamEvent } from '@/types.js'
 
 // ---------------------------------------------------------------------------
-// Logger mock — prevent pino output during tests
+// Logger mock — prevent pino output during tests; hoist debug spy for assertions
 // ---------------------------------------------------------------------------
+const loggerDebugSpy = vi.hoisted(() => vi.fn())
+
 vi.mock('@/logger.js', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-    debug: vi.fn(),
+    debug: loggerDebugSpy,
   })),
 }))
 
@@ -689,6 +691,270 @@ describe('LivestreamClient', () => {
 
       // getLivestreamConfig called again after backoff
       expect(getLivestreamConfig.mock.calls.length).toBeGreaterThanOrEqual(2)
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Diagnostic debug logging
+  // -------------------------------------------------------------------------
+
+  describe('debug logging — connect', () => {
+    it('logs a debug message with origin+pathname (no query string) when the stream connects', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      // Use a URL with a query-string auth token to verify it is stripped
+      const cfgWithToken: LivestreamConfig = {
+        url: 'https://livestream.example.com/events?token=secret123',
+        appliances: [{ applianceId: 'appl-1', properties: ['mode'] }],
+      }
+      const client = makeMockClient({
+        getLivestreamConfig: vi.fn(() => Promise.resolve(cfgWithToken)),
+      })
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+
+      loggerDebugSpy.mockClear()
+      ls.start()
+      await flushPromises()
+
+      // Must have logged a connect message — must not include the token
+      const debugCalls = loggerDebugSpy.mock.calls
+      const connectCall = debugCalls.find(
+        (args: unknown[]) => typeof args[1] === 'string' && args[1].toLowerCase().includes('connect'),
+      )
+      expect(connectCall).toBeDefined()
+      // The logged object must include the URL without the query string
+      const loggedObj = connectCall?.[0] as Record<string, unknown>
+      expect(typeof loggedObj?.url).toBe('string')
+      expect(loggedObj?.url).not.toContain('secret123')
+      expect(loggedObj?.url).toContain('/events')
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  describe('debug logging — heartbeat/comment lines', () => {
+    it('logs a debug message when a heartbeat/comment SSE line is received', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      s.push(': keep-alive\n')
+      await flushPromises()
+
+      // At least one debug call should mention heartbeat/keepalive/comment
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      const heartbeatCall = debugCalls.find((args) =>
+        typeof args[0] === 'string'
+          ? args[0].toLowerCase().includes('heartbeat') || args[0].toLowerCase().includes('keep')
+          : typeof args[1] === 'string' &&
+            (args[1].toLowerCase().includes('heartbeat') || args[1].toLowerCase().includes('keep')),
+      )
+      expect(heartbeatCall).toBeDefined()
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  describe('debug logging — named event: line', () => {
+    it('logs a debug message with the event name when an event: line arrives (e.g. event:ping)', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      s.push('event: update\n')
+      await flushPromises()
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      // Should log the event name via the named-event handler
+      const namedEventCall = debugCalls.find((args) => {
+        const obj = args[0]
+        if (typeof obj === 'object' && obj !== null) {
+          return JSON.stringify(obj).includes('update')
+        }
+        return false
+      })
+      expect(namedEventCall).toBeDefined()
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  describe('debug logging — unexpected (non-data:, non-event:) line', () => {
+    it('logs a debug message with the line content when a truly unexpected line arrives', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      s.push('id: 12345\n') // SSE id field — not data: or event: or comment
+      await flushPromises()
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      const unexpectedCall = debugCalls.find((args) => {
+        const obj = args[0]
+        if (typeof obj === 'object' && obj !== null) {
+          return JSON.stringify(obj).includes('id: 12345')
+        }
+        return typeof obj === 'string' && obj.includes('id: 12345')
+      })
+      expect(unexpectedCall).toBeDefined()
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  describe('debug logging — data: payload received', () => {
+    it('logs a debug message with the raw payload string before parsing for each data: line', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      const payload = '{"applianceId":"appl-1","property":"mode","value":"cool"}'
+      s.push(`data: ${payload}\n`)
+      await flushPromises()
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      // Must have a debug call containing the raw payload string
+      const payloadCall = debugCalls.find((args) => {
+        const obj = args[0]
+        if (typeof obj === 'object' && obj !== null) {
+          return (obj as Record<string, unknown>).payload === payload
+        }
+        return false
+      })
+      expect(payloadCall).toBeDefined()
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  describe('debug logging — parse failure (null return from parseStreamEventData)', () => {
+    it('logs a debug message with the raw payload when parseStreamEventData returns null', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      // Valid JSON but not a StreamEvent shape (no applianceId)
+      const badPayload = '{"type":"heartbeat","sequence":42}'
+      s.push(`data: ${badPayload}\n`)
+      await flushPromises()
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      // Must have a debug call about parse failure that includes the raw payload
+      const parseFailCall = debugCalls.find((args) => {
+        const obj = args[0]
+        const msg = typeof args[1] === 'string' ? args[1] : ''
+        const hasPayload =
+          typeof obj === 'object' && obj !== null && (obj as Record<string, unknown>).payload === badPayload
+        const mentionsFailure = msg.toLowerCase().includes('parse') || msg.toLowerCase().includes('did not')
+        return hasPayload && mentionsFailure
+      })
+      expect(parseFailCall).toBeDefined()
+
+      await ls[Symbol.asyncDispose]()
+    })
+
+    it('logs parse failure debug message when data: line contains malformed JSON', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      const malformed = 'not-valid-json'
+      s.push(`data: ${malformed}\n`)
+      await flushPromises()
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      const parseFailCall = debugCalls.find((args) => {
+        const obj = args[0]
+        return typeof obj === 'object' && obj !== null && (obj as Record<string, unknown>).payload === malformed
+      })
+      expect(parseFailCall).toBeDefined()
+
+      await ls[Symbol.asyncDispose]()
+    })
+  })
+
+  describe('debug logging — successful event dispatch', () => {
+    it('logs a debug message with applianceId and property when a valid StreamEvent is dispatched', async () => {
+      const s = makeStream()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(makeResponse(s.stream))),
+      )
+
+      const client = makeMockClient()
+      const ls = new LivestreamClient(client, { reconnectBaseMs: 100, reconnectMaxMs: 200 })
+      ls.start()
+      await flushPromises()
+
+      loggerDebugSpy.mockClear()
+      s.push('data: {"applianceId":"appl-1","property":"mode","value":"heat"}\n')
+      await flushPromises()
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      // Must have a debug call containing applianceId and property from the event
+      const dispatchCall = debugCalls.find((args) => {
+        const obj = args[0]
+        if (typeof obj === 'object' && obj !== null) {
+          const o = obj as Record<string, unknown>
+          return o.applianceId === 'appl-1' && o.property === 'mode'
+        }
+        return false
+      })
+      expect(dispatchCall).toBeDefined()
 
       await ls[Symbol.asyncDispose]()
     })

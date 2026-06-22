@@ -22,12 +22,12 @@ const configSchema = z.object({
       username: z.string(),
       password: z.string(),
       countryCode: z.string().regex(/^[A-Z]{2}$/i, 'must be a two-letter country code (e.g. FI, SE)'),
-      safetyRefreshInterval: z
+      refreshInterval: z
         .number()
         .int()
-        .min(600, 'must be at least 600 seconds (10 minutes)')
-        .max(86400, 'should not exceed 86400 seconds (24 hours)')
-        .default(21600),
+        .min(10, 'must be at least 10 seconds')
+        .max(3600, 'should not exceed 3600 seconds')
+        .default(60),
       applianceDiscoveryInterval: z
         .number()
         .int()
@@ -40,6 +40,12 @@ const configSchema = z.object({
         .min(5, 'must be at least 5 minutes')
         .max(715, 'should not exceed 715 minutes (API tokens last 720 minutes)')
         .default(60),
+      commandStateDelaySeconds: z
+        .number()
+        .int()
+        .min(5, 'must be at least 5 seconds (API needs time to register the command)')
+        .max(300, 'should not exceed 300 seconds (5 minutes)')
+        .default(30),
       applianceRemovalGracePeriodMinutes: z
         .number()
         .int()
@@ -69,19 +75,19 @@ const configSchema = z.object({
     })
     .check((ctx) => {
       // Cross-field guard: the token must remain valid long enough to cover at least one
-      // full appliance-discovery cycle. Discovery is the most frequent recurring API activity
-      // now that state polling is replaced by SSE. safetyRefreshInterval is intentionally
-      // excluded — at its minimum (10 min) it would still be within discovery's max (60 min),
-      // and its default (6h) far exceeds discovery's default (5 min), so it does not drive
-      // the "token may expire between intervals" concern.
+      // full cycle of the longest recurring API interval (polling or discovery). Both
+      // refreshInterval (state polling, source of truth) and applianceDiscoveryInterval
+      // drive recurring API calls; the token must outlast the longer of the two.
       const renewMinutes = ctx.value.renewTokenBeforeExpiry
+      const refreshSeconds = ctx.value.refreshInterval
       const discoverySeconds = ctx.value.applianceDiscoveryInterval
-      const discoveryMinutes = discoverySeconds / 60
-      if (renewMinutes < discoveryMinutes) {
+      const longestSeconds = Math.max(refreshSeconds, discoverySeconds)
+      const longestIntervalMinutes = longestSeconds / 60
+      if (renewMinutes < longestIntervalMinutes) {
         ctx.issues.push({
           code: 'custom',
           input: ctx.value,
-          message: `must be at least ${Math.ceil(discoveryMinutes)} minutes (the appliance discovery interval is ${discoverySeconds} seconds). Otherwise the token may expire between discovery runs.`,
+          message: `must be at least ${Math.ceil(longestIntervalMinutes)} minutes (the longest polling interval is ${longestSeconds} seconds). Otherwise the token may expire between polls.`,
           path: ['renewTokenBeforeExpiry'],
         })
       }
@@ -162,9 +168,10 @@ const envSchema = z.object({
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   MQTT_QOS: z.coerce.number().optional(),
-  ELECTROLUX_SAFETY_REFRESH_INTERVAL: z.coerce.number().optional(),
+  ELECTROLUX_REFRESH_INTERVAL: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: z.coerce.number().optional(),
   ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
+  ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: z.coerce.number().optional(),
   ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: z.coerce.number().optional(),
   ELECTROLUX_API_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(120).optional(),
   ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS: z.coerce.number().optional(),
@@ -233,9 +240,10 @@ const configPathToEnvVar: Record<string, string> = {
   'electrolux.username': 'ELECTROLUX_USERNAME',
   'electrolux.password': 'ELECTROLUX_PASSWORD',
   'electrolux.countryCode': 'ELECTROLUX_COUNTRY_CODE',
-  'electrolux.safetyRefreshInterval': 'ELECTROLUX_SAFETY_REFRESH_INTERVAL',
+  'electrolux.refreshInterval': 'ELECTROLUX_REFRESH_INTERVAL',
   'electrolux.applianceDiscoveryInterval': 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL',
   'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
+  'electrolux.commandStateDelaySeconds': 'ELECTROLUX_COMMAND_STATE_DELAY_SECONDS',
   'electrolux.applianceRemovalGracePeriodMinutes': 'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
   'electrolux.apiTimeoutSeconds': 'ELECTROLUX_API_TIMEOUT_SECONDS',
   'electrolux.livestreamIdleTimeoutSeconds': 'ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS',
@@ -320,9 +328,10 @@ function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
       username: envConfig.ELECTROLUX_USERNAME,
       password: envConfig.ELECTROLUX_PASSWORD,
       countryCode: envConfig.ELECTROLUX_COUNTRY_CODE,
-      safetyRefreshInterval: envConfig.ELECTROLUX_SAFETY_REFRESH_INTERVAL,
+      refreshInterval: envConfig.ELECTROLUX_REFRESH_INTERVAL,
       applianceDiscoveryInterval: envConfig.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL,
       renewTokenBeforeExpiry: envConfig.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY,
+      commandStateDelaySeconds: envConfig.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS,
       applianceRemovalGracePeriodMinutes: envConfig.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES,
       apiTimeoutSeconds: envConfig.ELECTROLUX_API_TIMEOUT_SECONDS,
       livestreamIdleTimeoutSeconds: envConfig.ELECTROLUX_LIVESTREAM_IDLE_TIMEOUT_SECONDS,

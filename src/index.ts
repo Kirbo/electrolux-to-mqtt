@@ -24,7 +24,8 @@ const telemetrySalt = crypto
   .digest('hex')
 const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
 
-const safetyRefreshIntervalMs = config.electrolux.safetyRefreshInterval * 1000
+const refreshIntervalMs = config.electrolux.refreshInterval * 1000
+const commandStateDelaySeconds = config.electrolux.commandStateDelaySeconds
 const applianceDiscoveryIntervalMs = config.electrolux.applianceDiscoveryInterval * 1000
 const idleTimeoutMs = config.electrolux.livestreamIdleTimeoutSeconds * 1000
 const reconnectMaxMs = config.electrolux.livestreamReconnectMaxSeconds * 1000
@@ -35,6 +36,8 @@ const livestream = new LivestreamClient(client, {
 })
 
 const orchestrator = new Orchestrator(client, mqtt, {
+  refreshInterval: refreshIntervalMs,
+  commandStateDelaySeconds,
   applianceDiscoveryInterval: applianceDiscoveryIntervalMs,
   autoDiscovery: config.homeAssistant.autoDiscovery,
   apiFailureRestartThresholdMs: config.healthCheck.unHealthyRestartMinutes * 60_000,
@@ -47,7 +50,6 @@ const orchestrator = new Orchestrator(client, mqtt, {
 })
 
 let discoveryIntervalDisposable: Disposable | null = null
-let safetyRefreshIntervalDisposable: Disposable | null = null
 let stopVersionChecker: (() => void) | null = null
 let restartTimeoutDisposable: Disposable | null = null
 
@@ -57,8 +59,6 @@ const shutdown = async () => {
   restartTimeoutDisposable = null
   discoveryIntervalDisposable?.[Symbol.dispose]()
   discoveryIntervalDisposable = null
-  safetyRefreshIntervalDisposable?.[Symbol.dispose]()
-  safetyRefreshIntervalDisposable = null
   if (stopVersionChecker) stopVersionChecker()
   // Stop the stream before shutting down the orchestrator so cleanup is orderly
   await livestream[Symbol.asyncDispose]()
@@ -79,7 +79,7 @@ const waitForLogin = async () => {
 
 export const main = async () => {
   await runStartupMigrations()
-  logger.info(`Safety refresh interval set to: ${safetyRefreshIntervalMs / 1000} seconds`)
+  logger.info(`Appliance refresh interval set to: ${refreshIntervalMs / 1000} seconds`)
 
   // Initialize the client
   await client.initialize()
@@ -90,56 +90,41 @@ export const main = async () => {
 
   if (!appliances) {
     // API call failed (network error, DNS failure, etc.)
-    logger.error(
-      `Failed to fetch appliances due to API error. Retrying in ${safetyRefreshIntervalMs / 1000} seconds...`,
-    )
+    logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshIntervalMs / 1000} seconds...`)
     if (!orchestrator.isShuttingDown) {
       restartTimeoutDisposable = disposableTimeout(() => {
         restartTimeoutDisposable = null
         main().catch((err: unknown) => logger.error('Error in restart:', err))
-      }, safetyRefreshIntervalMs)
+      }, refreshIntervalMs)
     }
     return
   }
 
   if (appliances.length === 0) {
     logger.error(
-      `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${safetyRefreshIntervalMs / 1000} seconds...`,
+      `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshIntervalMs / 1000} seconds...`,
     )
     if (!orchestrator.isShuttingDown) {
       restartTimeoutDisposable = disposableTimeout(() => {
         restartTimeoutDisposable = null
         main().catch((err: unknown) => logger.error('Error in restart:', err))
-      }, safetyRefreshIntervalMs)
+      }, refreshIntervalMs)
     }
     return
   }
 
   logger.info(`Found ${appliances.length} appliance(s), initializing...`)
 
-  // Initialize all appliances (no stagger delay needed — initial seeds fire async)
-  for (const appliance of appliances) {
-    await orchestrator.initializeAppliance(appliance)
+  const totalAppliances = appliances.length
+  const intervalDelay = refreshIntervalMs / totalAppliances
+
+  // Initialize all appliances with staggered delays to distribute API load
+  for (const [i, appliance] of appliances.entries()) {
+    await orchestrator.initializeAppliance(appliance, i * intervalDelay)
   }
 
-  // Wire and start the SSE livestream
+  // Wire and start the SSE livestream (best-effort real-time updates on top of polling)
   orchestrator.initializeLivestream(livestream)
-
-  // Periodic safety refresh: re-seed all appliances to close drift regardless of stream activity.
-  // This is independent of stream reconnects (which also trigger reseeds) and runs infrequently
-  // (default 6h) as a backstop for any state drift that accumulates over long idle periods.
-  safetyRefreshIntervalDisposable = disposableInterval(() => {
-    if (orchestrator.isShuttingDown) {
-      safetyRefreshIntervalDisposable?.[Symbol.dispose]()
-      safetyRefreshIntervalDisposable = null
-      return
-    }
-    for (const appliance of orchestrator.getApplianceInstances().values()) {
-      client
-        .reseedApplianceState(appliance)
-        .catch((err: unknown) => logger.error('Error in safety refresh reseed:', err))
-    }
-  }, safetyRefreshIntervalMs)
 
   // Start periodic appliance discovery
   discoveryIntervalDisposable = disposableInterval(() => {

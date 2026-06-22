@@ -239,6 +239,13 @@ export class ElectroluxClient implements AsyncDisposable {
   private readonly mqtt: IMqtt
   private readonly lastActiveMode: Map<string, NormalizedClimateMode> = new Map()
   private readonly previousAppliances: Map<string, string> = new Map() // applianceId -> applianceName
+  // Timestamp (ms) of the last successful command per appliance. Used to suppress API-lag
+  // state regressions within the command settle window (see commandStateDelaySeconds).
+  private readonly lastCommandAt: Map<string, number> = new Map()
+  // Fields that were explicitly set by the most recent command, per appliance.
+  // Used by the orchestrator's SSE and self-heal paths to overlay the commanded fields
+  // on top of stale API responses during the settle window.
+  private readonly pendingCommandFields: Map<string, Partial<NormalizedState>> = new Map()
   private loginRetryCount = 0
   private refreshRetryCount = 0
   private loginWaiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
@@ -300,6 +307,49 @@ export class ElectroluxClient implements AsyncDisposable {
   public removeAppliance(applianceId: string) {
     this.lastActiveMode.delete(applianceId)
     this.previousAppliances.delete(applianceId)
+    this.lastCommandAt.delete(applianceId)
+    this.pendingCommandFields.delete(applianceId)
+  }
+
+  /**
+   * Return the pending commanded fields for an appliance if we are currently
+   * within the command settle window for that appliance; otherwise return undefined.
+   *
+   * The settle window is defined as commandStateDelaySeconds after the last
+   * successful command. During this window the Electrolux GET /state endpoint
+   * still returns the pre-command cached value, so all publish paths (interval
+   * poll, self-heal reseed, SSE delta) must overlay these fields on top of any
+   * state obtained from the API to prevent commanded values from regressing.
+   *
+   * The windowMs parameter is the same settleWindowMs used for reseedApplianceState.
+   */
+  public getPendingCommandFields(applianceId: string, windowMs: number): Partial<NormalizedState> | undefined {
+    if (!this.isWithinCommandSettleWindow(applianceId, windowMs)) {
+      return undefined
+    }
+    return this.pendingCommandFields.get(applianceId)
+  }
+
+  /**
+   * Record a successful command timestamp for the given appliance.
+   * Called by the orchestrator after sendApplianceCommand succeeds so that
+   * polls arriving within commandStateDelaySeconds do not regress the
+   * just-commanded fields back to the pre-command API value.
+   */
+  public recordCommandTimestamp(applianceId: string): void {
+    this.lastCommandAt.set(applianceId, Date.now())
+  }
+
+  /**
+   * Returns true if we are still within the command settle window.
+   * During this window the Electrolux GET /state endpoint returns the
+   * pre-command cached value (~15-17 s lag after a 200-OK command).
+   * Polls during this window must not regress optimistically-set fields.
+   */
+  public isWithinCommandSettleWindow(applianceId: string, windowMs: number): boolean {
+    const ts = this.lastCommandAt.get(applianceId)
+    if (ts === undefined) return false
+    return Date.now() - ts < windowMs
   }
 
   public async initialize() {
@@ -650,29 +700,29 @@ export class ElectroluxClient implements AsyncDisposable {
     const RATE_LIMIT_CALLS_PER_DAY = 5000
     const SECONDS_PER_DAY = 86400
     const numAppliances = Math.max(1, this.previousAppliances.size)
+    const refreshInterval = config.electrolux.refreshInterval
     const discoveryInterval = config.electrolux.applianceDiscoveryInterval
-    const safetyRefreshInterval = config.electrolux.safetyRefreshInterval
 
-    // Recurring calls per day (SSE replaces per-appliance state polling):
+    // Recurring calls per day:
+    // - State polls: numAppliances × (86400 / refreshInterval)
     // - Appliance discovery: 86400 / applianceDiscoveryInterval
-    // - Safety reseeds: numAppliances × (86400 / safetyRefreshInterval)
     // - On-reconnect reseeds are not counted here (they are infrequent and burst-limited)
+    const pollCallsPerDay = Math.ceil((SECONDS_PER_DAY / refreshInterval) * numAppliances)
     const discoveryCallsPerDay = Math.ceil(SECONDS_PER_DAY / discoveryInterval)
-    const reseedCallsPerDay = Math.ceil((SECONDS_PER_DAY / safetyRefreshInterval) * numAppliances)
-    const estimatedCallsPerDay = discoveryCallsPerDay + reseedCallsPerDay
+    const estimatedCallsPerDay = pollCallsPerDay + discoveryCallsPerDay
 
     logger.warn(
       'Received 429 Too Many Requests from the Electrolux API — you are being rate limited. ' +
-        'Please increase `electrolux.applianceDiscoveryInterval` or `electrolux.safetyRefreshInterval` in your configuration.',
+        'Please increase `electrolux.refreshInterval` or `electrolux.applianceDiscoveryInterval` in your configuration.',
     )
     logger.warn(
-      `Current settings: applianceDiscoveryInterval=${discoveryInterval}s, ` +
-        `safetyRefreshInterval=${safetyRefreshInterval}s, ` +
+      `Current settings: refreshInterval=${refreshInterval}s, ` +
+        `applianceDiscoveryInterval=${discoveryInterval}s, ` +
         `monitored appliances=${numAppliances}`,
     )
     logger.warn(
       `Estimated API calls per day with current settings: ~${estimatedCallsPerDay} ` +
-        `(discovery: ~${discoveryCallsPerDay}, safety reseeds: ~${reseedCallsPerDay})`,
+        `(state polls: ~${pollCallsPerDay}, discovery: ~${discoveryCallsPerDay})`,
     )
     logger.warn(
       `Electrolux API rate limits: ${RATE_LIMIT_CALLS_PER_DAY} calls/day · 10 calls/second · 5 concurrent calls`,
@@ -680,14 +730,14 @@ export class ElectroluxClient implements AsyncDisposable {
     if (estimatedCallsPerDay > RATE_LIMIT_CALLS_PER_DAY) {
       logger.warn(
         `Estimated daily calls (~${estimatedCallsPerDay}) exceed the limit. ` +
-          `Consider increasing applianceDiscoveryInterval above ${discoveryInterval}s ` +
-          `or safetyRefreshInterval above ${safetyRefreshInterval}s.`,
+          `Consider increasing refreshInterval above ${refreshInterval}s ` +
+          `or applianceDiscoveryInterval above ${discoveryInterval}s.`,
       )
     } else {
       logger.warn(
         `Your estimated daily calls (~${estimatedCallsPerDay}) are within the ${RATE_LIMIT_CALLS_PER_DAY}/day limit — ` +
           `the 429 may be due to bursting (10 calls/second or 5 concurrent calls). ` +
-          `Consider staggering reseeds or increasing applianceDiscoveryInterval above ${discoveryInterval}s as a precaution.`,
+          `Consider staggering polls or increasing refreshInterval above ${refreshInterval}s as a precaution.`,
       )
     }
   }
@@ -790,6 +840,27 @@ export class ElectroluxClient implements AsyncDisposable {
     if (immediateStateUpdates) {
       Object.assign(combinedState, immediateStateUpdates)
     }
+
+    // Record the commanded fields (normalized values from combinedState for all keys that
+    // were explicitly set by this command, including any immediate-state side-effects).
+    // The orchestrator will overlay these during the settle window to prevent any publish
+    // path (self-heal reseed, interval poll, SSE delta) from regressing them to the stale
+    // pre-command API value.
+    const commandedKeys = new Set<string>(Object.keys(rawCommand))
+    if (immediateStateUpdates) {
+      for (const key of Object.keys(immediateStateUpdates)) {
+        commandedKeys.add(key)
+      }
+    }
+    const pendingFields: Partial<NormalizedState> = {}
+    const combinedRecord = combinedState as unknown as Record<string, unknown>
+    for (const key of commandedKeys) {
+      const value = combinedRecord[key]
+      if (value !== undefined) {
+        ;(pendingFields as unknown as Record<string, unknown>)[key] = value
+      }
+    }
+    this.pendingCommandFields.set(applianceId, pendingFields)
 
     // Publish immediate feedback to MQTT
     this.mqtt.publish(`${applianceId}/state`, JSON.stringify(combinedState))
@@ -896,6 +967,7 @@ export class ElectroluxClient implements AsyncDisposable {
     applianceId: string,
     cacheKey: string,
     callback?: () => void,
+    settleWindowMs = 0,
   ): Promise<Appliance> {
     if (!this.client) {
       throw new Error('API client is not initialized')
@@ -903,9 +975,35 @@ export class ElectroluxClient implements AsyncDisposable {
     const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
 
     const cachedData = cache.get(cacheKey)
-    const cachedRawState = isAppliance(cachedData) ? cachedData : null
-    const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
+
+    // Resolve the diff baseline from the cache. Both raw Appliance (after a reseed/stream-delta)
+    // and already-normalized state (after an optimistic command publish) are valid baselines.
+    // Without this, a normalized-state cache entry is misclassified as "first fetch" which forces
+    // a full re-publish of the (possibly stale) API GET, reverting the optimistic value.
+    let cachedNormalizedState: NormalizedState | null = null
+    if (isAppliance(cachedData)) {
+      cachedNormalizedState = appliance.normalizeState(cachedData)
+    } else if (isNormalizedState(cachedData)) {
+      cachedNormalizedState = cachedData
+    }
+
     const normalizedState = appliance.normalizeState(response.data)
+
+    // Settle-window guard: within commandStateDelaySeconds after a successful command the
+    // Electrolux GET /state endpoint returns the pre-command cached value (~15-17 s lag).
+    // During this window a poll must not overwrite the optimistically-set cachedNormalizedState
+    // back to the stale API value. After the window the scheduled re-poll fires, which is
+    // treated as authoritative because the API cache has had time to catch up.
+    const inSettleWindow = settleWindowMs > 0 && this.isWithinCommandSettleWindow(applianceId, settleWindowMs)
+    if (inSettleWindow && cachedNormalizedState) {
+      logger.debug(
+        `Poll for ${applianceId} within command settle window — using cached state as diff baseline, skipping API regression`,
+      )
+      // Still update the raw Appliance in cache so the next delta can be applied cleanly,
+      // but keep the normalized publication baseline as the cached (optimistic) state.
+      cache.set(cacheKey, response.data)
+      return response.data
+    }
 
     const stateToPublish = this.prepareStateForPublishing(appliance, normalizedState, cachedNormalizedState)
     if (!stateToPublish) {
@@ -976,6 +1074,10 @@ export class ElectroluxClient implements AsyncDisposable {
 
       this.publishCommandFeedback(appliance, rawCommand, payload, applianceId, cacheKey)
 
+      // Record the command timestamp so polls within commandStateDelaySeconds do not
+      // regress the optimistic state back to the stale API GET value.
+      this.recordCommandTimestamp(applianceId)
+
       return response.data
     }, 'Error sending command')
 
@@ -1027,14 +1129,18 @@ export class ElectroluxClient implements AsyncDisposable {
   /**
    * Fetch /state for an appliance, normalize, diff-vs-cache, publish to MQTT, and update cache.
    * This is the single consolidated method for obtaining and publishing appliance state —
-   * used for initial seeding at startup, on-reconnect reseeds, and periodic safety resyncs.
+   * used for initial seeding at startup, on-reconnect reseeds, and periodic polling.
+   *
+   * settleWindowMs: when non-zero, polls arriving within this many ms of the last
+   * successful command will not overwrite optimistically-set state with the stale GET
+   * response (the Electrolux API caches state for ~15-17 s after a command).
    */
-  public async reseedApplianceState(appliance: BaseAppliance): Promise<Appliance | undefined> {
+  public async reseedApplianceState(appliance: BaseAppliance, settleWindowMs = 0): Promise<Appliance | undefined> {
     const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
     return this.handleApiRequest(async () => {
       await this.ensureValidToken()
-      return this.fetchAndProcessApplianceState(appliance, applianceId, cacheKey)
+      return this.fetchAndProcessApplianceState(appliance, applianceId, cacheKey, undefined, settleWindowMs)
     }, 'Error reseeding appliance state')
   }
 }

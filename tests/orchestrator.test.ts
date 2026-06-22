@@ -7,10 +7,11 @@ import type { NormalizedState } from '@/types/normalized.js'
 import type { ApplianceInfo, ApplianceStub } from '@/types.js'
 import { mockApplianceStateResponse } from './fixtures/api-responses.js'
 
-// Hoisted spy so we can assert on logger.error in m11 tests without recreating
-// the module. The orchestrator module captures its logger reference at import
-// time; using vi.hoisted ensures the same spy instance is returned by the mock.
+// Hoisted spies so we can assert on logger.error and logger.debug without
+// recreating the module. The orchestrator module captures its logger reference
+// at import time; using vi.hoisted ensures the same spy instance is returned.
 const loggerErrorSpy = vi.hoisted(() => vi.fn())
+const loggerDebugSpy = vi.hoisted(() => vi.fn())
 
 // Mock dependencies
 vi.mock('@/logger.js', () => ({
@@ -18,7 +19,7 @@ vi.mock('@/logger.js', () => ({
     info: vi.fn(),
     error: loggerErrorSpy,
     warn: vi.fn(),
-    debug: vi.fn(),
+    debug: loggerDebugSpy,
   })),
 }))
 
@@ -78,6 +79,8 @@ function createMockClient(): ElectroluxClient {
     sendApplianceCommand: vi.fn(() => Promise.resolve()),
     removeAppliance: vi.fn(),
     cleanup: vi.fn(),
+    // Returns undefined by default (no pending command pins) — tests can override
+    getPendingCommandFields: vi.fn(() => undefined),
   } as unknown as ElectroluxClient
 }
 
@@ -101,6 +104,8 @@ function createMockMqtt(): IMqtt {
 
 const defaultConfig: OrchestratorConfig = {
   idleTimeoutMs: 120000,
+  refreshInterval: 60000, // 60 seconds in ms
+  commandStateDelaySeconds: 30,
   applianceDiscoveryInterval: 300000,
   autoDiscovery: true,
   apiFailureRestartThresholdMs: 2700000, // 45 minutes
@@ -273,6 +278,144 @@ describe('Orchestrator', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       expect(client.reseedApplianceState).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('polling loop', () => {
+    it('should call reseedApplianceState immediately after initial delay then repeat at refreshInterval', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Before timeout fires: no seed yet
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
+
+      // Fire initial delay timeout (delayMs=0)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(1)
+
+      // Advance by one refreshInterval (60000ms) — interval tick fires
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(2)
+
+      // Advance by another refreshInterval
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(3)
+    })
+
+    it('should pass commandStateDelaySeconds settle window to reseedApplianceState', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1)
+
+      // First arg is the appliance, second is settleWindowMs = commandStateDelaySeconds * 1000 = 30000
+      expect(client.reseedApplianceState).toHaveBeenCalledWith(expect.anything(), 30_000)
+    })
+
+    it('should schedule command re-poll after commandStateDelaySeconds when command succeeds', async () => {
+      let capturedHandler: (topic: string, message: Buffer) => void = () => {}
+      vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {
+        capturedHandler = callback
+        return Promise.resolve()
+      })
+
+      // Return a non-undefined value so that scheduleCommandRepoll is triggered
+      vi.mocked(client.sendApplianceCommand).mockResolvedValueOnce({ applianceId: 'appliance-1' } as unknown as Awaited<
+        ReturnType<typeof client.sendApplianceCommand>
+      >)
+
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      // Fire command
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{"mode":"cool"}'))
+      await vi.advanceTimersByTimeAsync(1) // let command promise settle
+
+      // Advance by commandStateDelaySeconds (30000ms) — re-poll fires
+      await vi.advanceTimersByTimeAsync(30_000)
+      // Re-poll is called with settleWindowMs=0 (authoritative)
+      expect(client.reseedApplianceState).toHaveBeenCalledWith(expect.anything(), 0)
+    })
+
+    it('should stop polling interval when appliance is cleaned up', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      // Remove the appliance
+      orchestrator.cleanupAppliance('appliance-1')
+
+      // Advance by refreshInterval — interval should not fire
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
+    })
+
+    it('should call reseedApplianceState again when interval fires and state is defined', async () => {
+      vi.mocked(client.reseedApplianceState).mockResolvedValue({ applianceId: 'appliance-1' } as unknown as Awaited<
+        ReturnType<typeof client.reseedApplianceState>
+      >)
+
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(1)
+
+      // Advance by one interval — interval fires, reseed called again with non-undefined result
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(client.reseedApplianceState).toHaveBeenCalledTimes(2)
+    })
+
+    it('should log error when interval reseed rejects', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      vi.mocked(client.reseedApplianceState).mockRejectedValueOnce(new Error('poll failed'))
+      loggerErrorSpy.mockClear()
+
+      // Advance by one interval — triggers the catch branch
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(loggerErrorSpy).toHaveBeenCalled()
+    })
+
+    it('should stop interval when isShuttingDown is set before interval fires', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      // Set shutting down and manually advance — interval callback checks isShuttingDown
+      orchestrator.isShuttingDown = true
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
+    })
+
+    it('should log error when command re-poll reseed rejects', async () => {
+      let capturedHandler: (topic: string, message: Buffer) => void = () => {}
+      vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {
+        capturedHandler = callback
+        return Promise.resolve()
+      })
+
+      vi.mocked(client.sendApplianceCommand).mockResolvedValueOnce({ applianceId: 'appliance-1' } as unknown as Awaited<
+        ReturnType<typeof client.sendApplianceCommand>
+      >)
+
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      // Make the next reseedApplianceState call (the re-poll) reject
+      vi.mocked(client.reseedApplianceState).mockRejectedValueOnce(new Error('re-poll failed'))
+
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{"mode":"cool"}'))
+      await vi.advanceTimersByTimeAsync(1) // let command settle
+
+      loggerErrorSpy.mockClear()
+
+      // Advance past commandStateDelaySeconds — re-poll fires and rejects → error logged
+      await vi.advanceTimersByTimeAsync(35_000)
+
+      expect(loggerErrorSpy).toHaveBeenCalled()
     })
   })
 
@@ -712,6 +855,78 @@ describe('Orchestrator', () => {
       expect(mqtt.publish).not.toHaveBeenCalled()
     })
 
+    it('logs a debug message when event arrives for an untracked applianceId', () => {
+      loggerDebugSpy.mockClear()
+
+      orchestrator.handleStreamEvent({
+        applianceId: 'unknown-appliance',
+        property: 'WorkMode',
+        value: 0,
+      })
+
+      // Must log a debug message mentioning the unknown applianceId
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      const ignoredCall = debugCalls.find((args) => {
+        const obj = args[0]
+        const msg = typeof args[1] === 'string' ? args[1] : ''
+        // Either the message or first arg contains the applianceId
+        const hasId =
+          msg.includes('unknown-appliance') ||
+          (typeof obj === 'object' &&
+            obj !== null &&
+            (obj as Record<string, unknown>).applianceId === 'unknown-appliance')
+        return hasId
+      })
+      expect(ignoredCall).toBeDefined()
+    })
+
+    it('logs a debug message when event applies but produces no state diff', async () => {
+      const { cache } = await import('@/cache.js')
+
+      const rawAppliance = {
+        applianceId: 'appliance-1',
+        properties: { reported: { WorkMode: 1 } },
+      }
+      vi.mocked(cache.get).mockReturnValue(rawAppliance)
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      // Same normalized state before and after — no diff
+      const applianceInstance = orchestrator.getApplianceInstances().get('appliance-1')
+      if (applianceInstance) {
+        const sameState = {
+          applianceId: 'appliance-1',
+          deviceId: 'x',
+          mode: 'cool',
+        } as unknown as import('@/types/normalized.js').NormalizedState
+        vi.mocked(applianceInstance.normalizeState).mockReturnValue(sameState)
+      }
+
+      loggerDebugSpy.mockClear()
+
+      orchestrator.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'WorkMode',
+        value: 1,
+      })
+
+      const debugCalls = loggerDebugSpy.mock.calls as unknown[][]
+      // Must have a debug call about no state change for this appliance
+      const noDiffCall = debugCalls.find((args) => {
+        const obj = args[0]
+        const msg = typeof args[1] === 'string' ? args[1] : ''
+        const hasId =
+          msg.includes('appliance-1') ||
+          (typeof obj === 'object' && obj !== null && (obj as Record<string, unknown>).applianceId === 'appliance-1')
+        const mentionsNoChange =
+          msg.toLowerCase().includes('no state') ||
+          msg.toLowerCase().includes('no change') ||
+          msg.toLowerCase().includes('no diff')
+        return hasId && mentionsNoChange
+      })
+      expect(noDiffCall).toBeDefined()
+    })
+
     it('should log error when self-heal reseed rejects', async () => {
       const { cache } = await import('@/cache.js')
 
@@ -774,7 +989,8 @@ describe('Orchestrator', () => {
       const mockLivestream = createMockLivestream()
 
       await orchestrator.initializeAppliance(mockStub)
-      await vi.runAllTimersAsync()
+      // Drain the initial seed setTimeout(0) before wiring the livestream
+      await vi.advanceTimersByTimeAsync(1)
       orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
 
       // Capture the onEvent callback
@@ -799,7 +1015,7 @@ describe('Orchestrator', () => {
 
       await orchestrator.initializeAppliance(mockStub)
       // Drain the initial seed setTimeout(0) before wiring the livestream
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(1)
 
       orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
 
@@ -809,12 +1025,37 @@ describe('Orchestrator', () => {
 
       vi.mocked(client.reseedApplianceState).mockClear()
 
-      // Run all timers concurrently so the 100ms stagger setTimeout resolves
+      // Fire the reconnect hook and advance past the 100ms per-appliance stagger delay
       const reconnectPromise = reconnectHook ? reconnectHook() : Promise.resolve()
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(200)
       await reconnectPromise
 
       expect(client.reseedApplianceState).toHaveBeenCalledTimes(1)
+    })
+
+    it('should pass settle window to reseedApplianceState on reconnect (regression: on-connect reseed must not clobber in-flight command)', async () => {
+      const mockLivestream = createMockLivestream()
+
+      await orchestrator.initializeAppliance(mockStub)
+      // Drain the initial seed setTimeout(0) before wiring the livestream
+      await vi.advanceTimersByTimeAsync(1)
+
+      orchestrator.initializeLivestream(mockLivestream as unknown as import('@/livestream.js').LivestreamClient)
+
+      const reconnectHook = vi.mocked(mockLivestream.onReconnect).mock.calls[0]?.[0]
+      expect(reconnectHook).toBeDefined()
+
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      // Fire the reconnect hook and advance past the 100ms per-appliance stagger delay
+      const reconnectPromise = reconnectHook ? reconnectHook() : Promise.resolve()
+      await vi.advanceTimersByTimeAsync(200)
+      await reconnectPromise
+
+      // Must be called with settleWindowMs = commandStateDelaySeconds * 1000 (30 * 1000 = 30_000)
+      // so the guard in fetchAndProcessApplianceState suppresses regression of commanded fields
+      // during the settle window — mirroring the self-heal path fix at orchestrator.ts:324
+      expect(client.reseedApplianceState).toHaveBeenCalledWith(expect.anything(), 30_000)
     })
 
     it('should stop reseeding on reconnect when shutting down', async () => {
@@ -1370,6 +1611,46 @@ describe('Orchestrator', () => {
       // cleanup should only be called once
       expect(client.cleanup).toHaveBeenCalledTimes(1)
     })
+
+    it('should cancel pending command re-poll timeouts on shutdown', async () => {
+      let capturedHandler: (topic: string, message: Buffer) => void = () => {}
+      vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {
+        capturedHandler = callback
+        return Promise.resolve()
+      })
+
+      vi.mocked(client.sendApplianceCommand).mockResolvedValueOnce({ applianceId: 'appliance-1' } as unknown as Awaited<
+        ReturnType<typeof client.sendApplianceCommand>
+      >)
+
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      // Fire a command to schedule a re-poll timeout
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{"mode":"cool"}'))
+      await vi.advanceTimersByTimeAsync(1) // let command settle
+
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      orchestrator.shutdown()
+
+      // Advance past commandStateDelaySeconds — re-poll should NOT fire
+      await vi.advanceTimersByTimeAsync(35_000)
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
+    })
+
+    it('should cancel polling intervals on shutdown', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+      await vi.advanceTimersByTimeAsync(1) // drain initial seed
+
+      vi.mocked(client.reseedApplianceState).mockClear()
+
+      orchestrator.shutdown()
+
+      // Advance past refreshInterval — polling interval should NOT fire
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(client.reseedApplianceState).not.toHaveBeenCalled()
+    })
   })
 
   describe('[Symbol.asyncDispose]', () => {
@@ -1389,6 +1670,300 @@ describe('Orchestrator', () => {
       }
 
       expect(shutdownSpy).toHaveBeenCalledWith()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Command settle-window overlay — regression tests for the state-flapping bug
+  // ---------------------------------------------------------------------------
+  //
+  // Confirmed reproduction:
+  //   T0:     command targetTemperatureC=23 → optimistic publish {target:23}, cache=NormalizedState
+  //   T0+10s: ambient SSE → self-heal reseed (cache not raw) → GET returns stale {target:22}
+  //           → regressive publish target=22 ← BUG
+  //   T0+30s: authoritative re-poll → target=23 ← recovery (too late; HA already flapped)
+  //
+  // Fix: (a) self-heal reseed passes settleWindowMs so the guard in
+  //      fetchAndProcessApplianceState skips the regressive publish,
+  //      (b) SSE delta overlay pins commanded fields so a subsequent delta on the
+  //      stale-raw cache doesn't regress commanded values either.
+  // ---------------------------------------------------------------------------
+
+  describe('command settle-window overlay', () => {
+    /**
+     * Helper: return a mock ElectroluxClient that also exposes
+     * getPendingCommandFields — the new method required by the fix.
+     * Defaults to no pending fields.
+     */
+    function createMockClientWithPins(
+      pendingFields: Partial<NormalizedState> | undefined = undefined,
+    ): ElectroluxClient {
+      return {
+        ...createMockClient(),
+        getPendingCommandFields: vi.fn(() => pendingFields),
+      } as unknown as ElectroluxClient
+    }
+
+    it('self-heal reseed within the settle window passes settleWindowMs (not 0) to reseedApplianceState', async () => {
+      // This verifies the fix for regression path (a): the self-heal reseed that
+      // fires when cache is not a raw Appliance must forward the settle window so
+      // fetchAndProcessApplianceState's guard suppresses the regressive publish.
+      const pins: Partial<NormalizedState> = { targetTemperatureC: 23 }
+      const pinnedClient = createMockClientWithPins(pins)
+      const orch = new Orchestrator(pinnedClient, mqtt, defaultConfig)
+      const { cache } = await import('@/cache.js')
+
+      await orch.initializeAppliance(mockStub)
+
+      // Drain the initial seed so its reseedApplianceState call doesn't pollute assertions
+      await vi.advanceTimersByTimeAsync(1)
+      vi.mocked(pinnedClient.reseedApplianceState).mockClear()
+
+      // Cache now holds normalized state (not raw Appliance) — the post-command scenario
+      vi.mocked(cache.get).mockReturnValue({
+        applianceId: 'appliance-1',
+        deviceId: 'x',
+        mode: 'cool',
+        targetTemperatureC: 23,
+      })
+
+      // Fire an ambient SSE event — cache is not raw Appliance → self-heal path
+      orch.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'ambientTemperatureC',
+        value: 24,
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      // The self-heal reseed must be called with the settle window (30000ms), NOT 0
+      const reseedCalls = vi.mocked(pinnedClient.reseedApplianceState).mock.calls
+      expect(reseedCalls.length).toBeGreaterThan(0)
+      const [, settleArg] = reseedCalls[0] ?? []
+      expect(settleArg).toBeDefined()
+      expect(settleArg as number).toBeGreaterThan(0)
+    })
+
+    it('SSE delta within the settle window overlays the commanded targetTemperatureC — no regression', async () => {
+      // Arrange: command set targetTemperatureC=23; pending pins reflect this
+      const pins: Partial<NormalizedState> = { targetTemperatureC: 23 }
+      const pinnedClient = createMockClientWithPins(pins)
+      const orch = new Orchestrator(pinnedClient, mqtt, defaultConfig)
+      const { cache } = await import('@/cache.js')
+
+      await orch.initializeAppliance(mockStub)
+
+      // After the settle-window guard ran, cache holds the stale raw Appliance
+      // (targetTemperatureC=22 — pre-command value)
+      const staleRawAppliance = {
+        applianceId: 'appliance-1',
+        properties: {
+          reported: { targetTemperatureC: 22, ambientTemperatureC: 24 },
+        },
+      }
+      vi.mocked(cache.get).mockReturnValue(staleRawAppliance)
+
+      // Make normalizeState return states that include the stale targetTemperatureC=22
+      // so we can confirm the overlay corrects it to 23
+      const applianceInstance = orch.getApplianceInstances().get('appliance-1')
+      expect(applianceInstance).toBeDefined()
+      if (applianceInstance) {
+        vi.mocked(applianceInstance.normalizeState)
+          // First call: "before" state (old stale raw → normalized)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+            targetTemperatureC: 22,
+            ambientTemperatureC: 24,
+          } as unknown as NormalizedState)
+          // Second call: "after" state (patched stale raw → normalized) — ambient updated but target still 22
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+            targetTemperatureC: 22,
+            ambientTemperatureC: 25, // ambient changed
+          } as unknown as NormalizedState)
+      }
+
+      vi.mocked(mqtt.publish).mockClear()
+
+      // Ambient SSE event — cache IS a raw Appliance, so delta path runs
+      orch.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'ambientTemperatureC',
+        value: 25,
+      })
+
+      // Published state must have: ambientTemperatureC=25 (SSE update) AND targetTemperatureC=23 (pin)
+      expect(mqtt.publish).toHaveBeenCalledOnce()
+      const published = JSON.parse((vi.mocked(mqtt.publish).mock.calls[0] as [string, string])[1]) as Record<
+        string,
+        unknown
+      >
+      expect(published['targetTemperatureC']).toBe(23) // pinned — must NOT regress to 22
+      expect(published['ambientTemperatureC']).toBe(25) // live update preserved
+    })
+
+    it('SSE delta within the settle window pins applianceState alongside temperature', async () => {
+      // Demonstrates that multiple commanded fields are pinned simultaneously
+      const pins: Partial<NormalizedState> = {
+        targetTemperatureC: 23,
+        applianceState: 'on',
+      }
+      const pinnedClient = createMockClientWithPins(pins)
+      const orch = new Orchestrator(pinnedClient, mqtt, defaultConfig)
+      const { cache } = await import('@/cache.js')
+
+      await orch.initializeAppliance(mockStub)
+
+      const staleRawAppliance = {
+        applianceId: 'appliance-1',
+        properties: {
+          reported: { targetTemperatureC: 22, applianceState: 'off', ambientTemperatureC: 24 },
+        },
+      }
+      vi.mocked(cache.get).mockReturnValue(staleRawAppliance)
+
+      const applianceInstance = orch.getApplianceInstances().get('appliance-1')
+      if (applianceInstance) {
+        vi.mocked(applianceInstance.normalizeState)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+            targetTemperatureC: 22,
+            applianceState: 'off',
+            ambientTemperatureC: 24,
+          } as unknown as NormalizedState)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+            targetTemperatureC: 22,
+            applianceState: 'off',
+            ambientTemperatureC: 26,
+          } as unknown as NormalizedState)
+      }
+
+      vi.mocked(mqtt.publish).mockClear()
+
+      orch.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'ambientTemperatureC',
+        value: 26,
+      })
+
+      expect(mqtt.publish).toHaveBeenCalledOnce()
+      const published = JSON.parse((vi.mocked(mqtt.publish).mock.calls[0] as [string, string])[1]) as Record<
+        string,
+        unknown
+      >
+      expect(published['targetTemperatureC']).toBe(23)
+      expect(published['applianceState']).toBe('on')
+      expect(published['ambientTemperatureC']).toBe(26)
+    })
+
+    it('after the settle window, SSE delta publishes pure API state (no overlay)', async () => {
+      // After the window expires, getPendingCommandFields returns undefined
+      const pinnedClient = createMockClientWithPins(undefined) // no pending pins
+      const orch = new Orchestrator(pinnedClient, mqtt, defaultConfig)
+      const { cache } = await import('@/cache.js')
+
+      await orch.initializeAppliance(mockStub)
+
+      const rawAppliance = {
+        applianceId: 'appliance-1',
+        properties: { reported: { targetTemperatureC: 22, ambientTemperatureC: 24 } },
+      }
+      vi.mocked(cache.get).mockReturnValue(rawAppliance)
+
+      const applianceInstance = orch.getApplianceInstances().get('appliance-1')
+      if (applianceInstance) {
+        vi.mocked(applianceInstance.normalizeState)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+            targetTemperatureC: 22,
+            ambientTemperatureC: 24,
+          } as unknown as NormalizedState)
+          .mockReturnValueOnce({
+            applianceId: 'appliance-1',
+            deviceId: 'x',
+            mode: 'cool',
+            targetTemperatureC: 22, // API truth after window: target=22 (unchanged)
+            ambientTemperatureC: 26,
+          } as unknown as NormalizedState)
+      }
+
+      vi.mocked(mqtt.publish).mockClear()
+
+      orch.handleStreamEvent({
+        applianceId: 'appliance-1',
+        property: 'ambientTemperatureC',
+        value: 26,
+      })
+
+      expect(mqtt.publish).toHaveBeenCalledOnce()
+      const published = JSON.parse((vi.mocked(mqtt.publish).mock.calls[0] as [string, string])[1]) as Record<
+        string,
+        unknown
+      >
+      // No overlay → publishes the API truth
+      expect(published['targetTemperatureC']).toBe(22)
+      expect(published['ambientTemperatureC']).toBe(26)
+    })
+
+    it('interval poll within the settle window does not regress commanded fields (existing guard preserved)', async () => {
+      // The interval poll already passes settleWindowMs; the guard in
+      // fetchAndProcessApplianceState must still suppress the regression.
+      // Verify that reseedApplianceState is called with a non-zero settleWindowMs.
+      const orch = new Orchestrator(createMockClientWithPins(), mqtt, defaultConfig)
+
+      await orch.initializeAppliance(mockStub)
+      // Drain initial seed
+      await vi.advanceTimersByTimeAsync(1)
+
+      vi.mocked(orch['client'].reseedApplianceState).mockClear()
+
+      // Advance by one refreshInterval to fire the interval poll
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      // Interval poll must pass the settle window (commandStateDelaySeconds * 1000 = 30000)
+      const calls = vi.mocked(orch['client'].reseedApplianceState).mock.calls
+      expect(calls.length).toBeGreaterThan(0)
+      const intervalCall = calls[0]
+      expect(intervalCall).toBeDefined()
+      if (intervalCall) {
+        expect(intervalCall[1]).toBe(30_000)
+      }
+    })
+
+    it('pending command pins are cleared when appliance is removed via cleanupAppliance', async () => {
+      const pins: Partial<NormalizedState> = { targetTemperatureC: 23 }
+      const pinnedClient = createMockClientWithPins(pins)
+      const orch = new Orchestrator(pinnedClient, mqtt, defaultConfig)
+
+      await orch.initializeAppliance(mockStub)
+      orch.cleanupAppliance('appliance-1')
+
+      // After cleanup, removeAppliance must have been called on the client,
+      // which is responsible for clearing pending command fields
+      expect(pinnedClient.removeAppliance).toHaveBeenCalledWith('appliance-1')
+    })
+
+    it('pending command pins are cleared for all appliances on shutdown', async () => {
+      const pinnedClient = createMockClientWithPins({ targetTemperatureC: 23 })
+      const orch = new Orchestrator(pinnedClient, mqtt, defaultConfig)
+
+      await orch.initializeAppliance(mockStub)
+
+      // Shutdown calls client.cleanup() which should clear all pending state
+      orch.shutdown()
+
+      expect(pinnedClient.cleanup).toHaveBeenCalled()
     })
   })
 })

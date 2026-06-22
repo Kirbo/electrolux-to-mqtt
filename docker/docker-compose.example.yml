@@ -24,7 +24,8 @@ services:
       # - MQTT_CLIENT_ID=electrolux-comfort600                              # MQTT client ID
       # - MQTT_RETAIN=false                                                 # MQTT retain flag
       # - MQTT_QOS=2                                                        # MQTT QoS level, 0 = At most once, 1 = At least once, 2 = Exactly once
-      # - ELECTROLUX_SAFETY_REFRESH_INTERVAL=21600                          # Full-state safety resync interval in seconds (default: 21600 / 6h, min: 600, max: 86400)
+      # - ELECTROLUX_REFRESH_INTERVAL=60                                     # Appliance state polling interval in seconds (default: 60, min: 10, max: 3600)
+      # - ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30                          # Seconds to wait after a command before re-polling authoritative state (default: 30, min: 5, max: 300)
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300                       # Appliance discovery interval in seconds (how often to check for added/removed appliances)
       # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60                           # Refresh token when this many minutes remain before expiration (default: 60, min: 5, max: 715)
       # - ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30             # Minutes an appliance must be continuously absent before cleanup (default: 30, min: 1, max: 1440)

@@ -23,12 +23,15 @@ electrolux:
   password: your_password_here
   # (Required) Two-letter uppercase country code (e.g. FI, SE, NO, DK)
   countryCode: your_country_code_here
-  # (Optional) Full-state safety resync interval in seconds. The bridge receives real-time
-  # state updates via SSE (server-sent events); this interval is a belt-and-suspenders periodic
-  # resync that catches any state drift if the SSE stream missed an event. 6 hours is the
-  # default because SSE delivers state changes immediately — this is not a polling frequency.
-  # Default: 21600 (6h), Min: 600 (10 min), Max: 86400 (24h).
-  safetyRefreshInterval: 21600
+  # (Optional) Appliance state polling interval in seconds. The bridge polls the Electrolux API
+  # for the full appliance state at this interval (this is the primary state source of truth).
+  # The SSE livestream provides low-latency state deltas on top of polling.
+  # Default: 60, Min: 10, Max: 3600.
+  refreshInterval: 60
+  # (Optional) Seconds to wait after sending a command before re-polling for the authoritative
+  # state. The Electrolux API state endpoint lags ~15-17 s after a command 200-OK, so this
+  # delay lets the API cache catch up before the bridge re-polls. Default: 30, Min: 5, Max: 300.
+  commandStateDelaySeconds: 30
   # (Optional) Appliance discovery interval in seconds (how often to check for added/removed appliances). Default: 300, Min: 60, Max: 3600
   applianceDiscoveryInterval: 300
   # (Optional) How many minutes before expiration should the token be refreshed.
@@ -62,7 +65,7 @@ homeAssistant:
   # (Optional) Automatically discover the device in Home Assistant. Default: true
   autoDiscovery: true
   # (Optional) Immediately revert HA state when a command is rejected by validation. Default: false
-  # When false, the UI stays on the invalid value until the next SSE state update corrects it.
+  # When false, the UI stays on the invalid value until the next poll or SSE state update corrects it.
   # When true, the state snaps back immediately but may cause UI flicker.
   revertStateOnRejection: false
   # (Optional) Re-publish discovery config + cached state when Home Assistant comes online.

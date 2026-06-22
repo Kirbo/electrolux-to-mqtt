@@ -19,6 +19,8 @@ const logger = createLogger('app')
 const STREAM_STALE_FACTOR = 2
 
 export interface OrchestratorConfig {
+  refreshInterval: number
+  commandStateDelaySeconds: number
   applianceDiscoveryInterval: number
   autoDiscovery: boolean
   apiFailureRestartThresholdMs: number
@@ -36,9 +38,12 @@ export class Orchestrator implements AsyncDisposable {
   private readonly config: OrchestratorConfig
   private livestream: LivestreamClient | null = null
   private readonly activeTimeouts = new Set<NodeJS.Timeout>()
+  private readonly activeCommandTimeouts = new Set<NodeJS.Timeout>()
   private readonly applianceInstances = new Map<string, BaseAppliance>()
+  private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
   private readonly applianceMissingSince = new Map<string, number>()
   private lastStreamSignal = Date.now()
+  private lastSuccessfulPollAt = 0 // 0 = no poll yet
   private _reconnectRegistered = false
   private _birthRegistered = false
   private _livestreamInitialized = false
@@ -63,10 +68,19 @@ export class Orchestrator implements AsyncDisposable {
     this.lastStreamSignal = Date.now()
   }
 
+  /** Record a successful poll result (state obtained from API). Used for health checks. */
+  private bumpPollSignal(): void {
+    this.lastSuccessfulPollAt = Date.now()
+  }
+
   private isApiConnected(): boolean {
+    const now = Date.now()
+    // A recent poll is a direct proof of API liveness.
+    const pollFresh = this.lastSuccessfulPollAt > 0 && now - this.lastSuccessfulPollAt < 3 * this.config.refreshInterval
+    // SSE liveness: stream connected + a recent signal (delta/reseed/discovery)
     const streamStaleMs = STREAM_STALE_FACTOR * this.config.idleTimeoutMs
-    const signalFresh = Date.now() - this.lastStreamSignal < streamStaleMs
-    return (this.livestream?.isStreamConnected() ?? false) && signalFresh
+    const streamFresh = (this.livestream?.isStreamConnected() ?? false) && now - this.lastStreamSignal < streamStaleMs
+    return pollFresh || streamFresh
   }
 
   private trackApiResult(state: unknown, now: number): void {
@@ -84,6 +98,92 @@ export class Orchestrator implements AsyncDisposable {
   private writeHealthStatus(): void {
     const apiConnected = this.isApiConnected()
     writeHealthFile({ mqttConnected: this.mqtt.client.connected, apiConnected })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Periodic state polling (baseline source of truth)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Start the state polling loop for a single appliance.
+   * Fires once after delayMs (load-distributed stagger), then repeats every refreshInterval.
+   * SSE deltas provide between-poll immediacy; polls are the authoritative source of truth.
+   */
+  private _startPolling(applianceId: string, appliance: BaseAppliance, delayMs: number): void {
+    const settleWindowMs = this.config.commandStateDelaySeconds * 1000
+    const timeoutId = setTimeout(() => {
+      this.activeTimeouts.delete(timeoutId)
+      if (this.isShuttingDown) return
+      if (!this.applianceInstances.has(applianceId)) return
+
+      this.client
+        .reseedApplianceState(appliance, settleWindowMs)
+        .then((state) => {
+          if (state !== undefined) this.bumpPollSignal()
+          this.trackApiResult(state, Date.now())
+          this.writeHealthStatus()
+        })
+        .catch((err: unknown) => {
+          logger.error(`Error on initial state poll for appliance ${applianceId}:`, err)
+        })
+        .finally(() => {
+          this._startIntervalPolling(applianceId, appliance, settleWindowMs)
+        })
+    }, delayMs)
+    this.activeTimeouts.add(timeoutId)
+  }
+
+  private _startIntervalPolling(applianceId: string, appliance: BaseAppliance, settleWindowMs: number): void {
+    if (this.isShuttingDown) return
+    if (!this.applianceInstances.has(applianceId)) return
+
+    const intervalId = setInterval(() => {
+      if (this.isShuttingDown) {
+        clearInterval(intervalId)
+        return
+      }
+      this.client
+        .reseedApplianceState(appliance, settleWindowMs)
+        .then((state) => {
+          if (state !== undefined) this.bumpPollSignal()
+          this.trackApiResult(state, Date.now())
+          this.writeHealthStatus()
+        })
+        .catch((err: unknown) => {
+          logger.error(`Error polling state for appliance ${applianceId}:`, err)
+        })
+    }, this.config.refreshInterval)
+
+    this.applianceStateIntervals.set(applianceId, intervalId)
+  }
+
+  /**
+   * Schedule an authoritative re-poll after commandStateDelaySeconds.
+   * Called after a successful command send to reconcile the optimistic state
+   * against the API once the Electrolux backend has registered the change.
+   */
+  public scheduleCommandRepoll(appliance: BaseAppliance): void {
+    if (this.isShuttingDown) return
+    const applianceId = appliance.getApplianceId()
+    const delayMs = this.config.commandStateDelaySeconds * 1000
+
+    const timeoutId = setTimeout(() => {
+      this.activeCommandTimeouts.delete(timeoutId)
+      if (this.isShuttingDown) return
+      if (!this.applianceInstances.has(applianceId)) return
+      // Re-poll with settleWindowMs=0: this IS the authoritative resync; no window needed.
+      this.client
+        .reseedApplianceState(appliance, 0)
+        .then((state) => {
+          if (state !== undefined) this.bumpPollSignal()
+          this.trackApiResult(state, Date.now())
+          this.writeHealthStatus()
+        })
+        .catch((err: unknown) => {
+          logger.error(`Error on command re-poll for appliance ${applianceId}:`, err)
+        })
+    }, delayMs)
+    this.activeCommandTimeouts.add(timeoutId)
   }
 
   // ---------------------------------------------------------------------------
@@ -200,18 +300,28 @@ export class Orchestrator implements AsyncDisposable {
    */
   public handleStreamEvent(event: StreamEvent): void {
     const appliance = this.applianceInstances.get(event.applianceId)
-    if (!appliance) return
+    if (!appliance) {
+      logger.debug(
+        { applianceId: event.applianceId, property: event.property },
+        'SSE event for untracked applianceId — ignored',
+      )
+      return
+    }
 
     const applianceId = event.applianceId
     const stateKey = cache.cacheKey(applianceId).state
     const cached = cache.get(stateKey)
 
+    const settleWindowMs = this.config.commandStateDelaySeconds * 1000
+
     if (!isAppliance(cached)) {
       // Cache holds normalized state or is empty — cannot safely apply delta.
       // Trigger a reseed to restore raw Appliance in cache, then return.
+      // Pass settleWindowMs so the guard in fetchAndProcessApplianceState suppresses
+      // any regressive publish of stale commanded fields during the settle window.
       logger.debug(`Stream delta for ${applianceId}: cache is not a raw Appliance — triggering reseed (self-heal)`)
       this.client
-        .reseedApplianceState(appliance)
+        .reseedApplianceState(appliance, settleWindowMs)
         .then((state: Appliance | undefined) => {
           this.trackApiResult(state, Date.now())
           this.writeHealthStatus()
@@ -225,12 +335,21 @@ export class Orchestrator implements AsyncDisposable {
     const patched = applyStreamEvent(cached, event)
     const cachedNormalized = appliance.normalizeState(cached)
     const newNormalized = appliance.normalizeState(patched)
-    const diffs = getStateDifferences(cachedNormalized, newNormalized)
+
+    // Settle-window overlay: during the command settle window, prevent commanded fields
+    // from regressing to their stale API values via the SSE delta path. Non-commanded
+    // fields (e.g. ambientTemperatureC, compressorState) continue to update live.
+    const pins = this.client.getPendingCommandFields(applianceId, settleWindowMs)
+    const stateToPublish: typeof newNormalized = pins ? { ...newNormalized, ...pins } : newNormalized
+
+    const diffs = getStateDifferences(cachedNormalized, stateToPublish)
 
     if (Object.keys(diffs).length > 0) {
       cache.set(stateKey, patched)
-      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(newNormalized))
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(stateToPublish))
       logger.debug(`Stream delta applied for ${applianceId}: ${Object.keys(diffs).join(', ')}`)
+    } else {
+      logger.debug({ applianceId, property: event.property }, 'SSE event applied with no state change')
     }
 
     this.bumpStreamSignal()
@@ -243,9 +362,11 @@ export class Orchestrator implements AsyncDisposable {
 
   /**
    * Initialize a single appliance: fetch info, create instance, publish discovery,
-   * register handlers, do an initial seed, and subscribe to MQTT commands.
+   * register handlers, start polling loop, and subscribe to MQTT commands.
+   *
+   * delayMs: staggered initial poll delay so appliances don't all hit the API at once.
    */
-  public async initializeAppliance(applianceStub: ApplianceStub) {
+  public async initializeAppliance(applianceStub: ApplianceStub, delayMs = 0) {
     const { applianceId } = applianceStub
 
     try {
@@ -280,22 +401,9 @@ export class Orchestrator implements AsyncDisposable {
       // Register the HA birth-message handler (once per orchestrator instance)
       this._registerBirthHandler()
 
-      // Seed initial state so HA receives state immediately at startup
-      const seedTimeout = setTimeout(() => {
-        this.activeTimeouts.delete(seedTimeout)
-        if (this.isShuttingDown) return
-        if (!this.applianceInstances.has(applianceId)) return
-        this.client
-          .reseedApplianceState(appliance)
-          .then((state: Appliance | undefined) => {
-            this.trackApiResult(state, Date.now())
-            this.writeHealthStatus()
-          })
-          .catch((err: unknown) => {
-            logger.error(`Error on initial seed for appliance ${applianceId}:`, err)
-          })
-      }, 0)
-      this.activeTimeouts.add(seedTimeout)
+      // Start state polling: fires initially after delayMs, then every refreshInterval.
+      // This is the baseline source of truth; SSE deltas provide between-poll immediacy.
+      this._startPolling(applianceId, appliance, delayMs)
 
       // Subscribe to MQTT commands for this appliance
       await this.mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
@@ -304,9 +412,19 @@ export class Orchestrator implements AsyncDisposable {
           logger.info('Received command on topic:', topic, 'Message:', command)
           const applianceInstance = this.applianceInstances.get(applianceId)
           if (applianceInstance) {
-            this.client.sendApplianceCommand(applianceInstance, command).catch((err: unknown) => {
-              logger.error(`Failed to send command to appliance ${applianceId}:`, err)
-            })
+            this.client
+              .sendApplianceCommand(applianceInstance, command)
+              .then((result) => {
+                // After a successful command, schedule an authoritative re-poll so the
+                // API state (which lags ~15-17 s after a 200-OK) can catch up and confirm
+                // (or correct) the optimistic publish. No-op if the command was rejected.
+                if (result !== undefined) {
+                  this.scheduleCommandRepoll(applianceInstance)
+                }
+              })
+              .catch((err: unknown) => {
+                logger.error(`Failed to send command to appliance ${applianceId}:`, err)
+              })
           } else {
             logger.error(`No appliance instance found for applianceId: ${applianceId}`)
           }
@@ -324,6 +442,13 @@ export class Orchestrator implements AsyncDisposable {
    */
   public cleanupAppliance(applianceId: string) {
     logger.info(`Cleaning up removed appliance: ${applianceId}`)
+
+    // Clear state polling interval for this appliance
+    const stateInterval = this.applianceStateIntervals.get(applianceId)
+    if (stateInterval) {
+      clearInterval(stateInterval)
+      this.applianceStateIntervals.delete(applianceId)
+    }
 
     // Clear missing-since tracking (idempotent — no-op if entry was never set)
     this.applianceMissingSince.delete(applianceId)
@@ -423,8 +548,9 @@ export class Orchestrator implements AsyncDisposable {
 
       if (newAppliances.length > 0) {
         logger.info(`Found ${newAppliances.length} new appliance(s)`)
-        for (const appliance of newAppliances) {
-          await this.initializeAppliance(appliance)
+        const intervalDelay = this.config.refreshInterval / (appliances.length + 1) // Distribute load
+        for (const [i, appliance] of newAppliances.entries()) {
+          await this.initializeAppliance(appliance, i * intervalDelay)
         }
       }
 
@@ -466,7 +592,7 @@ export class Orchestrator implements AsyncDisposable {
       const appliances = Array.from(this.applianceInstances.values())
       for (const appliance of appliances) {
         if (this.isShuttingDown) break
-        const state = await this.client.reseedApplianceState(appliance)
+        const state = await this.client.reseedApplianceState(appliance, this.config.commandStateDelaySeconds * 1000)
         this.trackApiResult(state, Date.now())
         this.writeHealthStatus()
         // Light stagger: ~100 ms between reseeds to avoid hitting the 10 req/s burst limit
@@ -502,11 +628,23 @@ export class Orchestrator implements AsyncDisposable {
 
     logger.info('Shutting down gracefully...')
 
-    // Clear pending startup timeouts
+    // Clear pending startup/initial-poll timeouts
     for (const t of this.activeTimeouts) {
       clearTimeout(t)
     }
     this.activeTimeouts.clear()
+
+    // Clear pending command re-poll timeouts
+    for (const t of this.activeCommandTimeouts) {
+      clearTimeout(t)
+    }
+    this.activeCommandTimeouts.clear()
+
+    // Clear all appliance polling intervals
+    for (const interval of this.applianceStateIntervals.values()) {
+      clearInterval(interval)
+    }
+    this.applianceStateIntervals.clear()
 
     // Stop the SSE livestream (fire-and-forget — asyncDispose in index.ts handles the await)
     if (this.livestream) {

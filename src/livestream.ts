@@ -134,6 +134,8 @@ export class LivestreamClient implements AsyncDisposable {
 
         attempt = 0
         this.connected = true
+        const safeUrl = new URL(cfg.url)
+        logger.debug({ url: `${safeUrl.origin}${safeUrl.pathname}` }, 'SSE stream connected')
         await this.fireReconnectHooks()
         await this.consumeStream(res.body, this.abort.signal)
       } catch (err) {
@@ -186,13 +188,17 @@ export class LivestreamClient implements AsyncDisposable {
     const abortPromise = signalToPromise(signal)
     let buffer = ''
 
+    let closedByAbort = false
     try {
       this.armWatchdog()
 
       while (true) {
         const result = await Promise.race([reader.read(), abortPromise])
         // abortPromise resolved (null) — leave the loop; runLoop will handle the abort
-        if (result === null) break
+        if (result === null) {
+          closedByAbort = true
+          break
+        }
         if (result.done) break
 
         this.armWatchdog()
@@ -200,6 +206,7 @@ export class LivestreamClient implements AsyncDisposable {
         buffer = this.processBuffer(buffer)
       }
     } finally {
+      logger.debug({ closedByAbort }, 'SSE stream closed')
       reader.cancel().catch(() => {
         // Suppress cancel errors — stream may already be closed/aborted
       })
@@ -223,14 +230,33 @@ export class LivestreamClient implements AsyncDisposable {
   /** Parse and dispatch a single complete SSE line. */
   private dispatchLine(raw: string): void {
     const line = raw.trim()
-    if (line === '' || line.startsWith(':')) return
+    if (line === '') return
+    if (line.startsWith(':')) {
+      logger.debug('SSE heartbeat/comment received')
+      return
+    }
 
-    if (!line.startsWith('data:')) return
+    if (line.startsWith('event:')) {
+      // Named event (e.g. event:ping from the Electrolux endpoint) — expected, no-op
+      logger.debug({ event: line.slice('event:'.length).trim() }, 'SSE named event received')
+      return
+    }
+
+    if (!line.startsWith('data:')) {
+      logger.debug({ line }, 'SSE unexpected non-data line received')
+      return
+    }
 
     const payload = line.slice('data:'.length).trim()
-    const event = parseStreamEventData(payload)
-    if (!event) return
+    logger.debug({ payload }, 'SSE data line received')
 
+    const event = parseStreamEventData(payload)
+    if (!event) {
+      logger.debug({ payload }, 'SSE data line did not parse to a StreamEvent')
+      return
+    }
+
+    logger.debug({ applianceId: event.applianceId, property: event.property }, 'SSE StreamEvent dispatching to hooks')
     this._lastEventAt = Date.now()
     for (const hook of this.eventHooks) {
       try {

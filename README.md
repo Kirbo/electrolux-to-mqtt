@@ -80,7 +80,8 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `MQTT_CLIENT_ID`                                      | MQTT client identifier                                                   | `electrolux-comfort600` | No       |
 | `MQTT_RETAIN`                                         | Retain MQTT messages                                                     | `false`                 | No       |
 | `MQTT_QOS`                                            | MQTT QoS level (0, 1, or 2)                                              | `2`                     | No       |
-| `ELECTROLUX_SAFETY_REFRESH_INTERVAL`                  | Full-state safety resync interval in seconds (600–86400). State is delivered in real-time via SSE; this is a belt-and-suspenders resync for drift correction | `21600`  | No       |
+| `ELECTROLUX_REFRESH_INTERVAL`                         | Appliance state polling interval in seconds (10–3600). Polling is the primary state source; SSE provides low-latency deltas on top | `60` | No |
+| `ELECTROLUX_COMMAND_STATE_DELAY_SECONDS`              | Seconds to wait after a command before re-polling authoritative state (5–300) | `30`              | No       |
 | `ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL`             | Appliance discovery interval in seconds (60–3600)                        | `300`                   | No       |
 | `ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY`                | Minutes before token expiry to refresh (5–715)                           | `60`                    | No       |
 | `ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES`   | Minutes an appliance must be continuously absent before cleanup (1–1440) | `30`                    | No       |
@@ -153,7 +154,8 @@ docker run --rm \
   # -e MQTT_CLIENT_ID=electrolux-comfort600 \
   # -e MQTT_RETAIN=false \
   # -e MQTT_QOS=2 \
-  # -e ELECTROLUX_SAFETY_REFRESH_INTERVAL=21600 \
+  # -e ELECTROLUX_REFRESH_INTERVAL=60 \
+  # -e ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30 \
   # -e ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300 \
   # -e ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60 \
   # -e ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30 \
@@ -234,7 +236,8 @@ services:
       # - MQTT_CLIENT_ID=electrolux-comfort600
       # - MQTT_RETAIN=false
       # - MQTT_QOS=2
-      # - ELECTROLUX_SAFETY_REFRESH_INTERVAL=21600
+      # - ELECTROLUX_REFRESH_INTERVAL=60
+      # - ELECTROLUX_COMMAND_STATE_DELAY_SECONDS=30
       # - ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL=300
       # - ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY=60
       # - ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES=30
