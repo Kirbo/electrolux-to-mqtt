@@ -28,7 +28,7 @@ initialise variables:
       dotenv: variables.env
   script:
     - touch variables.env
-    - echo "NODE_VERSION=$(cat .nvmrc)-alpine3.23" >> variables.env
+    - echo "NODE_VERSION=$(cat .nvmrc)-alpine3.24" >> variables.env
 
 bump version:
   stage: init
