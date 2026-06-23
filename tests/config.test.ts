@@ -1289,7 +1289,7 @@ homeAssistant:
       } catch (error) {
         expect(error).toBeInstanceOf(z.ZodError)
         if (error instanceof z.ZodError) {
-          expect(error.issues.length).toBe(2)
+          expect(error.issues).toHaveLength(2)
         }
       }
     })

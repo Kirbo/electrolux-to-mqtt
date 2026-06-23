@@ -696,7 +696,7 @@ describe('Orchestrator', () => {
       await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
 
       // No additional state fetches should have happened
-      expect(vi.mocked(client.getApplianceState).mock.calls.length).toBe(callsAfterFirstPoll)
+      expect(vi.mocked(client.getApplianceState).mock.calls).toHaveLength(callsAfterFirstPoll)
       expect(orchestrator.isShuttingDown).toBe(true)
     })
 
@@ -752,7 +752,7 @@ describe('Orchestrator', () => {
       // If an interval leaked, advancing time would trigger getApplianceState again
       const callsAtShutdown = vi.mocked(client.getApplianceState).mock.calls.length
       await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
-      expect(vi.mocked(client.getApplianceState).mock.calls.length).toBe(callsAtShutdown)
+      expect(vi.mocked(client.getApplianceState).mock.calls).toHaveLength(callsAtShutdown)
     })
   })
 

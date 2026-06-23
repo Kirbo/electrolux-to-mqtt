@@ -264,7 +264,7 @@ describe('normalizers', () => {
           reported: {
             applianceState: 'running',
             deviceId: 'device-123',
-            dataModelVersion: 1,
+            dataModelVersion: '1.0.1',
             $version: 5,
           },
         },
@@ -277,7 +277,7 @@ describe('normalizers', () => {
       expect(result.connectionState).toBe('connected')
       expect(result.applianceState).toBe('on')
       expect(result.deviceId).toBe('device-123')
-      expect(result.dataModelVersion).toBe(1)
+      expect(result.dataModelVersion).toBe('1.0.1')
       expect(result.version).toBe(5)
     })
 
@@ -332,8 +332,8 @@ describe('normalizers', () => {
           reported: {
             schedulerMode: 'ON',
             schedulerSession: 'OFF',
-            startTime: '08:00',
-            stopTime: '22:00',
+            startTime: 480,
+            stopTime: 1320,
           },
         },
       } as unknown as Appliance
@@ -342,8 +342,8 @@ describe('normalizers', () => {
 
       expect(result.schedulerMode).toBe('on')
       expect(result.schedulerSession).toBe('off')
-      expect(result.startTime).toBe('08:00')
-      expect(result.stopTime).toBe('22:00')
+      expect(result.startTime).toBe(480)
+      expect(result.stopTime).toBe(1320)
     })
 
     it('should normalize firmware versions', () => {
