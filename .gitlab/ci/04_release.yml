@@ -267,9 +267,13 @@ deploy telemetry-backend:
     - *deploy_backend_env
     - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
 
-# After a bridge release (new version tagged), restart the backend so it regenerates
-# badges immediately with the new release data instead of waiting for the next interval.
-refresh telemetry-backend:
+# After a bridge release (new tag + GitLab release), regenerate the badges in the *running*
+# backend so the version badges reflect the new release immediately instead of waiting up to
+# BADGE_INTERVAL_SECONDS for the next cycle. A one-shot `regenerate-badges` script runs inside
+# the container and rewrites the SVGs on the shared badge volume — no restart, no rebuild.
+# (A plain `up -d` would be a no-op here, since the image/config is unchanged — which is why the
+# beta badge went stale after a beta-only release.)
+refresh telemetry badges:
   stage: release
   image: alpine:latest
   rules:
@@ -299,8 +303,7 @@ refresh telemetry-backend:
   before_script:
     - *ssh_deploy
   script:
-    - *deploy_backend_env
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up -d"
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && docker compose -f telemetry-backend/docker-compose.yml exec -T telemetry-backend node dist/regenerate-badges.js"
 
 prepare dockerhub readme:
   stage: release
