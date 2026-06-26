@@ -1,14 +1,14 @@
 # Electrolux to MQTT / Home Assistant
 
-[![Latest Stable](https://e2m.devaus.eu/stable.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases)
-[![Latest Beta](https://e2m.devaus.eu/beta.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases)
+[![Latest Stable](https://e2m.devaus.eu/stable.svg)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases)
+[![Latest Beta](https://e2m.devaus.eu/beta.svg)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases)
 [![Docker Pulls](https://badgen.net/docker/pulls/kirbownz/electrolux-to-mqtt)](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt/)
-[![Active Users](https://e2m.devaus.eu/users.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases)
+[![Active Users](https://e2m.devaus.eu/users.svg)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases)
 
-[![CI/CD Pipeline Status](https://gitlab.com/kirbo/electrolux-to-mqtt/badges/main/pipeline.svg)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/pipelines)
-[![GitLab Last Commit](https://img.shields.io/gitlab/last-commit/Kirbo%2Felectrolux-to-mqtt)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/commits)
-[![GitLab Issues](https://img.shields.io/gitlab/issues/open/Kirbo%2Felectrolux-to-mqtt?labels=Bug)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues?label_name%5B%5D=Bug)
-[![GitLab Merge Requests](https://img.shields.io/gitlab/merge-requests/open/Kirbo%2Felectrolux-to-mqtt)](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests)
+[![CI/CD Pipeline Status](https://gitlab.com/kirbodev/electrolux-to-mqtt/badges/main/pipeline.svg)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/pipelines)
+[![GitLab Last Commit](https://img.shields.io/gitlab/last-commit/kirbodev%2Felectrolux-to-mqtt)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/commits)
+[![GitLab Issues](https://img.shields.io/gitlab/issues/open/kirbodev%2Felectrolux-to-mqtt?labels=Bug)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/issues?label_name%5B%5D=Bug)
+[![GitLab Merge Requests](https://img.shields.io/gitlab/merge-requests/open/kirbodev%2Felectrolux-to-mqtt)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/merge_requests)
 
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kirbo_electrolux-to-mqtt&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kirbo_electrolux-to-mqtt)
@@ -32,11 +32,11 @@ A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Ho
 - **Anonymous Telemetry** - During version checks, sends the app version, update channel (`stable`/`beta`), OS name and version, CPU architecture, and connected-appliance model id(s) and count to a self-hosted [Aptabase](https://aptabase.com) instance. Aptabase derives an approximate country from the request IP and computes a daily-rotating, non-reversible visitor id (IP + user-agent + daily salt) — no stable device id, username, or other personal data is sent or stored. Opt out by setting `E2M_TELEMETRY_ENABLED=false`. This is a personal project maintained in my free time, and knowing the active user count helps me gauge how much effort to invest in it.
 
 Relevant links:
-- [Source codes](https://gitlab.com/kirbo/electrolux-to-mqtt) are in GitLab
-- [Issues](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues) are in GitLab
-- [Pull/Merge Requests](https://gitlab.com/kirbo/electrolux-to-mqtt/-/merge_requests) are in GitLab
-- [Releases](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases) containing the Release Notes are in GitLab
-- [CI/CD Pipeline](https://gitlab.com/kirbo/electrolux-to-mqtt/-/pipelines) is in GitLab
+- [Source codes](https://gitlab.com/kirbodev/electrolux-to-mqtt) are in GitLab
+- [Issues](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/issues) are in GitLab
+- [Pull/Merge Requests](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/merge_requests) are in GitLab
+- [Releases](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases) containing the Release Notes are in GitLab
+- [CI/CD Pipeline](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/pipelines) is in GitLab
 - [Dockerhub](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt)
 - [GitHub mirror](https://github.com/Kirbo/electrolux-to-mqtt)
 - [SonarQube Cloud](https://sonarcloud.io/project/overview?id=kirbo_electrolux-to-mqtt)
@@ -48,7 +48,7 @@ Relevant links:
 |-------|------|-------|
 | **Electrolux Comfort 600** | Portable Air Conditioner | Full support: climate modes, fan speed, swing, sleep mode, temperature control |
 
-Unknown models that report as a portable air conditioner will use the Comfort 600 implementation as a fallback. If you have a different Electrolux appliance and would like support added, please [open an issue](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues).
+Unknown models that report as a portable air conditioner will use the Comfort 600 implementation as a fallback. If you have a different Electrolux appliance and would like support added, please [open an issue](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/issues).
 
 ## Prerequisites
 
@@ -297,7 +297,7 @@ configuration needed. Override with `VERSION_CHECK_UPDATE_CHANNEL=stable` (env v
 `updateChannel: stable` in `config.yml` under `versionCheck:` to pin to the stable channel.
 
 Release notes for each beta are available on the
-[GitLab releases page](https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases).
+[GitLab releases page](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases).
 </details>
 
 ## Developing locally

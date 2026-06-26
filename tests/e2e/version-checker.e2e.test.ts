@@ -6,8 +6,8 @@ const NOTIFY_TOPIC = process.env.E2M_NTFY_TOPIC || 'vB66ozQaRiqhTE9j'
 const APTABASE_EVENTS_URL = 'https://aptabase.devaus.eu/api/v0/events'
 const APTABASE_APP_KEY = 'A-SH-2414786682'
 const NTFY_URL = `https://ntfy.sh/${NOTIFY_TOPIC}`
-const GITLAB_RELEASES_URL = 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases'
-const GITLAB_TAGS_URL = 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/repository/tags'
+const GITLAB_RELEASES_URL = 'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases'
+const GITLAB_TAGS_URL = 'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/repository/tags'
 
 // Helper to get latest version from GitLab
 type GitLabTag = {

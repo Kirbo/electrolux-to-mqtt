@@ -417,7 +417,7 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockAxiosGet).toHaveBeenCalledWith(
-        'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases',
+        'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases',
         expect.any(Object),
       )
 
@@ -445,7 +445,7 @@ describe('version-checker', () => {
       // Should have called both releases and tags endpoints
       expect(mockAxiosGet).toHaveBeenCalledWith(expect.stringContaining('/releases'), expect.any(Object))
       expect(mockAxiosGet).toHaveBeenCalledWith(
-        'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/repository/tags',
+        'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/repository/tags',
         expect.any(Object),
       )
 

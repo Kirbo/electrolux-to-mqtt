@@ -11,7 +11,7 @@ const APTABASE_EVENTS_URL = `${APTABASE_HOST}/api/v0/events`
 
 const logger = createLogger('version')
 
-const GITLAB_REPO = 'kirbo/electrolux-to-mqtt'
+const GITLAB_REPO = 'kirbodev/electrolux-to-mqtt'
 const GITLAB_API = 'https://gitlab.com/api/v4'
 
 // Track whether we've already notified about a newer version in this session

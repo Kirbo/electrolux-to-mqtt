@@ -29,7 +29,7 @@ Please be respectful and considerate in all interactions. We're here to build gr
    ```
 3. **Add upstream remote**:
    ```bash
-   git remote add upstream https://gitlab.com/kirbo/electrolux-to-mqtt.git
+   git remote add upstream https://gitlab.com/kirbodev/electrolux-to-mqtt.git
    ```
 
 ## Development Setup
@@ -362,7 +362,7 @@ This project supports AI-assisted development with [Claude Code](https://docs.an
 
 ## Questions?
 
-- **Issues**: [Open an issue](https://gitlab.com/kirbo/electrolux-to-mqtt/-/issues)
+- **Issues**: [Open an issue](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/issues)
 - **Discussions**: Use GitLab discussions for questions
 - **Documentation**: Check the [README](../README.md)
 

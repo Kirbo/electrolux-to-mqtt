@@ -91,7 +91,7 @@ actions:
           else 'unknown'
         }} ago.
         You're running version {{ trigger.payload_json.currentVersion | default('unknown') }}.
-        Read the release notes in https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases/{{ trigger.payload_json.latestVersion }}
+        Read the release notes in https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases/{{ trigger.payload_json.latestVersion }}
   - action: notify.notify
     data:
       title: Electrolux to MQTT
@@ -105,6 +105,6 @@ actions:
           else 'unknown'
         }} ago.
         You're running version {{ trigger.payload_json.currentVersion | default('unknown') }}.
-        Read the release notes in https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases/{{ trigger.payload_json.latestVersion }}
+        Read the release notes in https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases/{{ trigger.payload_json.latestVersion }}
 mode: single
 ```
