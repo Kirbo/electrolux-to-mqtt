@@ -217,15 +217,33 @@ create gitlab prerelease:
         exit 1
       fi
 
-.ssh_telemetry: &ssh_telemetry
-  - apk add --no-cache openssh-client
+.ssh_deploy: &ssh_deploy
+  - apk add --no-cache openssh-client curl bash
+  # Install the mise-pinned, PQ-capable sops (version from mise.toml) — NOT alpine's
+  # apk sops, which may be too old to decrypt the native post-quantum (ML-KEM) age key.
+  - curl https://mise.run | sh
+  - export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+  - mise trust
+  - mise install sops
+  - mise reshim
   - mkdir -p ~/.ssh
   - echo "${SSH_KEY}" | base64 -d > ~/.ssh/id_rsa
   - chmod 700 ~/.ssh
   - chmod 600 ~/.ssh/id_rsa
   - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
 
-update telemetry backend:
+# Pull latest on the server, decrypt telemetry-backend/.env from its committed SOPS .enc
+# using the SOPS_AGE_KEY CI/CD variable, and copy the plaintext .env over. The age key
+# lives ONLY in the CI variable (rotate in one place); the server stores neither sops
+# nor the key. sops here is the mise-pinned, PQ/ML-KEM-capable version (see mise.toml),
+# installed in the *ssh_deploy step and resolved via the mise shim on PATH.
+.deploy_backend_env: &deploy_backend_env
+  - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && git fetch origin ${CI_COMMIT_BRANCH} && git checkout ${CI_COMMIT_BRANCH} && git pull origin ${CI_COMMIT_BRANCH}"
+  - SOPS_AGE_KEY="${SOPS_AGE_KEY}" sops -d --input-type binary --output-type binary telemetry-backend/.env.enc > telemetry-backend/.env
+  - scp telemetry-backend/.env "${TELEMETRY_USER}@${TELEMETRY_HOST}:${TELEMETRY_PATH}/telemetry-backend/.env"
+  - rm -f telemetry-backend/.env
+
+deploy telemetry-backend:
   stage: release
   image: alpine:latest
   rules:
@@ -234,8 +252,6 @@ update telemetry backend:
     - if: '$CI_COMMIT_TAG == null && ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "next")'
       changes:
         - telemetry-backend/**/*
-        - telemetry-backend/package.json
-        - telemetry-backend/pnpm-lock.yaml
       when: on_success
     - when: never
   cache: []
@@ -246,11 +262,14 @@ update telemetry backend:
     - job: telemetry-backend test
       artifacts: false
   before_script:
-    - *ssh_telemetry
+    - *ssh_deploy
   script:
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && git fetch origin ${CI_COMMIT_BRANCH} && git checkout ${CI_COMMIT_BRANCH} && git pull origin ${CI_COMMIT_BRANCH} && ./telemetry-backend/start.sh"
+    - *deploy_backend_env
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
 
-refresh telemetry badges:
+# After a bridge release (new version tagged), restart the backend so it regenerates
+# badges immediately with the new release data instead of waiting for the next interval.
+refresh telemetry-backend:
   stage: release
   image: alpine:latest
   rules:
@@ -274,13 +293,14 @@ refresh telemetry badges:
     - job: create gitlab prerelease
       artifacts: false
       optional: true
-    - job: update telemetry backend
+    - job: deploy telemetry-backend
       artifacts: false
       optional: true
   before_script:
-    - *ssh_telemetry
+    - *ssh_deploy
   script:
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH}/telemetry-backend && docker compose exec -T telemetry-backend node dist/regenerate-badges.js"
+    - *deploy_backend_env
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up -d"
 
 prepare dockerhub readme:
   stage: release
