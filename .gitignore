@@ -8,6 +8,7 @@ docker-compose.local.yml
 !tests/config.yml
 dist
 coverage
+telemetry-backend/badge/
 .DS_Store
 tests/e2e/snapshots
 .env

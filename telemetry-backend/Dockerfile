@@ -59,8 +59,11 @@ ENV NODE_ENV=production
 
 # Run as non-root user
 RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
+# Badge output dir (OUTPUT_DIR) — writable by the non-root user even when the
+# bind-mounted host dir is empty.
+RUN mkdir -p /app/badge && chown nodejs:nodejs /app/badge
 USER nodejs
 
-EXPOSE 3002
+EXPOSE 3001
 
 CMD ["node", "dist/index.js"]

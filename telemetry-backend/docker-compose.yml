@@ -11,18 +11,18 @@ services:
         - NODE_VERSION=${NODE_VERSION:-24}
     container_name: telemetry-backend
     restart: unless-stopped
-    # Published on the host so Nginx Proxy Manager (NPM, which runs in its own container
-    # and cannot reach the host's 127.0.0.1) can proxy to it.
-    # Alternative: attach this service to NPM's docker network and proxy to
-    # "telemetry-backend:3002" by service name — avoids the port being public.
+    # Published on the host so the reverse proxy reaches it. Port 3001 matches the OLD
+    # backend, so the existing nginx /telemetry proxy target doesn't change. (NPM, in its
+    # own container, can't reach the host's 127.0.0.1 — proxy to the host IP:3001, or
+    # attach this service to NPM's network and proxy to "telemetry-backend:3001".)
     ports:
-      - "3002:3002"
-    # SOPS-decrypted secrets (CH creds + APTABASE_APP_ID) — see telemetry-backend/.env.example
+      - "3001:3001"
+    # SOPS-decrypted secrets (CH creds + APTABASE_APP_ID) — see telemetry-backend/.env.example.
     # Run `pnpm sops:decrypt` to generate .env from the committed .env.enc.
     env_file:
       - .env
     environment:
-      - PORT=3002
+      - PORT=3001
       - APTABASE_HOST=https://aptabase.devaus.eu
       - APTABASE_APP_KEY=A-SH-2414786682
       # Rate limit: 10 requests per 60 s per IP (old bridge checks once/hour max)
@@ -30,6 +30,12 @@ services:
       - RATE_LIMIT_WINDOW_MS=60000
       # Badge regeneration interval in seconds (default 300 = every 5 minutes)
       - BADGE_INTERVAL_SECONDS=300
+      - OUTPUT_DIR=/app/badge
+    volumes:
+      # Badge SVGs + telemetry.json are written here and served STATICALLY by nginx, so
+      # the high-traffic badge GETs never hit the container. The host side (./badge,
+      # gitignored) is what nginx's `root` points at — see nginx/reverse-proxy.conf.
+      - ./badge:/app/badge
     networks:
       # Attach to the Aptabase stack's network so the ClickHouse service resolves by
       # service name (e.g. 'aptabase_events_db'). Replace 'aptabase_default' with your

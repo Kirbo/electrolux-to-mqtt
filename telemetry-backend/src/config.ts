@@ -16,6 +16,7 @@ export interface BackendConfig {
   clickhouseDatabase: string
   aptabaseAppId: string
   badgeIntervalSeconds: number
+  outputDir: string
   releasesApiUrl: string
   releasesPageUrl: string
   // Legacy ingest: Aptabase forwarding (non-secret)
@@ -52,8 +53,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     clickhouseDatabase: env.CLICKHOUSE_DATABASE ?? 'default',
     aptabaseAppId,
     badgeIntervalSeconds,
-    releasesApiUrl: env.RELEASES_API_URL ?? 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases',
-    releasesPageUrl: env.RELEASES_PAGE_URL ?? 'https://gitlab.com/kirbo/electrolux-to-mqtt/-/releases',
+    outputDir: env.OUTPUT_DIR ?? '/app/badge',
+    releasesApiUrl: env.RELEASES_API_URL ?? 'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases',
+    releasesPageUrl: env.RELEASES_PAGE_URL ?? 'https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases',
     aptabaseHost: env.APTABASE_HOST ?? 'https://aptabase.devaus.eu',
     aptabaseAppKey: env.APTABASE_APP_KEY ?? 'A-SH-2414786682',
     rateLimitRequests,
@@ -72,7 +74,7 @@ function parsePositiveInt(raw: string | undefined, name: string, defaultValue: n
 }
 
 function parsePort(raw: string | undefined): number {
-  const port = parsePositiveInt(raw, 'PORT', 3002)
+  const port = parsePositiveInt(raw, 'PORT', 3001)
   if (port > 65535) {
     throw new Error(`${PREFIX} FATAL: PORT must be between 1 and 65535, got: "${raw ?? ''}"`)
   }

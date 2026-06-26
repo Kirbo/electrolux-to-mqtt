@@ -24,6 +24,10 @@ describe('readConfig', () => {
       expect(readConfig(BASE_ENV).badgeIntervalSeconds).toBe(300)
     })
 
+    it('defaults OUTPUT_DIR to /app/badge', () => {
+      expect(readConfig(BASE_ENV).outputDir).toBe('/app/badge')
+    })
+
     it('defaults RELEASES_API_URL to gitlab.com', () => {
       expect(readConfig(BASE_ENV).releasesApiUrl).toContain('gitlab.com')
     })
@@ -32,8 +36,8 @@ describe('readConfig', () => {
       expect(readConfig(BASE_ENV).releasesPageUrl).toContain('gitlab.com')
     })
 
-    it('defaults PORT to 3002', () => {
-      expect(readConfig(BASE_ENV).port).toBe(3002)
+    it('defaults PORT to 3001', () => {
+      expect(readConfig(BASE_ENV).port).toBe(3001)
     })
 
     it('defaults APTABASE_HOST', () => {

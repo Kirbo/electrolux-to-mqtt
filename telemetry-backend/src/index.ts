@@ -48,6 +48,7 @@ async function main(): Promise<void> {
     ch,
     appId: config.aptabaseAppId,
     releasesApiUrl: config.releasesApiUrl,
+    outputDir: config.outputDir,
   })
 
   // First regeneration before the server starts so badges are ready on first request.
@@ -58,7 +59,7 @@ async function main(): Promise<void> {
   const forwarder = createHttpForwarder(config.aptabaseHost, config.aptabaseAppKey)
   const limiter = createRateLimiter(config.rateLimitRequests, config.rateLimitWindowMs)
 
-  const server = startServer(store, forwarder, limiter, config.port, serviceVersion)
+  const server = startServer(store, forwarder, limiter, config.releasesPageUrl, config.port, serviceVersion)
 
   const intervalId = setInterval(() => {
     void store.regenerate()

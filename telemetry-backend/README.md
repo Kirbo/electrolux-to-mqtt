@@ -1,18 +1,24 @@
 # telemetry-backend
 
-Combined Aptabase-backed HTTP service that replaces the separate `badge-cron` + `telemetry-shim` containers.
+Aptabase-backed HTTP service that serves the README badges and forwards legacy telemetry POSTs to Aptabase. Replaces the previous Express + Redis telemetry backend.
+
+A near drop-in for the old telemetry backend — same routes and port (3001) — but Aptabase-backed.
 
 ## What it does
 
-1. **Badge serving (permanent)** — on startup and every `BADGE_INTERVAL_SECONDS` (default 300 s), reads aggregated usage data from Aptabase's ClickHouse and fetches the latest GitLab releases, then renders four in-memory artifacts:
-   - `GET /users.svg` — users-today badge
-   - `GET /stable.svg` — latest stable release badge
-   - `GET /beta.svg` — latest beta release badge (invisible SVG if beta is not newer than stable)
-   - `GET /telemetry.json` — raw aggregated telemetry (total + channels + per-version breakdown)
-   - `GET /` — 302 redirect to `/users.svg`
-   - `GET /health` — 200 `{ status: 'ok' }`
+1. **Badge generation (permanent)** — on startup and every `BADGE_INTERVAL_SECONDS` (default 300 s), reads aggregated usage data from Aptabase's ClickHouse and fetches the latest GitLab releases, then **writes** the artifacts to `OUTPUT_DIR` (a mounted volume). The reverse proxy serves these **statically**, so the high-traffic badge GETs never hit the container:
+   - `users.svg` — users-today badge
+   - `stable.svg` — latest stable release badge
+   - `beta.svg` — latest beta release badge (invisible SVG if beta is not newer than stable)
+   - `telemetry.json` — raw aggregated telemetry (total + channels + per-version breakdown)
 
-2. **Legacy ingest (temporary)** — old bridge versions (`<2026.6.x`) `POST /telemetry` with `{ userHash, version, channel }`. The service validates, rate-limits, and forwards to Aptabase as a `version_check` event (tagged `source='legacy'`). Responds 204 regardless of Aptabase result (best-effort).
+2. **Dynamic endpoints (served by the container)** — everything the old backend exposed dynamically:
+   - `GET /telemetry` — the aggregated JSON (also written to disk as `telemetry.json`)
+   - `GET /stable` / `GET /beta` — 302 redirect to the latest release (fail-open to the releases page)
+   - `GET /health` — 200 `{ status: 'ok' }`
+   - `POST /telemetry` — **legacy ingest**: old bridge versions POST `{ userHash, version, channel }`; the service rate-limits, validates, and forwards to Aptabase as a `version_check` event tagged `source='legacy'` (204, best-effort). *Temporary* — see the delete checklist.
+
+   `GET /` → `302 /users.svg` is handled by the reverse proxy.
 
 ### Delete checklist for the legacy half
 
@@ -33,28 +39,26 @@ When `source='legacy'` events in Aptabase drop to ~0 (no more old bridges in the
 | `CLICKHOUSE_DATABASE` | No | `default` | ClickHouse database |
 | `APTABASE_APP_ID` | Yes | — | Aptabase app GUID (from dashboard / `apps` Postgres table) |
 | `BADGE_INTERVAL_SECONDS` | No | `300` | Seconds between badge regeneration cycles |
+| `OUTPUT_DIR` | No | `/app/badge` | Dir the badge files are written to (mounted volume, served static by nginx) |
 | `RELEASES_API_URL` | No | GitLab API | GitLab releases API URL |
 | `RELEASES_PAGE_URL` | No | GitLab page | GitLab releases page URL |
 | `APTABASE_HOST` | No | `https://aptabase.devaus.eu` | Aptabase ingestion host |
 | `APTABASE_APP_KEY` | No | `A-SH-2414786682` | Aptabase App-Key for forwarding |
 | `RATE_LIMIT_REQUESTS` | No | `10` | Max requests per IP per window |
 | `RATE_LIMIT_WINDOW_MS` | No | `60000` | Rate limit window in ms |
-| `PORT` | No | `3002` | HTTP listen port |
+| `PORT` | No | `3001` | HTTP listen port (matches the old backend, so the proxy target is unchanged) |
 
 **SOPS-managed secrets** (put in `telemetry-backend/.env`, encrypted as `.env.enc`):
 `CLICKHOUSE_URL`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `APTABASE_APP_ID`
 
 **Non-secret** (live in `docker-compose.yml` environment block):
-`APTABASE_HOST`, `APTABASE_APP_KEY`, `PORT`, `BADGE_INTERVAL_SECONDS`, `RATE_LIMIT_*`
+`APTABASE_HOST`, `APTABASE_APP_KEY`, `PORT`, `OUTPUT_DIR`, `BADGE_INTERVAL_SECONDS`, `RATE_LIMIT_*`
 
-## Nginx Proxy Manager (NPM) wiring
+## Reverse proxy wiring
 
-NPM runs in its own container and cannot reach the host's `127.0.0.1`. Two options:
+The badge SVGs (+ `telemetry.json`) are served **statically** from the `OUTPUT_DIR` volume; only the dynamic routes (`/telemetry`, `/stable`, `/beta`, `/health`) are proxied to the service on **:3001** (the old backend's port — so an existing proxy config barely changes). See `nginx/reverse-proxy.conf` for a host-nginx reference (static `root` + proxied dynamic locations).
 
-- **Host IP**: proxy to `http://<host-ip>:3002` (e.g. `http://192.168.1.10:3002`)
-- **Docker network**: attach this service to NPM's network and proxy to `http://telemetry-backend:3002` by service name (avoids public port exposure)
-
-See `nginx/reverse-proxy.conf` for the reference nginx config for host-nginx deployments.
+With **Nginx Proxy Manager** (a container that can't reach the host's `127.0.0.1`): serve the badge dir statically and forward the dynamic locations to the **host IP**`:3001`, or attach the service to NPM's network and use `http://telemetry-backend:3001`.
 
 ## Aptabase X-Forwarded-For trust (legacy ingest prerequisite)
 

@@ -7,7 +7,6 @@ import type { RateLimiter } from './rate-limit.js'
 import { validateLegacyBody } from './validation.js'
 
 const JSON_CONTENT_TYPE = 'application/json'
-const SVG_CONTENT_TYPE = 'image/svg+xml'
 
 const NO_CACHE_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -15,17 +14,16 @@ const NO_CACHE_HEADERS: Record<string, string> = {
   Expires: '0',
 }
 
-function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body)
-  res.writeHead(status, { 'Content-Type': JSON_CONTENT_TYPE })
-  res.end(payload)
-}
-
 /**
  * Max accepted POST body. Legacy bodies are ~150 B; the cap stops an oversized
  * request from exhausting memory on the (64 MB) container.
  */
 const MAX_BODY_BYTES = 8 * 1024
+
+function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'Content-Type': JSON_CONTENT_TYPE })
+  res.end(JSON.stringify(body))
+}
 
 type ReadBodyResult = { ok: true; body: string } | { ok: false; reason: 'too_large' | 'error' }
 
@@ -60,16 +58,11 @@ function readBody(req: http.IncomingMessage, maxBytes: number): Promise<ReadBody
   })
 }
 
-function handleSvg(res: http.ServerResponse, svg: string | null): void {
-  if (svg === null) {
-    res.writeHead(503, { 'Content-Type': 'text/plain' })
-    res.end('Not yet ready')
-    return
-  }
-  res.writeHead(200, { 'Content-Type': SVG_CONTENT_TYPE, ...NO_CACHE_HEADERS })
-  res.end(svg)
+function handleHealth(res: http.ServerResponse): void {
+  writeJson(res, 200, { status: 'ok' })
 }
 
+/** `GET /telemetry` — the aggregated JSON, served from memory (refreshed each cycle). */
 function handleTelemetryJson(res: http.ServerResponse, json: string | null): void {
   if (json === null) {
     res.writeHead(503, { 'Content-Type': 'text/plain' })
@@ -80,8 +73,10 @@ function handleTelemetryJson(res: http.ServerResponse, json: string | null): voi
   res.end(json)
 }
 
-function handleHealth(res: http.ServerResponse): void {
-  writeJson(res, 200, { status: 'ok' })
+/** `GET /stable` / `GET /beta` — 302 to the release page (fail-open to the releases list). */
+function handleReleaseRedirect(res: http.ServerResponse, releasesPageUrl: string, tag: string | null): void {
+  res.writeHead(302, { Location: tag ? `${releasesPageUrl}/${tag}` : releasesPageUrl })
+  res.end()
 }
 
 async function handleLegacyTelemetry(
@@ -115,11 +110,10 @@ async function handleLegacyTelemetry(
     writeJson(res, 400, { error: 'Failed to read request body' })
     return
   }
-  const rawBody = bodyResult.body
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(rawBody)
+    parsed = JSON.parse(bodyResult.body)
   } catch {
     writeJson(res, 400, { error: 'Invalid JSON' })
     return
@@ -144,22 +138,22 @@ async function handleLegacyTelemetry(
 }
 
 /**
- * Create the combined telemetry-backend HTTP server with injected dependencies.
+ * Create the telemetry-backend HTTP server. Badge SVGs are written to disk and
+ * served statically by the reverse proxy — they are NOT routes here. This server
+ * keeps the old backend's dynamic endpoints (a drop-in surface):
  *
- * Routes:
- *   GET /              → 302 /users.svg
- *   GET /users.svg     → in-memory SVG (no-cache) or 503
- *   GET /stable.svg    → in-memory SVG (no-cache) or 503
- *   GET /beta.svg      → in-memory SVG (no-cache) or 503
- *   GET /telemetry.json → in-memory JSON (no-cache) or 503
- *   POST /telemetry    → legacy ingest: validate → rate-limit → forward → 204
- *   GET /health        → 200 { status: 'ok' }
- *   *                  → 404
+ *   GET  /telemetry → aggregated JSON (in-memory) or 503
+ *   POST /telemetry → legacy ingest: rate-limit → validate → forward → 204
+ *   GET  /stable    → 302 to the latest stable release (or the releases page)
+ *   GET  /beta      → 302 to the latest beta release (or the releases page)
+ *   GET  /health    → 200 { status: 'ok' }
+ *   *               → 404
  */
 export function createServer(
   store: BadgeStore,
   forwarder: AptabaseForwarder,
   limiter: RateLimiter,
+  releasesPageUrl: string,
   serviceVersion: string,
 ): http.Server {
   return http.createServer((req, res) => {
@@ -171,39 +165,27 @@ export function createServer(
       return
     }
 
-    if (url === '/') {
-      res.writeHead(302, { Location: '/users.svg' })
-      res.end()
+    if (url === '/stable') {
+      handleReleaseRedirect(res, releasesPageUrl, store.getStableTag())
       return
     }
 
-    if (url === '/users.svg') {
-      handleSvg(res, store.getUsersSvg())
-      return
-    }
-
-    if (url === '/stable.svg') {
-      handleSvg(res, store.getStableSvg())
-      return
-    }
-
-    if (url === '/beta.svg') {
-      handleSvg(res, store.getBetaSvg())
-      return
-    }
-
-    if (url === '/telemetry.json') {
-      handleTelemetryJson(res, store.getTelemetryJson())
+    if (url === '/beta') {
+      handleReleaseRedirect(res, releasesPageUrl, store.getBetaTag())
       return
     }
 
     if (url === '/telemetry') {
-      if (method !== 'POST') {
-        res.writeHead(405, { Allow: 'POST' })
-        res.end()
+      if (method === 'POST') {
+        void handleLegacyTelemetry(req, res, forwarder, limiter, serviceVersion)
         return
       }
-      void handleLegacyTelemetry(req, res, forwarder, limiter, serviceVersion)
+      if (method === 'GET') {
+        handleTelemetryJson(res, store.getTelemetryJson())
+        return
+      }
+      res.writeHead(405, { Allow: 'GET, POST' })
+      res.end()
       return
     }
 
@@ -217,10 +199,11 @@ export function startServer(
   store: BadgeStore,
   forwarder: AptabaseForwarder,
   limiter: RateLimiter,
+  releasesPageUrl: string,
   port: number,
   serviceVersion: string,
 ): http.Server {
-  const server = createServer(store, forwarder, limiter, serviceVersion)
+  const server = createServer(store, forwarder, limiter, releasesPageUrl, serviceVersion)
   server.listen(port, '0.0.0.0', () => {
     console.log(`[telemetry-backend] Listening on port ${port}`)
   })

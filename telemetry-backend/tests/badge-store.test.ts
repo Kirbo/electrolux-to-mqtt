@@ -1,8 +1,23 @@
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { ReleasesFetcher } from '../src/badge-store.js'
+import type { FileWriter, ReleasesFetcher } from '../src/badge-store.js'
 import { createBadgeStore } from '../src/badge-store.js'
 import { INVISIBLE_SVG } from '../src/badges.js'
 import { FakeClickHouse } from './fake-clickhouse.js'
+
+const OUT = '/out'
+const usersFile = path.join(OUT, 'users.svg')
+const telemetryFile = path.join(OUT, 'telemetry.json')
+const stableFile = path.join(OUT, 'stable.svg')
+const betaFile = path.join(OUT, 'beta.svg')
+
+function recordingWriter(): { writeFile: FileWriter; files: Map<string, string> } {
+  const files = new Map<string, string>()
+  const writeFile: FileWriter = async (filePath, content) => {
+    files.set(filePath, content)
+  }
+  return { writeFile, files }
+}
 
 function buildFakeCh(total = 5): FakeClickHouse {
   const fake = new FakeClickHouse()
@@ -11,259 +26,171 @@ function buildFakeCh(total = 5): FakeClickHouse {
   return fake
 }
 
-const stableRelease = async (): Promise<{ stable: string | null; beta: string | null }> => ({
-  stable: 'v2026.6.0',
-  beta: null,
-})
+const stableRelease: ReleasesFetcher = async () => ({ stable: 'v2026.6.0', beta: null })
+const bothReleases: ReleasesFetcher = async () => ({ stable: 'v2026.5.0', beta: 'v2026.6.0b1' })
+const betaOnlyReleases: ReleasesFetcher = async () => ({ stable: null, beta: 'v2026.6.0b1' })
+const noReleases: ReleasesFetcher = async () => ({ stable: null, beta: null })
 
-// Beta is for the NEXT minor (2026.7.0b1 > stable 2026.6.0), so the badge should be shown.
-const bothReleases = async (): Promise<{ stable: string | null; beta: string | null }> => ({
-  stable: 'v2026.5.0',
-  beta: 'v2026.6.0b1',
-})
-
-const betaOnlyReleases = async (): Promise<{ stable: string | null; beta: string | null }> => ({
-  stable: null,
-  beta: 'v2026.6.0b1',
-})
-
-const noReleases = async (): Promise<{ stable: string | null; beta: string | null }> => ({
-  stable: null,
-  beta: null,
-})
+function makeStore(opts: { ch?: FakeClickHouse; releasesFetcher?: ReleasesFetcher; writeFile: FileWriter }) {
+  return createBadgeStore({
+    ch: opts.ch ?? buildFakeCh(),
+    appId: 'test-app',
+    releasesApiUrl: 'https://example.com',
+    outputDir: OUT,
+    releasesFetcher: opts.releasesFetcher ?? stableRelease,
+    writeFile: opts.writeFile,
+  })
+}
 
 describe('createBadgeStore', () => {
   describe('initial state', () => {
-    it('all getters return null before first regenerate', () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
-      expect(store.getUsersSvg()).toBeNull()
-      expect(store.getStableSvg()).toBeNull()
-      expect(store.getBetaSvg()).toBeNull()
+    it('getters return null before the first regenerate', () => {
+      const store = makeStore({ writeFile: recordingWriter().writeFile })
       expect(store.getTelemetryJson()).toBeNull()
+      expect(store.getStableTag()).toBeNull()
+      expect(store.getBetaTag()).toBeNull()
     })
   })
 
-  describe('after successful regenerate', () => {
-    it('usersSvg is populated with a valid SVG', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(42),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
+  describe('after a successful regenerate (stable only)', () => {
+    it('writes users.svg with the count and telemetry.json with the total', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: buildFakeCh(42), writeFile })
       await store.regenerate()
-      const svg = store.getUsersSvg()
-      expect(svg).not.toBeNull()
-      expect(svg).toContain('42')
-      expect(svg).toContain('Users')
+      expect(files.get(usersFile)).toContain('42')
+      expect(files.get(usersFile)).toContain('Users')
+      const json = files.get(telemetryFile) ?? ''
+      expect((JSON.parse(json) as { total: number }).total).toBe(42)
+      expect(store.getTelemetryJson()).toBe(json)
     })
 
-    it('telemetryJson is serialized JSON containing the total', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(7),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
+    it('writes stable.svg with the version and exposes the stable tag', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ writeFile })
       await store.regenerate()
-      const json = store.getTelemetryJson()
-      expect(json).not.toBeNull()
-      const parsed = JSON.parse(json ?? '') as { total: number }
-      expect(parsed.total).toBe(7)
+      expect(files.get(stableFile)).toContain('2026.6.0')
+      expect(store.getStableTag()).toBe('v2026.6.0')
     })
 
-    it('stableSvg contains the stable version string', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
+    it('writes an invisible beta.svg and a null beta tag when beta is not newer', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ writeFile })
       await store.regenerate()
-      expect(store.getStableSvg()).toContain('2026.6.0')
+      expect(files.get(betaFile)).toBe(INVISIBLE_SVG)
+      expect(store.getBetaTag()).toBeNull()
+    })
+  })
+
+  describe('beta newer than stable', () => {
+    it('writes beta.svg with the version and exposes the beta tag', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ releasesFetcher: bothReleases, writeFile })
+      await store.regenerate()
+      expect(files.get(betaFile)).toContain('2026.6.0b1')
+      expect(store.getBetaTag()).toBe('v2026.6.0b1')
     })
 
-    it('betaSvg is INVISIBLE_SVG when beta is not newer than stable', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
+    it('treats beta as newer when there is no stable', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ releasesFetcher: betaOnlyReleases, writeFile })
       await store.regenerate()
-      expect(store.getBetaSvg()).toBe(INVISIBLE_SVG)
-    })
-
-    it('betaSvg contains the beta version when beta is newer', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: bothReleases,
-      })
-      await store.regenerate()
-      expect(store.getBetaSvg()).toContain('2026.6.0b1')
-    })
-
-    it('betaSvg contains the beta version when there is no stable', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: betaOnlyReleases,
-      })
-      await store.regenerate()
-      expect(store.getBetaSvg()).toContain('2026.6.0b1')
+      expect(files.get(betaFile)).toContain('2026.6.0b1')
+      expect(store.getBetaTag()).toBe('v2026.6.0b1')
     })
   })
 
   describe('best-effort: telemetry failure', () => {
-    it('keeps usersSvg/telemetryJson null when ClickHouse throws', async () => {
-      const throwingCh = new FakeClickHouse()
-      // No handlers registered → query throws
-      const store = createBadgeStore({
-        ch: throwingCh,
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
+    it('writes no users.svg/telemetry.json and keeps the JSON null when ClickHouse throws', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: new FakeClickHouse(), writeFile })
       await store.regenerate()
-      expect(store.getUsersSvg()).toBeNull()
+      expect(files.has(usersFile)).toBe(false)
+      expect(files.has(telemetryFile)).toBe(false)
       expect(store.getTelemetryJson()).toBeNull()
     })
 
-    it('still populates release badges when telemetry fails', async () => {
-      const throwingCh = new FakeClickHouse()
-      const store = createBadgeStore({
-        ch: throwingCh,
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: stableRelease,
-      })
+    it('still writes release badges when telemetry fails', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: new FakeClickHouse(), writeFile })
       await store.regenerate()
-      expect(store.getStableSvg()).toContain('2026.6.0')
+      expect(files.get(stableFile)).toContain('2026.6.0')
+      expect(store.getStableTag()).toBe('v2026.6.0')
     })
   })
 
   describe('best-effort: releases failure', () => {
-    it('keeps stableSvg/betaSvg null when releases fetcher throws', async () => {
-      const throwingFetcher: ReleasesFetcher = () => Promise.reject(new Error('Network error'))
-      const store = createBadgeStore({
-        ch: buildFakeCh(3),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: throwingFetcher,
-      })
+    it('writes no release SVGs and keeps tags null when the releases fetcher throws', async () => {
+      const { writeFile, files } = recordingWriter()
+      const throwing: ReleasesFetcher = () => Promise.reject(new Error('Network error'))
+      const store = makeStore({ ch: buildFakeCh(3), releasesFetcher: throwing, writeFile })
       await store.regenerate()
-      expect(store.getStableSvg()).toBeNull()
-      expect(store.getBetaSvg()).toBeNull()
+      expect(files.has(stableFile)).toBe(false)
+      expect(files.has(betaFile)).toBe(false)
+      expect(store.getStableTag()).toBeNull()
     })
 
-    it('still populates telemetry when releases fail', async () => {
-      const throwingFetcher: ReleasesFetcher = () => Promise.reject(new Error('Network error'))
-      const store = createBadgeStore({
-        ch: buildFakeCh(3),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: throwingFetcher,
-      })
+    it('still writes telemetry when releases fail', async () => {
+      const { writeFile, files } = recordingWriter()
+      const throwing: ReleasesFetcher = () => Promise.reject(new Error('Network error'))
+      const store = makeStore({ ch: buildFakeCh(3), releasesFetcher: throwing, writeFile })
       await store.regenerate()
-      expect(store.getUsersSvg()).not.toBeNull()
+      expect(files.has(usersFile)).toBe(true)
+      expect(store.getTelemetryJson()).not.toBeNull()
     })
   })
 
   describe('last-good preservation', () => {
-    it('retains last-good usersSvg when the subsequent telemetry cycle fails', async () => {
-      let callCount = 0
-      const intermittentCh = new FakeClickHouse()
-      intermittentCh.onQuery('uniqExact(user_id) AS total', () => {
-        callCount++
-        if (callCount > 1) throw new Error('CH temporarily unavailable')
+    it('retains the last-good telemetry JSON when a later cycle fails', async () => {
+      let calls = 0
+      const ch = new FakeClickHouse()
+      ch.onQuery('uniqExact(user_id) AS total', () => {
+        calls++
+        if (calls > 1) throw new Error('CH temporarily unavailable')
         return [{ total: 99 }]
       })
-      intermittentCh.onQuery('GROUP BY version, channel', () => [])
+      ch.onQuery('GROUP BY version, channel', () => [])
+      const store = makeStore({ ch, releasesFetcher: noReleases, writeFile: recordingWriter().writeFile })
 
-      const store = createBadgeStore({
-        ch: intermittentCh,
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: noReleases,
-      })
+      await store.regenerate()
+      const first = store.getTelemetryJson()
+      expect(first).toContain('99')
 
-      await store.regenerate() // succeeds
-      const firstSvg = store.getUsersSvg()
-      expect(firstSvg).toContain('99')
-
-      await store.regenerate() // telemetry fails
-      // Last-good should be preserved
-      expect(store.getUsersSvg()).toBe(firstSvg)
-    })
-
-    it('retains last-good stableSvg when the subsequent releases cycle fails', async () => {
-      let releaseCallCount = 0
-      const intermittentFetcher: ReleasesFetcher = () => {
-        releaseCallCount++
-        if (releaseCallCount > 1) return Promise.reject(new Error('Network error'))
-        return Promise.resolve({ stable: 'v2026.6.0', beta: null })
-      }
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: intermittentFetcher,
-      })
-
-      await store.regenerate() // succeeds
-      const firstStable = store.getStableSvg()
-      expect(firstStable).toContain('2026.6.0')
-
-      await store.regenerate() // releases fails
-      expect(store.getStableSvg()).toBe(firstStable)
+      await store.regenerate() // telemetry now fails
+      expect(store.getTelemetryJson()).toBe(first)
     })
   })
 
   describe('no-releases edge case', () => {
-    it('keeps stableSvg/betaSvg null when API returns no releases at all (initial)', async () => {
-      const store = createBadgeStore({
-        ch: buildFakeCh(),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
-        releasesFetcher: noReleases,
-      })
+    it('writes no release SVGs and keeps tags null when the API returns nothing', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ releasesFetcher: noReleases, writeFile })
       await store.regenerate()
-      // Null on first cycle when no releases are found
-      expect(store.getStableSvg()).toBeNull()
-      expect(store.getBetaSvg()).toBeNull()
+      expect(files.has(stableFile)).toBe(false)
+      expect(files.has(betaFile)).toBe(false)
+      expect(store.getStableTag()).toBeNull()
+      expect(store.getBetaTag()).toBeNull()
     })
   })
 
   describe('console logging', () => {
-    it('logs telemetry update', async () => {
+    it('logs the telemetry update', async () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
-      const store = createBadgeStore({
+      const store = makeStore({
         ch: buildFakeCh(42),
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
         releasesFetcher: noReleases,
+        writeFile: recordingWriter().writeFile,
       })
       await store.regenerate()
       expect(spy).toHaveBeenCalledWith(expect.stringContaining('42 users'))
       spy.mockRestore()
     })
 
-    it('logs errors when ClickHouse throws', async () => {
+    it('logs an error when ClickHouse throws', async () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const throwingCh = new FakeClickHouse()
-      const store = createBadgeStore({
-        ch: throwingCh,
-        appId: 'test-app',
-        releasesApiUrl: 'https://example.com',
+      const store = makeStore({
+        ch: new FakeClickHouse(),
         releasesFetcher: noReleases,
+        writeFile: recordingWriter().writeFile,
       })
       await store.regenerate()
       expect(spy).toHaveBeenCalledWith(expect.stringContaining('[telemetry-backend]'), expect.any(Error))
