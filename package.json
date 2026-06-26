@@ -27,6 +27,8 @@
     "sops:decrypt": "scripts/sops-env.sh decrypt",
     "sops:encrypt": "scripts/sops-env.sh encrypt",
     "sops:rotate": "scripts/sops-rotate.sh",
+    "sops:sync-ci": "scripts/sync-ci-age-key.sh",
+    "gitlab:rotate-pat": "scripts/rotate-gitlab-pat.sh",
     "sync:versions": "bash scripts/sync-versions.sh"
   },
   "keywords": [

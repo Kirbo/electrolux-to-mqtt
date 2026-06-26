@@ -75,5 +75,16 @@ echo "Verification passed"
 # 8. Clean up
 rm "${KEY_FILE}"
 
+# 9. Sync the new private key to GitLab CI/CD (File-type SOPS_AGE_KEY_FILE) so the deploy job can
+#    still decrypt telemetry-backend/.env.enc. Best-effort: a GitLab/PAT hiccup shouldn't fail the
+#    whole rotation — re-run `pnpm sops:sync-ci` once access is sorted. (1Password step 6 already
+#    updated the key the sync re-reads.)
+echo ""
+if "$(dirname "$0")/sync-ci-age-key.sh"; then
+  echo "GitLab CI/CD SOPS_AGE_KEY_FILE updated to the new key."
+else
+  echo "WARNING: couldn't sync the new key to GitLab CI/CD — re-run 'pnpm sops:sync-ci' after fixing." >&2
+fi
+
 echo ""
 echo "Rotation complete. Commit: .sops.yaml and all .env*.enc files"

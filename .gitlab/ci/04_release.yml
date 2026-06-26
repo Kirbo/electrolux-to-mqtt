@@ -232,14 +232,14 @@ create gitlab prerelease:
   - chmod 600 ~/.ssh/id_rsa
   - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
 
-# Pull latest on the server, decrypt telemetry-backend/.env from its committed SOPS .enc
-# using the SOPS_AGE_KEY CI/CD variable, and copy the plaintext .env over. The age key
-# lives ONLY in the CI variable (rotate in one place); the server stores neither sops
-# nor the key. sops here is the mise-pinned, PQ/ML-KEM-capable version (see mise.toml),
-# installed in the *ssh_deploy step and resolved via the mise shim on PATH.
+# Pull latest on the server, decrypt telemetry-backend/.env from its committed SOPS .enc in the
+# runner (ci/decrypt-env.sh), and copy the plaintext .env to the server. The age key lives ONLY in
+# a GitLab CI/CD variable — preferred File-type SOPS_AGE_KEY_FILE (set via `pnpm sops:sync-ci`), or a
+# masked SOPS_AGE_KEY; sops reads either. The server stores neither sops nor the key. sops is the
+# mise-pinned, PQ/ML-KEM-capable version (see mise.toml), on PATH from the *ssh_deploy step.
 .deploy_backend_env: &deploy_backend_env
   - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && git fetch origin ${CI_COMMIT_BRANCH} && git checkout ${CI_COMMIT_BRANCH} && git pull origin ${CI_COMMIT_BRANCH}"
-  - SOPS_AGE_KEY="${SOPS_AGE_KEY}" sops -d --input-type binary --output-type binary telemetry-backend/.env.enc > telemetry-backend/.env
+  - sh ci/decrypt-env.sh
   - scp telemetry-backend/.env "${TELEMETRY_USER}@${TELEMETRY_HOST}:${TELEMETRY_PATH}/telemetry-backend/.env"
   - rm -f telemetry-backend/.env
 
