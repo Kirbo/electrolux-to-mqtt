@@ -2,7 +2,7 @@
 
 ## Project
 
-Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest. Standalone `telemetry-backend/` for anon usage stats.
+Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest. Standalone `telemetry-backend/` is a single HTTP service that serves SVG badges (in-memory from Aptabase ClickHouse) and forwards legacy `/telemetry` POSTs to Aptabase — delete the ingest half once `source=legacy` traffic drops to ~0.
 
 ## Commands
 
@@ -17,6 +17,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm sonar` | SonarQube scanner (reads `.env`) |
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
+| `pnpm sync:versions` | Propagate `mise.toml` Node/Alpine to all derived files (also: `mise run sync-versions`) |
 
 Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter: `pnpm vitest run -t "pattern"`.
 
@@ -32,16 +33,18 @@ Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `O
 - **`appliances/`** — `BaseAppliance` abstract → `createAppliance()` factory function. Each owns discovery config, normalization, command denormalization.
 - **`config.ts`** — Zod schemas. YAML or env vars, never mixed. `envSchema` coerces/defaults; `configSchema` validates.
 - **`cache.ts`** — state cache. Orchestrator diffs vs cache for MQTT publishing.
-- **`version-checker.ts`** — periodic release check + ntfy + anon telemetry to `telemetry-backend/`.
+- **`version-checker.ts`** — periodic release check + ntfy + anon telemetry sent directly to self-hosted Aptabase (`src/telemetry.ts` builds the event: OS/arch + appliance model(s)/count).
 - **`health.ts`** — Docker HEALTHCHECK file touch. Best-effort (read-only fs safe).
 
-`telemetry-backend/` standalone pnpm package. HTTP surface behind `RedisLike` interface (testable via `FakeRedis`). Rate limiting before payload validation.
+`telemetry-backend/` standalone pnpm package. A single HTTP service (Node built-in `http`, no Express) that:
+1. Serves SVG badges in-memory — every `BADGE_INTERVAL_SECONDS` (default 300) it reads aggregates from self-hosted Aptabase ClickHouse (`ClickHouseLike` / `FakeClickHouse` in tests) and renders `/users.svg`, `/stable.svg`, `/beta.svg`, `/telemetry.json` (302 at `/`). Responds 503 until first cycle completes.
+2. Receives legacy `POST /telemetry {userHash, version, channel}` from old bridge versions and forwards them to Aptabase as `version_check` events (`AptabaseForwarder` interface, testable with a fake). Delete the ingest half once `source=legacy` traffic drops to ~0.
 
-API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. `.claude/agents/engineer.md` per-change-type checklists. `/audit` + `/maintain` are trigger stubs — workflow + rules in `.claude/agents/auditor.md` + `.claude/agents/maintainer.md`.
+API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. The `/engineer` skill holds the per-change-type file checklists; the `/audit` + `/maintain` skills hold the full audit + dependency workflows.
 
 ## Subagents
 
-`src/`, `tests/`, `docker/`, `telemetry-backend/` changes → delegate to `engineer` subagent (TDD workflow). `auditor` for `/audit`, `maintainer` for `/maintain`.
+Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/` work yourself, in-loop, at the session model. The detailed workflows live in skills — follow `/engineer` (TDD + per-change-type checklists) for code work, `/audit` for audits, `/maintain` for dependency work. Spin up generic sub-agents only for genuine parallel fan-out (e.g. independent searches across many files); they inherit the session model. Never delegate to offload work onto a fixed-model agent.
 
 ## Rules
 
@@ -71,10 +74,10 @@ API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fi
 
 ### Sync
 - Docs (`*.md`), examples, config files must sync with code.
-- **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in `.claude/agents/engineer.md § Config`.
-- Follow file checklists in `.claude/agents/engineer.md` for code changes.
-- `.nvmrc`, `package.json` `engines`, Docker build args must match Node.js version.
-- When `.claude/agents/` or `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
+- **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in the `/engineer` skill (§ Config).
+- Follow the file checklists in the `/engineer` skill for code changes.
+- Node/Alpine/sops/age versions are pinned in `mise.toml` (single source); run `mise run sync-versions` (or `pnpm sync:versions`) to propagate to `.nvmrc`, `engines`, Dockerfiles, compose files, and CI; CI job `versions in sync` guards drift.
+- When `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.
 
 ### Docker
@@ -114,4 +117,4 @@ Before `git commit --amend` or `git rebase`: check if commits pushed (`git log o
 
 ## Self-maintenance
 
-Suggest updates to `.claude/CLAUDE.md`, `.claude/agents/`, `.claude/skills/` when gaps noticed. Ask before updating.
+Suggest updates to `.claude/CLAUDE.md`, `.claude/skills/` when gaps noticed. Ask before updating.

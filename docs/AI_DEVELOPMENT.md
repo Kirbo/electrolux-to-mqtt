@@ -1,6 +1,6 @@
 # AI-Assisted Development
 
-<!-- This file documents the AI-assisted development setup. AI agents only need to load it when the task explicitly involves the .claude/ tooling, agents, or skills; CLAUDE.md is the primary entrypoint for everything else. -->
+<!-- This file documents the AI-assisted development setup. AI agents only need to load it when the task explicitly involves the .claude/ tooling or skills; CLAUDE.md is the primary entrypoint for everything else. -->
 
 This project is set up for AI-assisted development with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The configuration lives in `.claude/`.
 
@@ -8,26 +8,23 @@ This project is set up for AI-assisted development with [Claude Code](https://do
 
 Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This file contains the project's coding rules and verification steps. Task-specific checklists live in `.claude/skills/` and load on demand when a skill is invoked.
 
+**Single-agent model.** The main agent does all the work itself, in-loop, at whatever model you pick with `/model` — there are no fixed-model worker subagents. The detailed workflows live in skills (`/engineer`, `/audit`, `/maintain`, `/audit-fix`) that the agent follows in its own loop. Generic sub-agents are spun up only for genuine parallel fan-out (e.g. independent searches across many files); they inherit your session model.
+
 ### Structure
 
 ```
 .claude/
-  CLAUDE.md                      # Rules, verification
+  CLAUDE.md                      # Rules, verification (lean — heavy checklists live in skills)
   skills/
-    audit/SKILL.md               # /audit trigger stub → agents/auditor.md
-    audit-fix/SKILL.md           # /audit-fix full pipeline: audit → fix → verify → commit
-    maintain/SKILL.md            # /maintain trigger stub → agents/maintainer.md
-  agents/
-    engineer.md                  # TDD implementation work + file checklists (src/, tests/, docker/, telemetry-backend/)
-    auditor.md                   # /audit work
-    maintainer.md                # /maintain work
+    engineer/SKILL.md            # /engineer — TDD workflow + per-change-type file checklists (src/, tests/, docker/, telemetry-backend/)
+    audit/SKILL.md               # /audit — full phased audit: automated checks + manual review + report
+    audit-fix/SKILL.md           # /audit-fix — full pipeline: audit → fix → verify → commit
+    maintain/SKILL.md            # /maintain — dependency updates, vuln fixes, breakage resolution
   agent-memory/
-    shared/                      # Shared memories for all agents (feedback, user, project)
-      MEMORY.md                  # Index of all shared memories (auto-loaded each session)
+    shared/                      # Single shared memory namespace (the one agent)
+      MEMORY.md                  # Index of all memories (auto-loaded each session)
       feedback_*.md              # Workflow preferences and coding rules learned from sessions
-      user_*.md / project_*.md   # User profile and project context
-    auditor/                     # Persistent cross-session memory for the auditor agent
-    maintainer/                  # Persistent cross-session memory for the maintainer agent
+      project_*.md / reference_*.md  # Project context and external-system pointers
 ```
 
 ### Contributor setup: shared agent memory
@@ -50,8 +47,9 @@ Skills are predefined workflows invoked as slash commands in Claude Code:
 
 | Command | What it does |
 |---------|-------------|
-| `/audit` | Full codebase audit: lint, typecheck, tests, then manual review against the checklist. Reports findings only; fixes delegated to `engineer`. |
-| `/audit-fix` | Full pipeline: audit → save report to `audit-report.md` → user approves findings → engineer fixes → verify → user approves commit batches → commit. |
+| `/engineer` | TDD workflow + per-change-type file checklists. The agent follows it in-loop when implementing, refactoring, or fixing bugs in `src/`, `tests/`, `docker/`, or `telemetry-backend/`. |
+| `/audit` | Full codebase audit: lint, typecheck, tests, then manual review against the checklist. The agent runs it in-loop and reports findings; it only fixes on explicit approval. |
+| `/audit-fix` | Full pipeline, all in-loop: audit → save report to `audit-report.md` → triage → fix → verify → user approves commit batches → commit. |
 | `/maintain` | Update all dependencies and pnpm, fix any breakage from updates. |
 
 ### Ad-hoc prompting

@@ -1,7 +1,10 @@
 ---
-name: Audit heuristics and anti-patterns
-description: Grep patterns, known false-positives, and defect-density areas for this codebase
-type: project
+name: audit-heuristics-and-anti-patterns
+description: "Grep patterns, known false-positives, and defect-density areas for this codebase"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 98905752-6fe7-4789-adc0-1ffdffd4ca26
 ---
 
 ## Effective grep patterns
@@ -36,10 +39,10 @@ When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.re
 
 ## Telemetry-backend observations
 
-- Rate limiting before payload validation in POST /telemetry — correct per CLAUDE.md checklist
-- `express.json({ limit: '10kb' })` — size limit present
-- Multi-stage Dockerfile, dev deps stripped — correct
-- `RATE_LIMIT_SALT` defaults to machine-id or hostname — not hardcoded secret
+Service is a single Node built-in `http` server (no Express, no Redis) that reads Aptabase **ClickHouse** and serves in-memory SVG badges + `/telemetry.json`; legacy `POST /telemetry` forwards to Aptabase via `AptabaseForwarder`. (The old `express.json({ limit })` size-limit and Redis observations are obsolete — don't re-flag their absence.)
+- Rate limiting runs **before** forwarding on `POST /telemetry` — correct per CLAUDE.md checklist.
+- Request body size is bounded in the raw `http` handler — confirm the manual cap is present (there's no `express.json` limit to lean on anymore).
+- Multi-stage Dockerfile, dev deps stripped — correct.
 
 ## Watch patterns
 
@@ -54,9 +57,16 @@ When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.re
 
 `src/types.d.ts` union values must match E2E snapshots exactly. Normalizer transforms value (e.g., `'running'` -> `'on'`): pre-normalization value belongs in `types.d.ts`, NOT post-normalization. Post-normalization values live in `src/types/normalized.ts`. Example: `applianceState` in `types.d.ts` is `'off' | 'running'`, not `'on' | 'off'`.
 
-## `.claude/rules/` directory removed
+## `.claude/rules/` directory removed; agents folded into skills
 
-As of 2026-04-13, `.claude/rules/` gone. Checklists moved into `.claude/agents/engineer.md`. Don't reference `.claude/rules/` in watch patterns or audit checks.
+As of 2026-04-13, `.claude/rules/` gone. The per-change-type checklists now live in the `/engineer` skill (`.claude/skills/engineer/SKILL.md`); the audit + dependency workflows live in the `/audit` + `/maintain` skills. `.claude/agents/{engineer,auditor,maintainer}.md` were removed in the 2026-06 single-agent restructure — don't reference `.claude/rules/` or `.claude/agents/` in watch patterns or audit checks.
+
+## Doc/code sync gaps to watch
+
+(Folded in from the former `doc_sync_gaps.md`.)
+- `.claude/skills/` change → check `docs/AI_DEVELOPMENT.md` + `docs/CONTRIBUTING.md` for sync, including stale instruction-file paths.
+- README env var table vs `envSchema` field list → check after config changes.
+- `config.example.yml` vs `configSchema` fields → check after config changes.
 
 ## `config.yml` is gitignored — do not infer absence from git tooling
 

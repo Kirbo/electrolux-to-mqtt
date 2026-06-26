@@ -1,1 +1,0 @@
-- [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field

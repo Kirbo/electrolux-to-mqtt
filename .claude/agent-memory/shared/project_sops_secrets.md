@@ -7,7 +7,7 @@ metadata:
   originSessionId: 2440d5f4-e63d-42dc-8893-d237143dcb6a
 ---
 
-SOPS encrypts the two plaintext env files (`/.env` → `SONAR_TOKEN`; `telemetry-backend/.env` → `RATE_LIMIT_SALT`, `ALLOW_TEST_TELEMETRY`). Committed `.env.enc` / `telemetry-backend/.env.enc`; plaintext stays gitignored. Wired in `2026-06-05` (commit `fc5061e`), mirroring the `../kirbodev` project.
+SOPS encrypts the two plaintext env files (`/.env` → `SONAR_TOKEN`; `telemetry-backend/.env` → the Aptabase-service secrets: ClickHouse connection creds (`CLICKHOUSE_URL` + read-only `badge_reader` user/password) and `APTABASE_APP_ID`). Committed `.env.enc` / `telemetry-backend/.env.enc`; plaintext stays gitignored. Wired in `2026-06-05` (commit `fc5061e`), mirroring the `../kirbodev` project. (The old `RATE_LIMIT_SALT` / `ALLOW_TEST_TELEMETRY` contents predate the 2026-06-26 Aptabase rebuild — superseded by the ClickHouse creds above. `SONAR_TOKEN` rotation is still pending.)
 
 **Operational facts not obvious from the code:**
 - Key type is **age native post-quantum hybrid (ML-KEM-768 + X25519)**, recipient `age1pq1…` (~1959 chars). **Requires age ≥ 1.3.0** on every machine + CI that encrypts/decrypts. The Rust `rage` impl does NOT support native PQ — don't use it for these files.

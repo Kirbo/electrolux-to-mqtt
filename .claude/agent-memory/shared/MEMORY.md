@@ -1,8 +1,7 @@
 - [E2E snapshots are source of truth](feedback_e2e_snapshot_sync.md) — model-specific dirs; propagate API values to types automatically
 - [Single source of truth](feedback_single_source_of_truth.md) — no duplication across instruction files; cross-reference instead
 - [Run Biome before committing](feedback_biome_before_commit.md) — pnpm check before every commit; stage Biome's formatting changes and include in the same commit
-- [Deferred review items (2026-06-01)](project_review_deferred.md) — optional/scope items left undone after the F1–F6 review: PORT NaN guard, exactOptionalPropertyTypes, mqtt import side-effect, factory single-model fallback
-- [Delegate by default](feedback_delegate_by_default.md) — propose engineer/subagent delegation for code work by default; only handle directly when explicitly told, and that's one-time per task
+- [Deferred review items (2026-06-01)](project_review_deferred.md) — optional/scope items left after the F1–F6 review: exactOptionalPropertyTypes, mqtt import side-effect, factory single-model fallback (the telemetry-backend PORT NaN-guard item is now resolved)
 - [Apply fixes directly](feedback_apply_fixes_directly.md) — when asked to fix, edit the working tree + prove it; don't paste code and ask "apply this?"
 - [CalVer migration](project_calver_migration.md) — SemVer→CalVer (HA-style `YYYY.M.MICRO`/`bN`) complete: git-cliff generates per-release notes, combine-changelogs aggregates; only the 1.19.0→2026.6.0 release-notes announcement is left (human, at release)
 - [SOPS env-file encryption](project_sops_secrets.md) — age PQ (ML-KEM-768) key in 1Password "electrolux-to-mqtt age key"; needs age ≥ 1.3.0; `pnpm sops:*`; pending: rotate exposed SONAR_TOKEN
@@ -11,3 +10,14 @@
 - [Write memory before commit](feedback_memory_before_commit.md) — capture pending learnings as memory files before the commit step so they ride in the same commit/push
 - [Repo layout](project_repo_layout.md) — standalone docs live in `docs/`; README/LICENSE + all config files stay at root for tool/platform auto-resolution (don't move config to tidy root)
 - [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it
+- [Aptabase telemetry migration](project_aptabase_telemetry.md) — bridge sends telemetry straight to self-hosted Aptabase; one Aptabase-backed `telemetry-backend/` (badge-cron+telemetry-shim merged) serves badges in-memory from ClickHouse + forwards legacy `/telemetry` POSTs; includes the `src/` module map; CI decrypts `.env.enc` via `SOPS_AGE_KEY`; NPM proxies :3002; pending deploy
+- [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
+- [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
+- [@types/node must stay pinned to ^24](dep_atypes_node_pin.md) — pnpm update --latest drifts to ^25; re-pin after every deps:update run
+- [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
+- [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
+- [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
+- [esbuild vulns GHSA-gv7w-rqvm-qjhr + GHSA-g7r4-m6w7-qqqr](vuln_esbuild_GHSA-gv7w-rqvm-qjhr.md) — override esbuild>=0.28.1 in both pnpm-workspace.yaml; remove when vite/tsx/vitest bump floor
+- [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — Node 24 Alpine on catalog page 2 of 54 (down from 102), newest-first; checked June 2026
+- [pnpm override needs pnpm-workspace.yaml in every Dockerfile prod stage](dep_override_dockerfile_workspace.md) — else ERR_PNPM_LOCKFILE_CONFIG_MISMATCH; verify with docker build not just pnpm test
+- [vite vulns GHSA-fx2h-pf6j-xcff + GHSA-v6wh-96g9-6wx3](vuln_vite_GHSA-fx2h-pf6j-xcff.md) — override doesn't fix peer dep vulns; add vite as direct devDep in telemetry-backend instead
