@@ -4,10 +4,8 @@
 ARG NODE_VERSION=24
 
 # ── Stage 1: build ──────────────────────────────────────────────────
-# Pinned to a known-good digest for reproducible builds.
-# To update: docker manifest inspect node:${NODE_VERSION}-alpine
-# and replace the digest below with the amd64/linux entry.
-FROM node:${NODE_VERSION}-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749 AS builder
+# Standard Alpine image — not the hardened bridge container.
+FROM node:${NODE_VERSION}-alpine AS builder
 
 WORKDIR /app
 
@@ -31,7 +29,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
     pnpm run build
 
 # ── Stage 2: production ────────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749
+FROM node:${NODE_VERSION}-alpine
 
 WORKDIR /app
 
@@ -39,9 +37,8 @@ WORKDIR /app
 COPY ./package.json ./application.json
 
 # Copy package manifest, lock file, and workspace config from builder.
-# pnpm-workspace.yaml carries the dependency `overrides`; without it the
-# frozen install fails ERR_PNPM_LOCKFILE_CONFIG_MISMATCH (the lockfile records
-# overrides the config would otherwise be missing).
+# pnpm-workspace.yaml carries the dependency overrides; without it the
+# frozen install fails ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
@@ -61,19 +58,9 @@ COPY --from=builder /app/dist ./dist
 ENV NODE_ENV=production
 
 # Run as non-root user
-RUN addgroup -S nodejs && adduser -S nodejs -G nodejs && \
-    mkdir -p /app/badge && chown nodejs:nodejs /app/badge
+RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
 USER nodejs
 
-# Expose port
-EXPOSE 3001
+EXPOSE 3002
 
-# Liveness probe — hits the dedicated /health endpoint which has no rate limit
-# and no Redis dependency, so it reflects Express event loop health only.
-# PORT defaults to 3001 if not overridden at runtime.
-# wget is available in node:alpine; no curl fallback needed.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- "http://localhost:${PORT:-3001}/health" || exit 1
-
-# Start the server
 CMD ["node", "dist/index.js"]

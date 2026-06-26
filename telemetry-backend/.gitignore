@@ -1,5 +1,6 @@
 node_modules/
 dist/
-*.log
-badge/
-package-lock.json
+coverage/
+.pnpm-store/
+*.bak
+.env

@@ -7,7 +7,7 @@ HELP="Usage: $0 [root|backend|all]
 
   root     Scan pnpm-lock.yaml (main package)
   backend  Scan telemetry-backend/pnpm-lock.yaml
-  all      Scan both lockfiles (default)
+  all      Scan all lockfiles (default)
 
 Requires osv-scanner in PATH (brew install osv-scanner) or Docker as fallback."
 

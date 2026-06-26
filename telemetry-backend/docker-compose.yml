@@ -1,19 +1,4 @@
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: telemetry-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --appendfsync everysec
-    volumes:
-      - redis-data:/data
-    networks:
-      - telemetry-network
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: "256M"
-
   telemetry-backend:
     build:
       context: ../
@@ -25,41 +10,40 @@ services:
       args:
         - NODE_VERSION=${NODE_VERSION:-24}
     container_name: telemetry-backend
-    env_file:
-      - path: .env
-        required: false
     restart: unless-stopped
+    # Published on the host so Nginx Proxy Manager (NPM, which runs in its own container
+    # and cannot reach the host's 127.0.0.1) can proxy to it.
+    # Alternative: attach this service to NPM's docker network and proxy to
+    # "telemetry-backend:3002" by service name — avoids the port being public.
     ports:
-      - "3001:3001"
+      - "3002:3002"
+    # SOPS-decrypted secrets (CH creds + APTABASE_APP_ID) — see telemetry-backend/.env.example
+    # Run `pnpm sops:decrypt` to generate .env from the committed .env.enc.
+    env_file:
+      - .env
     environment:
-      - PORT=3001
-      - REDIS_URL=redis://redis:6379
+      - PORT=3002
+      - APTABASE_HOST=https://aptabase.devaus.eu
+      - APTABASE_APP_KEY=A-SH-2414786682
+      # Rate limit: 10 requests per 60 s per IP (old bridge checks once/hour max)
+      - RATE_LIMIT_REQUESTS=10
       - RATE_LIMIT_WINDOW_MS=60000
-      - RATE_LIMIT_IP_MAX=10
-      - RATE_LIMIT_HASH_MAX=4
-      # - RATE_LIMIT_SALT=your-secret-salt
-      # - RATE_LIMIT_BREAKER_THRESHOLD=5
-      # - RATE_LIMIT_BREAKER_WINDOW_MS=60000
-      # - RATE_LIMIT_BREAKER_COOLDOWN_MS=30000
-      - ALLOW_TEST_TELEMETRY=${ALLOW_TEST_TELEMETRY:-false}
-      - TELEMETRY_BEHIND_PROXY=true   # Set true ONLY when deployed behind a header-rewriting reverse proxy (Caddy, nginx with explicit X-Forwarded-For overwrite). Default false.
-    depends_on:
-      - redis
+      # Badge regeneration interval in seconds (default 300 = every 5 minutes)
+      - BADGE_INTERVAL_SECONDS=300
     networks:
-      - telemetry-network
-    volumes:
-      - ./badge:/app/badge
-      - /etc/machine-id:/etc/machine-id:ro
+      # Attach to the Aptabase stack's network so the ClickHouse service resolves by
+      # service name (e.g. 'aptabase_events_db'). Replace 'aptabase_default' with your
+      # actual Aptabase network name (run `docker network ls` to find it).
+      - aptabase_default
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: "512M"
+          cpus: "0.2"
+          memory: "128M"
 
 networks:
-  telemetry-network:
-    driver: bridge
-
-volumes:
-  redis-data:
-    driver: local
+  # The Aptabase stack's Docker network — declared external so docker compose does not
+  # try to create it. Set the `name` field to your actual Aptabase network name.
+  aptabase_default:
+    external: true
+    name: aptabase_default  # CHANGE THIS to match your real Aptabase network name

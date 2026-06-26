@@ -36,9 +36,10 @@ Please be respectful and considerate in all interactions. We're here to build gr
 
 ### Prerequisites
 
-- **Node.js**: Version specified in `.nvmrc` (use `fnm use` or `nvm use`)
+- **Node.js**: Version specified in `.nvmrc` (use `fnm use` or `nvm use`). The canonical source is `mise.toml` `[tools] node` — `.nvmrc` is generated from it via `pnpm sync:versions`.
 - **pnpm**: Correct version is specified in `package.json` `packageManager` field
 - **Git**: For version control
+- **Tool versions (mise)**: Node.js, Alpine, sops, and age are all pinned in `mise.toml` at the repo root. After editing those values run `pnpm sync:versions` to propagate to all derived files.
 
 ### Installation
 
@@ -92,7 +93,7 @@ src/
 
 tests/                   # Test files (mirrors src/ structure)
 
-telemetry-backend/       # Standalone anonymous telemetry collection service
+telemetry-backend/       # Aptabase-backed HTTP service — serves SVG badges (in-memory) + forwards legacy /telemetry POSTs; delete the ingest half once source='legacy' traffic drops to ~0
 ```
 
 ## Adding a New Appliance
