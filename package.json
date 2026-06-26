@@ -26,7 +26,8 @@
     "deps:update": "pnpm update --latest && pnpm install",
     "sops:decrypt": "scripts/sops-env.sh decrypt",
     "sops:encrypt": "scripts/sops-env.sh encrypt",
-    "sops:rotate": "scripts/sops-rotate.sh"
+    "sops:rotate": "scripts/sops-rotate.sh",
+    "sync:versions": "bash scripts/sync-versions.sh"
   },
   "keywords": [
     "electrolux",

@@ -1,0 +1,28 @@
+# Pinned dev/CI tooling, managed by mise (https://mise.jdx.dev).
+# This is the SINGLE SOURCE OF TRUTH for Node.js major and Alpine version.
+# After editing node or ALPINE_VERSION, run `mise run sync-versions` (or
+# `pnpm sync:versions`) to propagate the values to all derived files
+# (.nvmrc, package.json engines, Dockerfiles, compose files, CI init).
+# The CI job "versions in sync" enforces this — it fails if derived files
+# drift from this file.
+[tools]
+# Node.js LTS major. Propagated to .nvmrc, package.json engines, Dockerfiles,
+# compose args, and .gitlab/ci/01_init.yml by scripts/sync-versions.sh.
+node = "24"
+# sops MUST be built against age >= 1.3.0 to decrypt the project's NATIVE
+# post-quantum (ML-KEM-768 + X25519) age recipient (`age1pq1…`). Older sops and the
+# Rust `rage` impl CANNOT decrypt these files. Pin to the version you run locally
+# (`sops --version`) so CI decryption matches.
+sops = "latest"
+# age CLI — used for key generation / `pnpm sops:rotate`. Decryption itself goes
+# through sops's embedded age library, so CI badge decryption needs only sops.
+age = "latest"
+
+[env]
+# Alpine minor version used in the prod Docker image tag (dhi.io/node:<NODE>-alpine<ALPINE>)
+# and in the CI NODE_VERSION export. Propagated by scripts/sync-versions.sh.
+ALPINE_VERSION = "3.24"
+
+[tasks.sync-versions]
+description = "Propagate node + Alpine versions from mise.toml to all derived files"
+run = "bash scripts/sync-versions.sh"
