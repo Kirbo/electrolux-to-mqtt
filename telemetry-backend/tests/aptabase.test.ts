@@ -114,6 +114,16 @@ describe('createHttpForwarder', () => {
     expect(call?.init.body).toBe(JSON.stringify([SAMPLE_EVENT]))
   })
 
+  it('embeds the sessionId in the User-Agent so each install gets its own Aptabase user_id', async () => {
+    const { fetch, calls } = fakeFetch(new Response(null, { status: 200 }))
+    const forwarder = createHttpForwarder('https://aptabase.example', 'A-KEY', fetch)
+
+    await forwarder.forward(SAMPLE_EVENT, '203.0.113.7')
+
+    const headers = new Headers(calls[0]?.init.headers)
+    expect(headers.get('User-Agent')).toBe(`electrolux-to-mqtt-legacy/${SAMPLE_EVENT.sessionId}`)
+  })
+
   it('resolves on a 2xx response', async () => {
     const { fetch } = fakeFetch(new Response('{}', { status: 200 }))
     const forwarder = createHttpForwarder('https://aptabase.example', 'A-KEY', fetch)

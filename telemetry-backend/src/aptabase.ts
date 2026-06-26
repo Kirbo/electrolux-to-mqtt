@@ -76,9 +76,14 @@ async function readErrorBody(res: Response): Promise<string> {
 /**
  * Create an AptabaseForwarder that POSTs events to the real Aptabase ingestion endpoint.
  *
- * The client IP is forwarded via X-Forwarded-For so Aptabase attributes the event
- * to the originating bridge install rather than the backend's IP. This is the CRITICAL
- * prerequisite for correct per-install counting — see README.md.
+ * Per-install counting: Aptabase derives the daily anonymous `user_id` from
+ * `app_id + client IP + User-Agent`. All forwarded events share the backend's IP
+ * (the proxy chain in front of Aptabase doesn't honor the X-Forwarded-For we send),
+ * so a constant User-Agent would collapse every legacy bridge into one `user_id`.
+ * We therefore embed the install's `sessionId` (deterministically derived from the
+ * bridge's `userHash`) into the User-Agent so each install gets its own `user_id`.
+ * X-Forwarded-For is still sent — if the chain is ever fixed to trust it, GeoIP is
+ * restored too, but counting no longer depends on it.
  *
  * A non-2xx response throws (with the status + body) so the caller logs it instead of
  * silently dropping the event — a 401/400 from Aptabase would otherwise be invisible.
@@ -103,7 +108,7 @@ export function createHttpForwarder(
           headers: {
             'App-Key': appKey,
             'Content-Type': 'application/json',
-            'User-Agent': 'electrolux-to-mqtt-legacy',
+            'User-Agent': `electrolux-to-mqtt-legacy/${event.sessionId}`,
             'X-Forwarded-For': clientIp,
           },
           body: JSON.stringify([event]),

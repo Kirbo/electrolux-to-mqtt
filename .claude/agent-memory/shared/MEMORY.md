@@ -11,7 +11,7 @@
 - [Repo layout](project_repo_layout.md) — standalone docs live in `docs/`; README/LICENSE + all config files stay at root for tool/platform auto-resolution (don't move config to tidy root)
 - [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it
 - [Aptabase telemetry migration](project_aptabase_telemetry.md) — bridge sends telemetry straight to self-hosted Aptabase; one Aptabase-backed `telemetry-backend/` (badge-cron+telemetry-shim merged) serves badges in-memory from ClickHouse + forwards legacy `/telemetry` POSTs; includes the `src/` module map; CI decrypts `.env.enc` via `SOPS_AGE_KEY`; NPM proxies :3002; pending deploy
-- [Aptabase drops non-GUID sessionId](aptabase_sessionid_guid.md) — ingest silently drops events whose sessionId isn't a UUID (200, no row); legacy forwarder now maps userHash→UUID
+- [Aptabase ingest gotchas](aptabase_sessionid_guid.md) — drops non-GUID sessionId (200, no row); user_id = hash(app_id+IP+UA) so shared-IP installs collapse → forwarder maps userHash→UUID sessionId + per-install User-Agent
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
 - [@types/node must stay pinned to ^24](dep_atypes_node_pin.md) — pnpm update --latest drifts to ^25; re-pin after every deps:update run

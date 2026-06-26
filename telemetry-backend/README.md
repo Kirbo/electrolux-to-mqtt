@@ -60,9 +60,19 @@ The badge SVGs (+ `telemetry.json`) are served **statically** from the `OUTPUT_D
 
 With **Nginx Proxy Manager** (a container that can't reach the host's `127.0.0.1`): serve the badge dir statically and forward the dynamic locations to the **host IP**`:3001`, or attach the service to NPM's network and use `http://telemetry-backend:3001`.
 
-## Aptabase X-Forwarded-For trust (legacy ingest prerequisite)
+## Per-install counting & GeoIP
 
-For `source='legacy'` events to be counted per bridge install (not per backend IP), Aptabase must trust and use the `X-Forwarded-For` header that this service sends. Verify this is enabled in your Aptabase configuration before deploying the legacy ingest path.
+Aptabase derives the daily anonymous `user_id` from `app_id + client IP + User-Agent`.
+All forwarded events share **one** client IP (the backend container — the proxy chain
+in front of Aptabase doesn't honor the `X-Forwarded-For` this service sends), so a
+constant User-Agent would collapse every legacy bridge into a single `user_id`. To keep
+per-install counts correct **without** depending on the proxy chain, the forwarder sets a
+per-install `User-Agent` (`electrolux-to-mqtt-legacy/<sessionId>`, where `sessionId` is
+derived from the bridge's `userHash`). Each install therefore gets its own `user_id`.
+
+`X-Forwarded-For` is still sent. If you fix the openresty→Aptabase chain to trust it
+(e.g. `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` with the proxy hops as known networks),
+GeoIP (`country_code`/`region_name`) is restored too — but counting no longer needs it.
 
 ## Development
 
