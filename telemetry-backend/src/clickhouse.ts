@@ -16,18 +16,31 @@ export interface TelemetryResult {
   }>
 }
 
-// Raw row shapes returned by ClickHouse queries
+// Raw row shapes returned by ClickHouse queries. ClickHouse serializes UInt64
+// aggregates (uniqExact) as JSON *strings* in JSONEachRow, so counts arrive as
+// e.g. "1", not 1 — the union reflects that and forces coercion via toCount.
 interface TotalRow {
-  total: number
+  total: string | number
 }
 
 interface VersionRow {
   version: string
   channel: string
-  count: number
+  count: string | number
 }
 
 type VersionEntry = { count: number; channels: { stable: number; beta: number } }
+
+/**
+ * Coerce a ClickHouse-returned count to a finite, non-negative integer.
+ * UInt64 aggregates come back as JSON strings ("1"), so without this every
+ * `0 + "1"` would string-concatenate to "01" and totals would leak raw strings.
+ * Unparseable values fold to 0 so one bad row can't poison the arithmetic.
+ */
+function toCount(value: string | number): number {
+  const n = typeof value === 'number' ? value : Number.parseInt(value, 10)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
 
 /**
  * Create a ClickHouse client backed by @clickhouse/client.
@@ -98,17 +111,18 @@ export async function aggregateTelemetry(ch: ClickHouseLike, appId: string): Pro
     ),
   ])
 
-  const total = totalRows[0]?.total ?? 0
+  const total = toCount(totalRows[0]?.total ?? 0)
   const channels = { stable: 0, beta: 0 }
   const byVersion = new Map<string, VersionEntry>()
 
   for (const row of versionRows) {
     const ch2 = resolveChannel(row.channel, row.version)
-    channels[ch2] += row.count
+    const count = toCount(row.count)
+    channels[ch2] += count
 
     const entry = byVersion.get(row.version) ?? { count: 0, channels: { stable: 0, beta: 0 } }
-    entry.count += row.count
-    entry.channels[ch2] += row.count
+    entry.count += count
+    entry.channels[ch2] += count
     byVersion.set(row.version, entry)
   }
 

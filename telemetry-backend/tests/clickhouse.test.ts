@@ -122,6 +122,27 @@ describe('aggregateTelemetry', () => {
     expect(result.versions).toHaveLength(0)
   })
 
+  it('coerces ClickHouse string-serialized UInt64 counts to numbers (no "01" concatenation)', async () => {
+    // Real ClickHouse serializes UInt64 aggregates (uniqExact) as JSON strings:
+    // "1", not 1. Without coercion, `0 + "1"` string-concatenates to "01" and the
+    // total passes the raw "1" straight through. Reproduces the live /telemetry bug.
+    const fake = new FakeClickHouse()
+    fake.onQuery('uniqExact(user_id) AS total', () => [{ total: '1' }])
+    fake.onQuery('GROUP BY version, channel', () => [{ version: '2026.6.11b1', channel: 'beta', count: '01' }])
+
+    const result = await aggregateTelemetry(fake, APP_ID)
+
+    expect(result.total).toBe(1)
+    expect(result.channels.stable).toBe(0)
+    expect(result.channels.beta).toBe(1)
+    const entry = result.versions.find((v) => v.version === '2026.6.11b1')
+    expect(entry?.count).toBe(1)
+    expect(entry?.channels.beta).toBe(1)
+    // Guard against the regression directly: nothing in the JSON should be a quoted number.
+    expect(JSON.stringify(result)).not.toContain('"01"')
+    expect(JSON.stringify(result)).not.toContain('"1"')
+  })
+
   it('aggregates multiple rows for the same version under different channels', async () => {
     const fake = buildFake(
       [{ total: 3 }],
