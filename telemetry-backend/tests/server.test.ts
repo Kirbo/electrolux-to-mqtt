@@ -210,7 +210,8 @@ describe('createServer', () => {
       expect(forwarder.calls).toHaveLength(1)
       const call = forwarder.calls[0]
       expect(call?.event.eventName).toBe('version_check')
-      expect(call?.event.sessionId).toBe(VALID_HASH)
+      // userHash is mapped to a UUID-shaped sessionId (Aptabase drops non-GUID sessionIds).
+      expect(call?.event.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(call?.event.props.source).toBe('legacy')
     })
 

@@ -1,13 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { buildAptabaseEvent } from '../src/aptabase.js'
+import { buildAptabaseEvent, createHttpForwarder } from '../src/aptabase.js'
 
 const VALID_HASH = 'a'.repeat(64)
 const SERVICE_VERSION = '1.0.0'
 
+const SAMPLE_EVENT = buildAptabaseEvent({ userHash: VALID_HASH, version: '2026.6.10', channel: 'stable' }, '1.0.0')
+
 describe('buildAptabaseEvent', () => {
-  it('sets sessionId to the userHash', () => {
+  it('maps the userHash to a UUID-shaped sessionId (Aptabase drops non-GUID sessionIds)', () => {
     const event = buildAptabaseEvent({ userHash: VALID_HASH, version: '1.2.3' }, SERVICE_VERSION)
-    expect(event.sessionId).toBe(VALID_HASH)
+    expect(event.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  })
+
+  it('derives the sessionId deterministically from the userHash', () => {
+    const a = buildAptabaseEvent({ userHash: VALID_HASH, version: '1.2.3' }, SERVICE_VERSION)
+    const b = buildAptabaseEvent({ userHash: VALID_HASH, version: '9.9.9' }, SERVICE_VERSION)
+    expect(a.sessionId).toBe(b.sessionId)
+  })
+
+  it('builds the sessionId from the first 16 bytes of the userHash', () => {
+    const userHash = `0123456789abcdef${'f'.repeat(48)}`
+    const event = buildAptabaseEvent({ userHash, version: '1.2.3' }, SERVICE_VERSION)
+    expect(event.sessionId).toBe('01234567-89ab-cdef-ffff-ffffffffffff')
   })
 
   it('sets eventName to version_check', () => {
@@ -69,5 +83,46 @@ describe('buildAptabaseEvent', () => {
     const event = buildAptabaseEvent({ userHash: VALID_HASH, version: '1.2.3' }, SERVICE_VERSION)
     expect(() => new Date(event.timestamp)).not.toThrow()
     expect(new Date(event.timestamp).toISOString()).toBe(event.timestamp)
+  })
+})
+
+describe('createHttpForwarder', () => {
+  type FetchCall = { url: string; init: RequestInit }
+
+  function fakeFetch(response: Response): { fetch: typeof fetch; calls: FetchCall[] } {
+    const calls: FetchCall[] = []
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(input), init: init ?? {} })
+      return response
+    }) as typeof fetch
+    return { fetch: fetchImpl, calls }
+  }
+
+  it('POSTs the event batch to the /api/v0/events endpoint with the App-Key', async () => {
+    const { fetch, calls } = fakeFetch(new Response(null, { status: 200 }))
+    const forwarder = createHttpForwarder('https://aptabase.example', 'A-KEY', fetch)
+
+    await forwarder.forward(SAMPLE_EVENT, '203.0.113.7')
+
+    expect(calls).toHaveLength(1)
+    const call = calls[0]
+    expect(call?.url).toBe('https://aptabase.example/api/v0/events')
+    expect(call?.init.method).toBe('POST')
+    const headers = new Headers(call?.init.headers)
+    expect(headers.get('App-Key')).toBe('A-KEY')
+    expect(headers.get('X-Forwarded-For')).toBe('203.0.113.7')
+    expect(call?.init.body).toBe(JSON.stringify([SAMPLE_EVENT]))
+  })
+
+  it('resolves on a 2xx response', async () => {
+    const { fetch } = fakeFetch(new Response('{}', { status: 200 }))
+    const forwarder = createHttpForwarder('https://aptabase.example', 'A-KEY', fetch)
+    await expect(forwarder.forward(SAMPLE_EVENT, '203.0.113.7')).resolves.toBeUndefined()
+  })
+
+  it('throws with the status and body on a non-2xx response', async () => {
+    const { fetch } = fakeFetch(new Response('bad app key', { status: 401, statusText: 'Unauthorized' }))
+    const forwarder = createHttpForwarder('https://aptabase.example', 'A-KEY', fetch)
+    await expect(forwarder.forward(SAMPLE_EVENT, '203.0.113.7')).rejects.toThrow(/401 Unauthorized: bad app key/)
   })
 })

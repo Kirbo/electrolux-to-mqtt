@@ -16,7 +16,7 @@ A near drop-in for the old telemetry backend — same routes and port (3001) —
    - `GET /telemetry` — the aggregated JSON (also written to disk as `telemetry.json`)
    - `GET /stable` / `GET /beta` — 302 redirect to the latest release (fail-open to the releases page)
    - `GET /health` — 200 `{ status: 'ok' }`
-   - `POST /telemetry` — **legacy ingest**: old bridge versions POST `{ userHash, version, channel }`; the service rate-limits, validates, and forwards to Aptabase as a `version_check` event tagged `source='legacy'` (204, best-effort). *Temporary* — see the delete checklist.
+   - `POST /telemetry` — **legacy ingest**: old bridge versions POST `{ userHash, version, channel }`; the service rate-limits, validates, and forwards to Aptabase as a `version_check` event tagged `source='legacy'` (204, best-effort). The `userHash` is mapped to a UUID-shaped `sessionId` because **Aptabase silently drops events whose `sessionId` is not GUID-parseable** (200 response, no row written). *Temporary* — see the delete checklist.
 
    `GET /` → `302 /users.svg` is handled by the reverse proxy.
 
