@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BaseAppliance } from '@/appliances/base.js'
-import { getOsInfo, mapOsName, summarizeAppliances } from '@/telemetry.js'
+import { deriveTelemetrySessionId, getOsInfo, mapOsName, summarizeAppliances } from '@/telemetry.js'
 
 vi.mock('node:os', () => ({
   default: {
@@ -59,6 +59,28 @@ describe('getOsInfo', () => {
 
     const info = getOsInfo()
     expect(info.osName).toBe('Windows')
+  })
+})
+
+describe('deriveTelemetrySessionId', () => {
+  it('returns a GUID-shaped string (Aptabase drops non-GUID sessionIds)', () => {
+    expect(deriveTelemetrySessionId('user@example.com')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    )
+  })
+
+  it('is deterministic — same username always yields the same id', () => {
+    expect(deriveTelemetrySessionId('user@example.com')).toBe(deriveTelemetrySessionId('user@example.com'))
+  })
+
+  it('yields different ids for different usernames', () => {
+    expect(deriveTelemetrySessionId('a@example.com')).not.toBe(deriveTelemetrySessionId('b@example.com'))
+  })
+
+  it('matches the backend legacy mapping (first 16 bytes of sha256(username) as 8-4-4-4-12)', () => {
+    // sha256('user@example.com') = b4c9a289323b21a01c3e940f150eb9b8… — keep in sync with
+    // telemetry-backend userHashToSessionId so legacy and direct paths share one id per install.
+    expect(deriveTelemetrySessionId('user@example.com')).toBe('b4c9a289-323b-21a0-1c3e-940f150eb9b8')
   })
 })
 

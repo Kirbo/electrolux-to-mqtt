@@ -779,9 +779,12 @@ describe('version-checker', () => {
 
       const stopChecker = startVersionChecker('v1.6.3', ctx)
       await vi.advanceTimersByTimeAsync(0)
-      await vi.advanceTimersByTimeAsync(3600 * 1000)
+      // One telemetry ping on start re-reads the fleet.
+      expect(callCount).toBe(1)
 
-      // Called once per check (2 checks: immediate + 1 interval tick)
+      // Telemetry pings every 15 minutes (independent of the version-check interval); each
+      // ping calls applianceSummary() again, so the fleet is read live, not captured once.
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000)
       expect(callCount).toBe(2)
 
       stopChecker()

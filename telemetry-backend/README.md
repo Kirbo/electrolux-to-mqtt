@@ -60,19 +60,33 @@ The badge SVGs (+ `telemetry.json`) are served **statically** from the `OUTPUT_D
 
 With **Nginx Proxy Manager** (a container that can't reach the host's `127.0.0.1`): serve the badge dir statically and forward the dynamic locations to the **host IP**`:3001`, or attach the service to NPM's network and use `http://telemetry-backend:3001`.
 
-## Per-install counting & GeoIP
+## How the user count works
 
-Aptabase derives the daily anonymous `user_id` from `app_id + client IP + User-Agent`.
-All forwarded events share **one** client IP (the backend container — the proxy chain
-in front of Aptabase doesn't honor the `X-Forwarded-For` this service sends), so a
-constant User-Agent would collapse every legacy bridge into a single `user_id`. To keep
-per-install counts correct **without** depending on the proxy chain, the forwarder sets a
-per-install `User-Agent` (`electrolux-to-mqtt-legacy/<sessionId>`, where `sessionId` is
-derived from the bridge's `userHash`). Each install therefore gets its own `user_id`.
+The "users" count is `uniqExact(session_id)` over a **rolling 26h window** (`USER_WINDOW_HOURS`
+in `clickhouse.ts`), **not** Aptabase's `user_id`:
 
-`X-Forwarded-For` is still sent. If you fix the openresty→Aptabase chain to trust it
-(e.g. `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` with the proxy hops as known networks),
-GeoIP (`country_code`/`region_name`) is restored too — but counting no longer needs it.
+- **`session_id`, not `user_id`** — Aptabase's `user_id` is a daily hash of `app_id + client IP
+  + User-Agent` that **rotates at UTC midnight**, so it can't be counted across the boundary.
+  `session_id` is a stable per-install id (derived from `sha256(electrolux username)`, identical
+  on the bridge's direct path and on the legacy forwarder), so it survives midnight and restarts.
+- **Rolling 26h, not `toStartOfDay`** — a fixed-width trailing window keeps the count steady around
+  the clock instead of resetting at midnight and ramping up. 26h = the version-checker's 24h max
+  poll interval + 2h slack, so every install that pinged at least once is always inside it. The
+  bridge also pings telemetry every 15 min (decoupled from the version-check interval), so a steady
+  cadence keeps the window full. *Once legacy traffic →0 and the legacy ingest half is removed, the
+  window can shrink to ~1h (4× the 15-min ping) for a tighter, more live count.*
+- **`stable`/`beta` are distinct counts** from a dedicated `GROUP BY channel` query — not the
+  over-counting sum of the per-version rows.
+
+### Per-install identity & GeoIP
+
+Aptabase's `user_id` (used by Aptabase's own dashboard, not this badge) shares one client IP for all
+forwarded legacy events (the backend container — the proxy chain doesn't honor the `X-Forwarded-For`
+this service sends). The forwarder still sets a per-install `User-Agent`
+(`electrolux-to-mqtt-legacy/<sessionId>`) so Aptabase's own counts don't collapse, and still sends
+`X-Forwarded-For`. If you fix the openresty→Aptabase chain to trust it (e.g.
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` with the proxy hops as known networks), GeoIP
+(`country_code`/`region_name`) is restored — but this badge's count doesn't depend on it.
 
 ## Development
 

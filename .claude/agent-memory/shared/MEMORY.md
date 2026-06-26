@@ -12,6 +12,7 @@
 - [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it
 - [Aptabase telemetry migration](project_aptabase_telemetry.md) — bridge sends telemetry straight to self-hosted Aptabase; one Aptabase-backed `telemetry-backend/` (badge-cron+telemetry-shim merged) serves badges in-memory from ClickHouse + forwards legacy `/telemetry` POSTs; includes the `src/` module map; CI decrypts `.env.enc` via `SOPS_AGE_KEY`; NPM proxies :3002; pending deploy
 - [Aptabase ingest gotchas](aptabase_sessionid_guid.md) — drops non-GUID sessionId (200, no row); user_id = hash(app_id+IP+UA) so shared-IP installs collapse → forwarder maps userHash→UUID sessionId + per-install User-Agent
+- [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = sha256(username); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
 - [@types/node must stay pinned to ^24](dep_atypes_node_pin.md) — pnpm update --latest drifts to ^25; re-pin after every deps:update run

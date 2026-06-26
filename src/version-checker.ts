@@ -9,6 +9,12 @@ const APTABASE_HOST = 'https://aptabase.devaus.eu'
 const APTABASE_APP_KEY = 'A-SH-2414786682'
 const APTABASE_EVENTS_URL = `${APTABASE_HOST}/api/v0/events`
 
+// Telemetry pings Aptabase on a fixed cadence, decoupled from the user-configurable version
+// check interval (`versionCheck.checkInterval`). This keeps each install's "last seen"
+// fresh — the badge backend counts distinct installs over a rolling window, so a steady
+// ping cadence makes that count steady regardless of how rarely the user checks for updates.
+const TELEMETRY_PING_INTERVAL_MS = 15 * 60 * 1000
+
 const logger = createLogger('version')
 
 const GITLAB_REPO = 'kirbodev/electrolux-to-mqtt'
@@ -323,6 +329,26 @@ async function sendTelemetry(context: TelemetryContext, version: string, channel
 }
 
 /**
+ * Send a telemetry ping, honoring the dev-version and opt-out skips. Runs on its own fixed
+ * interval ({@link TELEMETRY_PING_INTERVAL_MS}), independent of the version check.
+ */
+async function runTelemetry(
+  telemetryContext: TelemetryContext,
+  currentVersion: string,
+  updateChannel: 'stable' | 'beta',
+): Promise<void> {
+  if (currentVersion === 'development') {
+    logger.debug('Running development version, skipping telemetry')
+    return
+  }
+  if (!config.telemetryEnabled) {
+    logger.debug('Telemetry disabled, skipping')
+    return
+  }
+  await sendTelemetry(telemetryContext, currentVersion, updateChannel)
+}
+
+/**
  * Check if a newer version is available and log if found
  */
 function publishInfoIfChanged(mqtt: IMqtt | undefined, message: string): void {
@@ -331,24 +357,12 @@ function publishInfoIfChanged(mqtt: IMqtt | undefined, message: string): void {
   mqtt.publishInfo(message)
 }
 
-async function checkForUpdates(
-  currentVersion: string,
-  telemetryContext: TelemetryContext,
-  updateChannel: 'stable' | 'beta',
-  mqtt?: IMqtt,
-): Promise<void> {
+async function checkForUpdates(currentVersion: string, updateChannel: 'stable' | 'beta', mqtt?: IMqtt): Promise<void> {
   // Skip check if running development version
   if (currentVersion === 'development') {
     logger.debug('Running development version, skipping version check')
     publishInfoIfChanged(mqtt, JSON.stringify({ currentVersion, status: 'development' }))
     return
-  }
-
-  // Send telemetry (skipped when user has opted out)
-  if (config.telemetryEnabled) {
-    await sendTelemetry(telemetryContext, currentVersion, updateChannel)
-  } else {
-    logger.debug('Telemetry disabled, skipping')
   }
 
   const latest = await fetchLatestVersion(updateChannel)
@@ -442,22 +456,30 @@ export function startVersionChecker(
   logger.info(`Update channel: ${updateChannel} ${channelLogSuffix}`)
 
   logger.info(`Version check interval set to ${formatDuration(checkIntervalSeconds)}`)
+  logger.info(`Telemetry ping interval set to ${formatDuration(TELEMETRY_PING_INTERVAL_MS / 1000)}`)
 
-  // Check immediately on start
-  checkForUpdates(currentVersion, telemetryContext, updateChannel, mqtt).catch((error) => {
-    logger.debug('Version check failed:', error)
-  })
-
-  // Set up periodic check
-  const intervalDisposable = disposableInterval(() => {
-    checkForUpdates(currentVersion, telemetryContext, updateChannel, mqtt).catch((error) => {
+  const pingTelemetry = (): void => {
+    runTelemetry(telemetryContext, currentVersion, updateChannel).catch((error) => {
+      logger.debug('Telemetry ping failed:', error)
+    })
+  }
+  const runCheck = (): void => {
+    checkForUpdates(currentVersion, updateChannel, mqtt).catch((error) => {
       logger.debug('Version check failed:', error)
     })
-  }, checkIntervalMs)
+  }
+
+  // Run both immediately on start, then on their own independent intervals: telemetry on a
+  // fixed cadence, the version check on the user-configured interval.
+  pingTelemetry()
+  runCheck()
+  const telemetryDisposable = disposableInterval(pingTelemetry, TELEMETRY_PING_INTERVAL_MS)
+  const checkDisposable = disposableInterval(runCheck, checkIntervalMs)
 
   // Return cleanup function
   return () => {
-    intervalDisposable[Symbol.dispose]()
+    telemetryDisposable[Symbol.dispose]()
+    checkDisposable[Symbol.dispose]()
     logger.debug('Version checker stopped')
   }
 }

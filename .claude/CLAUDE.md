@@ -33,7 +33,7 @@ Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `O
 - **`appliances/`** — `BaseAppliance` abstract → `createAppliance()` factory function. Each owns discovery config, normalization, command denormalization.
 - **`config.ts`** — Zod schemas. YAML or env vars, never mixed. `envSchema` coerces/defaults; `configSchema` validates.
 - **`cache.ts`** — state cache. Orchestrator diffs vs cache for MQTT publishing.
-- **`version-checker.ts`** — periodic release check + ntfy + anon telemetry sent directly to self-hosted Aptabase (`src/telemetry.ts` builds the event: OS/arch + appliance model(s)/count).
+- **`version-checker.ts`** — periodic release check + ntfy on the user's `checkInterval`, plus anon telemetry to self-hosted Aptabase on its **own fixed 15-min cadence** (`TELEMETRY_PING_INTERVAL_MS`, decoupled from `checkInterval`). `src/telemetry.ts` builds the event (OS/arch + appliance model(s)/count) and `deriveTelemetrySessionId` — the stable per-install session id = `sha256(electrolux username)` formatted as a UUID, matching the backend's legacy `userHashToSessionId` so an install keeps one id across the legacy→direct upgrade. The badge counts distinct `session_id` over a rolling 26h window.
 - **`health.ts`** — Docker HEALTHCHECK file touch. Best-effort (read-only fs safe).
 
 `telemetry-backend/` standalone pnpm package. A single HTTP service (Node built-in `http`, no Express) that:

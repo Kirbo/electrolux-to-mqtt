@@ -4,21 +4,31 @@ import { FakeClickHouse } from './fake-clickhouse.js'
 
 const APP_ID = 'test-app-guid'
 
-// Helper: build a FakeClickHouse with the standard two-query setup.
+// Helper: build a FakeClickHouse for the three-query setup (total / channels / versions).
+// Patterns disambiguate the three SQL statements:
+//   - 'uniqExact(session_id) AS total' → total query
+//   - 'GROUP BY channel'              → channel-only query (NOT a substring of the next)
+//   - 'GROUP BY version, channel'     → per-version query
 function buildFake(
-  totalRows: Array<{ total: number }>,
-  versionRows: Array<{ version: string; channel: string; count: number }>,
+  totalRows: Array<{ total: number | string }>,
+  channelRows: Array<{ channel: string; count: number | string }>,
+  versionRows: Array<{ version: string; channel: string; count: number | string }>,
 ): FakeClickHouse {
   const fake = new FakeClickHouse()
-  fake.onQuery('uniqExact(user_id) AS total', () => totalRows)
+  fake.onQuery('uniqExact(session_id) AS total', () => totalRows)
+  fake.onQuery('GROUP BY channel', () => channelRows)
   fake.onQuery('GROUP BY version, channel', () => versionRows)
   return fake
 }
 
 describe('aggregateTelemetry', () => {
-  it('returns the correct total from its own query, not summed from version rows', async () => {
+  it('returns the total from its own distinct query, not summed from version rows', async () => {
     const fake = buildFake(
       [{ total: 5 }],
+      [
+        { channel: 'stable', count: 4 },
+        { channel: 'beta', count: 1 },
+      ],
       [
         { version: '2026.6.0', channel: 'stable', count: 2 },
         { version: '2026.6.0b1', channel: 'beta', count: 1 },
@@ -29,26 +39,16 @@ describe('aggregateTelemetry', () => {
     expect(result.total).toBe(5)
   })
 
-  it('builds channels totals from version rows', async () => {
-    const fake = buildFake(
-      [{ total: 3 }],
-      [
-        { version: '2026.6.0', channel: 'stable', count: 2 },
-        { version: '2026.6.0b1', channel: 'beta', count: 1 },
-      ],
-    )
-
-    const result = await aggregateTelemetry(fake, APP_ID)
-    expect(result.channels.stable).toBe(2)
-    expect(result.channels.beta).toBe(1)
-  })
-
-  it('folds unknown channel into stable', async () => {
+  it('builds channel totals from the distinct channel query, not by summing versions', async () => {
+    // The version rows sum to 3 stable, but the same install appears under two stable
+    // versions; the distinct channel query reports the real count (2). total must NOT be
+    // derived by summing versions.
     const fake = buildFake(
       [{ total: 2 }],
+      [{ channel: 'stable', count: 2 }],
       [
-        { version: '2026.6.0', channel: '', count: 1 },
-        { version: '2026.6.0', channel: 'unknown-val', count: 1 },
+        { version: '2026.6.10', channel: 'stable', count: 2 },
+        { version: '2026.6.9', channel: 'stable', count: 1 },
       ],
     )
 
@@ -57,17 +57,56 @@ describe('aggregateTelemetry', () => {
     expect(result.channels.beta).toBe(0)
   })
 
-  it('folds empty channel into beta when version is a pre-release', async () => {
-    const fake = buildFake([{ total: 1 }], [{ version: '2026.6.0b1', channel: '', count: 1 }])
+  it('splits stable and beta channel counts', async () => {
+    const fake = buildFake(
+      [{ total: 3 }],
+      [
+        { channel: 'stable', count: 2 },
+        { channel: 'beta', count: 1 },
+      ],
+      [],
+    )
 
     const result = await aggregateTelemetry(fake, APP_ID)
-    expect(result.channels.stable).toBe(0)
+    expect(result.channels.stable).toBe(2)
     expect(result.channels.beta).toBe(1)
+  })
+
+  it('folds an unknown/empty channel into stable in the channel totals', async () => {
+    const fake = buildFake(
+      [{ total: 2 }],
+      [
+        { channel: '', count: 1 },
+        { channel: 'unknown-val', count: 1 },
+      ],
+      [],
+    )
+
+    const result = await aggregateTelemetry(fake, APP_ID)
+    expect(result.channels.stable).toBe(2)
+    expect(result.channels.beta).toBe(0)
+  })
+
+  it('folds an empty channel into beta in the version breakdown when the version is pre-release', async () => {
+    const fake = buildFake(
+      [{ total: 1 }],
+      [{ channel: 'beta', count: 1 }],
+      [{ version: '2026.6.0b1', channel: '', count: 1 }],
+    )
+
+    const result = await aggregateTelemetry(fake, APP_ID)
+    const entry = result.versions.find((v) => v.version === '2026.6.0b1')
+    expect(entry?.channels.beta).toBe(1)
+    expect(entry?.channels.stable).toBe(0)
   })
 
   it('sorts versions descending', async () => {
     const fake = buildFake(
       [{ total: 3 }],
+      [
+        { channel: 'stable', count: 2 },
+        { channel: 'beta', count: 1 },
+      ],
       [
         { version: '2026.5.0', channel: 'stable', count: 1 },
         { version: '2026.6.0', channel: 'stable', count: 1 },
@@ -88,7 +127,7 @@ describe('aggregateTelemetry', () => {
       channel: 'stable',
       count: 1,
     }))
-    const fake = buildFake([{ total: 120 }], versionRows)
+    const fake = buildFake([{ total: 120 }], [{ channel: 'stable', count: 120 }], versionRows)
 
     const result = await aggregateTelemetry(fake, APP_ID)
     expect(result.versions).toHaveLength(100)
@@ -97,10 +136,11 @@ describe('aggregateTelemetry', () => {
   it('passes app_id as a query param, never interpolated into SQL', async () => {
     let capturedParams: Record<string, unknown> | null = null
     const fake = new FakeClickHouse()
-    fake.onQuery('uniqExact(user_id) AS total', (params) => {
+    fake.onQuery('uniqExact(session_id) AS total', (params) => {
       capturedParams = params
       return [{ total: 0 }]
     })
+    fake.onQuery('GROUP BY channel', () => [])
     fake.onQuery('GROUP BY version, channel', () => [])
 
     await aggregateTelemetry(fake, APP_ID)
@@ -113,7 +153,7 @@ describe('aggregateTelemetry', () => {
   })
 
   it('returns zero totals and empty versions list when no data', async () => {
-    const fake = buildFake([{ total: 0 }], [])
+    const fake = buildFake([{ total: 0 }], [], [])
 
     const result = await aggregateTelemetry(fake, APP_ID)
     expect(result.total).toBe(0)
@@ -126,9 +166,11 @@ describe('aggregateTelemetry', () => {
     // Real ClickHouse serializes UInt64 aggregates (uniqExact) as JSON strings:
     // "1", not 1. Without coercion, `0 + "1"` string-concatenates to "01" and the
     // total passes the raw "1" straight through. Reproduces the live /telemetry bug.
-    const fake = new FakeClickHouse()
-    fake.onQuery('uniqExact(user_id) AS total', () => [{ total: '1' }])
-    fake.onQuery('GROUP BY version, channel', () => [{ version: '2026.6.11b1', channel: 'beta', count: '01' }])
+    const fake = buildFake(
+      [{ total: '1' }],
+      [{ channel: 'beta', count: '1' }],
+      [{ version: '2026.6.11b1', channel: 'beta', count: '01' }],
+    )
 
     const result = await aggregateTelemetry(fake, APP_ID)
 
@@ -146,6 +188,10 @@ describe('aggregateTelemetry', () => {
   it('aggregates multiple rows for the same version under different channels', async () => {
     const fake = buildFake(
       [{ total: 3 }],
+      [
+        { channel: 'stable', count: 2 },
+        { channel: 'beta', count: 1 },
+      ],
       [
         { version: '2026.6.0', channel: 'stable', count: 2 },
         { version: '2026.6.0', channel: 'beta', count: 1 },

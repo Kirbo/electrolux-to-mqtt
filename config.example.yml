@@ -113,10 +113,11 @@ healthCheck:
   # (Optional) Minutes of sustained API failure before the container exits for Docker to restart it. Default: 45 (range: 10–1440)
   unHealthyRestartMinutes: 45
 
-# (Optional) Send anonymous telemetry during version checks: app version, update channel
-# (stable/beta), OS name and version, CPU architecture, and connected-appliance model id(s)
-# and count. Sent to a self-hosted Aptabase instance. Aptabase derives an approximate country
-# from the request IP and a daily-rotating non-reversible visitor id (IP+user-agent+daily salt)
-# — no stable device id, username, or personal data is sent or stored.
+# (Optional) Send anonymous telemetry every ~15 min (independent of the version-check
+# interval): app version, update channel (stable/beta), OS name and version, CPU architecture,
+# connected-appliance model id(s) and count, plus a stable per-install id (a one-way SHA-256
+# hash of your Electrolux username — never the username itself or any credential) so installs
+# can be counted over a rolling 24h window. Sent to a self-hosted Aptabase instance, which also
+# derives an approximate country from the request IP.
 # Default: true. Set to false to opt out entirely. Version checking still runs regardless.
 telemetryEnabled: true

@@ -1,4 +1,3 @@
-import crypto from 'node:crypto'
 import packageJson from '../package.json' with { type: 'json' }
 import config from './config.js'
 import { disposableInterval, disposableTimeout } from './disposable.js'
@@ -7,7 +6,7 @@ import createLogger from './logger.js'
 import { runStartupMigrations } from './migrate.js'
 import Mqtt from './mqtt.js'
 import { Orchestrator } from './orchestrator.js'
-import { summarizeAppliances } from './telemetry.js'
+import { deriveTelemetrySessionId, summarizeAppliances } from './telemetry.js'
 import { startVersionChecker } from './version-checker.js'
 
 const currentVersion = packageJson.version
@@ -16,8 +15,9 @@ logger.info({ version: currentVersion }, 'Starting Electrolux to MQTT')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
 
-// One UUID per process lifetime, used as Aptabase session identifier.
-const telemetrySessionId = crypto.randomUUID()
+// Stable per-install Aptabase session id, derived from the Electrolux username. Constant
+// across restarts so the badge can count distinct installs over a rolling window.
+const telemetrySessionId = deriveTelemetrySessionId(config.electrolux.username)
 
 const refreshInterval = client.refreshInterval * 1000
 const applianceDiscoveryInterval = config.electrolux.applianceDiscoveryInterval * 1000

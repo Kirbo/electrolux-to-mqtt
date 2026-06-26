@@ -21,7 +21,8 @@ function recordingWriter(): { writeFile: FileWriter; files: Map<string, string> 
 
 function buildFakeCh(total = 5): FakeClickHouse {
   const fake = new FakeClickHouse()
-  fake.onQuery('uniqExact(user_id) AS total', () => [{ total }])
+  fake.onQuery('uniqExact(session_id) AS total', () => [{ total }])
+  fake.onQuery('GROUP BY channel', () => [{ channel: 'stable', count: total }])
   fake.onQuery('GROUP BY version, channel', () => [{ version: '2026.6.0', channel: 'stable', count: total }])
   return fake
 }
@@ -143,11 +144,12 @@ describe('createBadgeStore', () => {
     it('retains the last-good telemetry JSON when a later cycle fails', async () => {
       let calls = 0
       const ch = new FakeClickHouse()
-      ch.onQuery('uniqExact(user_id) AS total', () => {
+      ch.onQuery('uniqExact(session_id) AS total', () => {
         calls++
         if (calls > 1) throw new Error('CH temporarily unavailable')
         return [{ total: 99 }]
       })
+      ch.onQuery('GROUP BY channel', () => [])
       ch.onQuery('GROUP BY version, channel', () => [])
       const store = makeStore({ ch, releasesFetcher: noReleases, writeFile: recordingWriter().writeFile })
 

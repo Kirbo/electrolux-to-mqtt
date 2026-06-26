@@ -23,11 +23,22 @@ interface TotalRow {
   total: string | number
 }
 
+interface ChannelRow {
+  channel: string
+  count: string | number
+}
+
 interface VersionRow {
   version: string
   channel: string
   count: string | number
 }
+
+// Rolling window for the "users" count. Must exceed the version-checker's 24h max poll
+// interval (config: VERSION_CHECK_INTERVAL ≤ 86400s) so every install that pinged at least
+// once is always inside it — the count then holds steady around the clock instead of
+// resetting at UTC midnight. The 2h slack absorbs clock skew / a slightly late poll.
+const USER_WINDOW_HOURS = 26
 
 type VersionEntry = { count: number; channels: { stable: number; beta: number } }
 
@@ -89,37 +100,47 @@ function resolveChannel(channel: string, version: string): 'stable' | 'beta' {
 /**
  * Aggregate telemetry from Aptabase's ClickHouse events table.
  *
- * Two separate queries are issued:
- *   1. A total distinct-user count (a user may appear under >1 version in a day,
- *      so summing per-version counts would overcount).
- *   2. Per-version × channel distinct-user counts for the breakdown.
+ * Counts distinct installs over a rolling {@link USER_WINDOW_HOURS} window, keyed on
+ * `session_id` (a stable per-install id — Aptabase's own `user_id` rotates with a daily
+ * salt, so it can't be counted across midnight). The rolling window keeps the count steady
+ * around the clock instead of building up from a UTC-midnight reset.
  *
- * Both queries are parameterized — app_id is never interpolated into the SQL.
- * The calendar-UTC-day window matches Aptabase's daily-salt rotation.
+ * Three parameterized queries (app_id is never interpolated):
+ *   1. total  — distinct installs (one install on >1 version still counts once).
+ *   2. channels — distinct installs per channel (so `stable`/`beta` are real user counts,
+ *      not the over-counting sum of the per-version rows).
+ *   3. versions — per-version × channel distinct installs for the breakdown.
  */
 export async function aggregateTelemetry(ch: ClickHouseLike, appId: string): Promise<TelemetryResult> {
   const params: Record<string, unknown> = { app_id: appId }
+  // USER_WINDOW_HOURS is a hardcoded integer constant, not user input — safe to inline.
+  const windowClause = `app_id={app_id:String} AND event_name='version_check' AND timestamp >= now() - INTERVAL ${USER_WINDOW_HOURS} HOUR`
 
-  const [totalRows, versionRows] = await Promise.all([
-    ch.query<TotalRow>(
-      `SELECT uniqExact(user_id) AS total FROM events WHERE app_id={app_id:String} AND event_name='version_check' AND timestamp>=toStartOfDay(now())`,
+  const [totalRows, channelRows, versionRows] = await Promise.all([
+    ch.query<TotalRow>(`SELECT uniqExact(session_id) AS total FROM events WHERE ${windowClause}`, params),
+    ch.query<ChannelRow>(
+      `SELECT JSONExtractString(string_props,'channel') AS channel, uniqExact(session_id) AS count FROM events WHERE ${windowClause} GROUP BY channel`,
       params,
     ),
     ch.query<VersionRow>(
-      `SELECT app_version AS version, JSONExtractString(string_props,'channel') AS channel, uniqExact(user_id) AS count FROM events WHERE app_id={app_id:String} AND event_name='version_check' AND timestamp>=toStartOfDay(now()) GROUP BY version, channel`,
+      `SELECT app_version AS version, JSONExtractString(string_props,'channel') AS channel, uniqExact(session_id) AS count FROM events WHERE ${windowClause} GROUP BY version, channel`,
       params,
     ),
   ])
 
   const total = toCount(totalRows[0]?.total ?? 0)
-  const channels = { stable: 0, beta: 0 }
-  const byVersion = new Map<string, VersionEntry>()
 
+  // Channels come from their own distinct query (no version available, so an unknown/empty
+  // channel folds to stable — in practice every stored event carries a concrete channel).
+  const channels = { stable: 0, beta: 0 }
+  for (const row of channelRows) {
+    channels[resolveChannel(row.channel, '')] += toCount(row.count)
+  }
+
+  const byVersion = new Map<string, VersionEntry>()
   for (const row of versionRows) {
     const ch2 = resolveChannel(row.channel, row.version)
     const count = toCount(row.count)
-    channels[ch2] += count
-
     const entry = byVersion.get(row.version) ?? { count: 0, channels: { stable: 0, beta: 0 } }
     entry.count += count
     entry.channels[ch2] += count
