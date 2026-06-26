@@ -21,12 +21,42 @@ function writeJson(res: http.ServerResponse, status: number, body: unknown): voi
   res.end(payload)
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
+/**
+ * Max accepted POST body. Legacy bodies are ~150 B; the cap stops an oversized
+ * request from exhausting memory on the (64 MB) container.
+ */
+const MAX_BODY_BYTES = 8 * 1024
+
+type ReadBodyResult = { ok: true; body: string } | { ok: false; reason: 'too_large' | 'error' }
+
+function readBody(req: http.IncomingMessage, maxBytes: number): Promise<ReadBodyResult> {
+  return new Promise((resolve) => {
+    let settled = false
+    const settle = (result: ReadBodyResult): void => {
+      if (!settled) {
+        settled = true
+        resolve(result)
+      }
+    }
+
+    const declared = Number(req.headers['content-length'])
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      settle({ ok: false, reason: 'too_large' })
+      return
+    }
+
     const chunks: Buffer[] = []
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
-    req.on('error', reject)
+    let total = 0
+    req.on('data', (chunk: Buffer) => {
+      total += chunk.length
+      if (total > maxBytes) {
+        settle({ ok: false, reason: 'too_large' })
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => settle({ ok: true, body: Buffer.concat(chunks).toString('utf8') }))
+    req.on('error', () => settle({ ok: false, reason: 'error' }))
   })
 }
 
@@ -74,13 +104,18 @@ async function handleLegacyTelemetry(
     return
   }
 
-  let rawBody: string
-  try {
-    rawBody = await readBody(req)
-  } catch {
+  const bodyResult = await readBody(req, MAX_BODY_BYTES)
+  if (!bodyResult.ok) {
+    if (bodyResult.reason === 'too_large') {
+      // Connection: close discards any unconsumed body so it can't desync keep-alive.
+      res.writeHead(413, { 'Content-Type': JSON_CONTENT_TYPE, Connection: 'close' })
+      res.end(JSON.stringify({ error: 'Payload Too Large' }))
+      return
+    }
     writeJson(res, 400, { error: 'Failed to read request body' })
     return
   }
+  const rawBody = bodyResult.body
 
   let parsed: unknown
   try {

@@ -58,4 +58,22 @@ describe('createRateLimiter', () => {
 
     vi.useRealTimers()
   })
+
+  it('prunes expired entries so the tracked-IP map does not grow unbounded', () => {
+    const now = Date.now()
+    vi.setSystemTime(now)
+
+    const limiter = createRateLimiter(5, 1_000)
+    limiter.allow('1.1.1.1')
+    limiter.allow('2.2.2.2')
+    expect(limiter.size()).toBe(2)
+
+    // Past the window, a request from a new IP triggers an amortized sweep that
+    // drops the two now-expired entries.
+    vi.setSystemTime(now + 1_001)
+    limiter.allow('3.3.3.3')
+    expect(limiter.size()).toBe(1)
+
+    vi.useRealTimers()
+  })
 })

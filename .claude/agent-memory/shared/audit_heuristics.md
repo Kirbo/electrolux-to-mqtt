@@ -41,7 +41,9 @@ When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.re
 
 Service is a single Node built-in `http` server (no Express, no Redis) that reads Aptabase **ClickHouse** and serves in-memory SVG badges + `/telemetry.json`; legacy `POST /telemetry` forwards to Aptabase via `AptabaseForwarder`. (The old `express.json({ limit })` size-limit and Redis observations are obsolete — don't re-flag their absence.)
 - Rate limiting runs **before** forwarding on `POST /telemetry` — correct per CLAUDE.md checklist.
-- Request body size is bounded in the raw `http` handler — confirm the manual cap is present (there's no `express.json` limit to lean on anymore).
+- Request body is capped at `MAX_BODY_BYTES` (8 KB) in `readBody` (`server.ts`) → 413 + `Connection: close`; covered by a test. (Added in the 2026-06-26 audit — the cap had been missing, an OOM-the-64M-container vector.)
+- The per-IP rate-limiter (`rate-limit.ts`) prunes expired entries via an amortized once-per-window sweep and exposes `size()`; covered by a test. (Added in the same audit — the map had grown unbounded.)
+- New raw-`http` handlers here have no framework defaults — always confirm resource bounds (body size, per-IP map eviction) on any added endpoint.
 - Multi-stage Dockerfile, dev deps stripped — correct.
 
 ## Watch patterns

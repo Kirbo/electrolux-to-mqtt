@@ -66,6 +66,9 @@ class FakeRateLimiter implements RateLimiter {
   allow(_ip: string): boolean {
     return this._allow
   }
+  size(): number {
+    return 0
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -302,6 +305,17 @@ describe('createServer', () => {
         body: 'hello',
       })
       expect(res.status).toBe(415)
+    })
+
+    it('returns 413 for an oversized body and does not forward', async () => {
+      const huge = 'x'.repeat(9 * 1024) // exceeds the 8 KB cap
+      const res = await fetch(`http://127.0.0.1:${port}/telemetry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: huge,
+      })
+      expect(res.status).toBe(413)
+      expect(forwarder.calls).toHaveLength(0)
     })
   })
 
