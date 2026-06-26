@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 const isE2EEnabled = process.env.E2E === 'true' || process.env.E2E_TEST === 'true'
 const NOTIFY_TOPIC = process.env.E2M_NTFY_TOPIC || 'vB66ozQaRiqhTE9j'
-const TELEMETRY_URL = 'https://e2m.devaus.eu/telemetry'
+const APTABASE_EVENTS_URL = 'https://aptabase.devaus.eu/api/v0/events'
+const APTABASE_APP_KEY = 'A-SH-2414786682'
 const NTFY_URL = `https://ntfy.sh/${NOTIFY_TOPIC}`
 const GITLAB_RELEASES_URL = 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/releases'
 const GITLAB_TAGS_URL = 'https://gitlab.com/api/v4/projects/kirbo%2Felectrolux-to-mqtt/repository/tags'
@@ -60,30 +61,37 @@ describe.skipIf(!isE2EEnabled)('version-checker', () => {
     expect(data[0]).toHaveProperty('commit')
   })
 
-  it('should send telemetry to backend', async (ctx) => {
-    try {
-      const res = await axios.post(
-        TELEMETRY_URL,
-        { userHash: 'e2e-test-hash', version: 'v1.6.3' },
-        { timeout: 10000, headers: { 'Content-Type': 'application/json' } },
-      )
-      expect(res.status).toBe(200)
-      expect(res.data).toHaveProperty('success')
-    } catch (err) {
-      // If the backend rejects the short test hash (ALLOW_TEST_TELEMETRY not set),
-      // skip rather than fail — the bypass is opt-in and the live backend may not have it.
-      // Re-throw on any other error so real regressions still surface.
-      if (
-        axios.isAxiosError(err) &&
-        err.response?.status === 400 &&
-        typeof err.response.data?.error === 'string' &&
-        err.response.data.error.includes('userHash length is invalid')
-      ) {
-        ctx.skip()
-        return
-      }
-      throw err
+  it('should accept a telemetry event at the Aptabase ingest endpoint', async () => {
+    // Uses eventName 'e2e_test' and isDebug:true so the event is filterable
+    // out of production dashboards.
+    const event = {
+      timestamp: new Date().toISOString(),
+      sessionId: 'e2e-test-session',
+      eventName: 'e2e_test',
+      systemProps: {
+        appVersion: '0.0.0-e2e',
+        osName: 'Linux',
+        osVersion: '0.0.0',
+        isDebug: true,
+        sdkVersion: 'electrolux-to-mqtt@0.0.0-e2e',
+      },
+      props: {
+        channel: 'stable',
+        arch: 'arm64',
+        appliance_models: 'E2E',
+        appliance_count: 0,
+      },
     }
+
+    const res = await axios.post(APTABASE_EVENTS_URL, [event], {
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/json',
+        'App-Key': APTABASE_APP_KEY,
+      },
+    })
+
+    expect(res.status).toBe(200)
   })
 
   it('should send ntfy notification to topic', async () => {

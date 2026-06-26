@@ -18,6 +18,13 @@ vi.mock('@/logger.js', () => ({
   default: () => loggerSpies,
 }))
 
+// Mock telemetry helpers for deterministic OS info in tests
+vi.mock('@/telemetry.js', () => ({
+  getOsInfo: () => ({ osName: 'Linux', osVersion: '5.15.0', arch: 'arm64' }),
+  mapOsName: (p: string) => p,
+  summarizeAppliances: () => ({ models: '', count: 0 }),
+}))
+
 // Mock config with default values
 vi.mock('@/config.js', () => ({
   default: {
@@ -29,6 +36,15 @@ vi.mock('@/config.js', () => ({
     telemetryEnabled: true,
   },
 }))
+
+/**
+ * Default telemetry context used across most tests.
+ * applianceSummary returns a single appliance by default.
+ */
+const makeTelemetryCtx = (sessionId = 'test-session-id') => ({
+  sessionId,
+  applianceSummary: () => ({ models: 'COMFORT600', count: 1 }),
+})
 
 describe('formatDuration', () => {
   it('returns "1 minute" for 60 seconds', () => {
@@ -112,7 +128,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       // Wait for immediate check to complete
       await vi.advanceTimersByTimeAsync(0)
@@ -125,11 +141,18 @@ describe('version-checker', () => {
         }),
       )
 
-      // Should send telemetry with channel
+      // Should send telemetry to Aptabase
       expect(mockAxiosPost).toHaveBeenCalledWith(
-        'https://e2m.devaus.eu/telemetry',
-        { userHash: 'test-hash-123', version: 'v1.6.3', channel: 'stable' },
-        expect.any(Object),
+        'https://aptabase.devaus.eu/api/v0/events',
+        expect.arrayContaining([
+          expect.objectContaining({
+            eventName: 'version_check',
+            sessionId: 'test-session-id',
+            systemProps: expect.objectContaining({ appVersion: '1.6.3' }),
+            props: expect.objectContaining({ channel: 'stable' }),
+          }),
+        ]),
+        expect.objectContaining({ headers: expect.objectContaining({ 'App-Key': 'A-SH-2414786682' }) }),
       )
 
       stopChecker()
@@ -140,7 +163,7 @@ describe('version-checker', () => {
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
       // v1.6.3 is a stable version → channel is derived as 'stable'
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       expect(loggerSpies.info).toHaveBeenCalledWith('Update channel: stable (derived from version v1.6.3)')
       expect(loggerSpies.info).toHaveBeenCalledWith('Version check interval set to 1 hour')
@@ -152,7 +175,7 @@ describe('version-checker', () => {
       mockAxiosGet.mockResolvedValue({ data: [] })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       expect(typeof stopChecker).toBe('function')
       expect(() => stopChecker()).not.toThrow()
@@ -164,7 +187,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       // Initial check
       await vi.advanceTimersByTimeAsync(0)
@@ -182,7 +205,7 @@ describe('version-checker', () => {
     it('should skip check for development version', async () => {
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('development', 'test-hash-123')
+      const stopChecker = startVersionChecker('development', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -226,7 +249,7 @@ describe('version-checker', () => {
       mockAxiosGet.mockResolvedValueOnce({
         data: [{ tag_name: latestTag, released_at: '2026-01-28T12:00:00Z' }],
       })
-      const stopChecker = moduleForCmp.startVersionChecker(current, 'hash', mockMqttCmp)
+      const stopChecker = moduleForCmp.startVersionChecker(current, makeTelemetryCtx(), mockMqttCmp)
       await vi.advanceTimersByTimeAsync(0)
       stopChecker()
       const calls = mockPublishInfoCmp.mock.calls
@@ -303,7 +326,7 @@ describe('version-checker', () => {
         ],
       })
 
-      const stopChecker = moduleWithBetaRcToStable.startVersionChecker('1.17.0-rc.7', 'hash', mockMqttBeta)
+      const stopChecker = moduleWithBetaRcToStable.startVersionChecker('1.17.0-rc.7', makeTelemetryCtx(), mockMqttBeta)
       await vi.advanceTimersByTimeAsync(0)
       stopChecker()
 
@@ -324,7 +347,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -345,7 +368,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -366,7 +389,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -389,7 +412,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -415,7 +438,7 @@ describe('version-checker', () => {
         })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -448,7 +471,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -482,7 +505,7 @@ describe('version-checker', () => {
 
       const mockPublishInfo = vi.fn()
       const mockMqtt = { publishInfo: mockPublishInfo } as unknown as IMqtt
-      const stopChecker = startVersionChecker('v1.6.1', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.1', makeTelemetryCtx(), mockMqtt)
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -497,7 +520,7 @@ describe('version-checker', () => {
       mockAxiosGet.mockRejectedValueOnce(error)
       vi.mocked(axios.isAxiosError).mockReturnValue(false)
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -512,7 +535,7 @@ describe('version-checker', () => {
       mockAxiosGet.mockRejectedValueOnce(error)
       vi.mocked(axios.isAxiosError).mockReturnValue(true)
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
@@ -544,17 +567,13 @@ describe('version-checker', () => {
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
 
-      const stopChecker = moduleWithOptOut.startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = moduleWithOptOut.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
       // Version check should still run
       expect(mockAxiosGet).toHaveBeenCalled()
-      // But telemetry POST should NOT have been called
-      expect(mockAxiosPost).not.toHaveBeenCalledWith(
-        'https://e2m.devaus.eu/telemetry',
-        expect.anything(),
-        expect.anything(),
-      )
+      // But telemetry POST should NOT have been called at all
+      expect(mockAxiosPost).not.toHaveBeenCalled()
 
       stopChecker()
     })
@@ -574,13 +593,13 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = mod.startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = mod.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockAxiosPost).toHaveBeenCalledWith(
-        'https://e2m.devaus.eu/telemetry',
-        { userHash: 'test-hash-123', version: 'v1.6.3', channel: 'stable' },
-        expect.any(Object),
+        'https://aptabase.devaus.eu/api/v0/events',
+        expect.arrayContaining([expect.objectContaining({ eventName: 'version_check', sessionId: 'test-session-id' })]),
+        expect.objectContaining({ headers: expect.objectContaining({ 'App-Key': 'A-SH-2414786682' }) }),
       )
 
       stopChecker()
@@ -588,28 +607,43 @@ describe('version-checker', () => {
   })
 
   describe('telemetry', () => {
-    it('should send telemetry with user hash and version', async () => {
+    it('should send telemetry event to Aptabase with correct payload', async () => {
       mockAxiosGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-abc')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx('test-session-abc'))
 
       await vi.advanceTimersByTimeAsync(0)
 
       // v1.6.3 is a stable version → resolved channel is 'stable'
       expect(mockAxiosPost).toHaveBeenCalledWith(
-        'https://e2m.devaus.eu/telemetry',
-        {
-          userHash: 'test-hash-abc',
-          version: 'v1.6.3',
-          channel: 'stable',
-        },
+        'https://aptabase.devaus.eu/api/v0/events',
+        [
+          expect.objectContaining({
+            sessionId: 'test-session-abc',
+            eventName: 'version_check',
+            systemProps: expect.objectContaining({
+              appVersion: '1.6.3',
+              osName: 'Linux',
+              osVersion: '5.15.0',
+              isDebug: false,
+              sdkVersion: 'electrolux-to-mqtt@1.6.3',
+            }),
+            props: expect.objectContaining({
+              channel: 'stable',
+              arch: 'arm64',
+              appliance_models: 'COMFORT600',
+              appliance_count: 1,
+            }),
+          }),
+        ],
         expect.objectContaining({
           timeout: 10000,
           headers: {
             'Content-Type': 'application/json',
+            'App-Key': 'A-SH-2414786682',
           },
         }),
       )
@@ -623,13 +657,150 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockRejectedValueOnce(new Error('Telemetry server down'))
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       // Should not throw even if telemetry fails
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have attempted telemetry
       expect(mockAxiosPost).toHaveBeenCalled()
+
+      stopChecker()
+    })
+  })
+
+  describe('Aptabase telemetry payload', () => {
+    it('sends a one-element array to the Aptabase events URL', async () => {
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx('sess-1'))
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [url, body] = mockAxiosPost.mock.calls[0] as [string, unknown]
+      expect(url).toBe('https://aptabase.devaus.eu/api/v0/events')
+      expect(Array.isArray(body)).toBe(true)
+      expect((body as unknown[]).length).toBe(1)
+
+      stopChecker()
+    })
+
+    it('includes App-Key header in the request', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [, , opts] = mockAxiosPost.mock.calls[0] as [string, unknown, { headers: Record<string, string> }]
+      expect(opts.headers['App-Key']).toBe('A-SH-2414786682')
+
+      stopChecker()
+    })
+
+    it('event has eventName "version_check" and correct sessionId', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const stopChecker = startVersionChecker('2026.6.0', makeTelemetryCtx('my-session-uuid'))
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const event = body[0]
+      expect(event?.eventName).toBe('version_check')
+      expect(event?.sessionId).toBe('my-session-uuid')
+
+      stopChecker()
+    })
+
+    it('strips leading "v" from appVersion and builds correct sdkVersion', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const stopChecker = startVersionChecker('v2026.6.0', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const event = body[0]
+      const systemProps = event?.systemProps as Record<string, unknown>
+      expect(systemProps?.appVersion).toBe('2026.6.0')
+      expect(systemProps?.sdkVersion).toBe('electrolux-to-mqtt@2026.6.0')
+
+      stopChecker()
+    })
+
+    it('systemProps has isDebug:false and mocked OS fields', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const systemProps = (body[0] as Record<string, unknown>)?.systemProps as Record<string, unknown>
+      expect(systemProps?.isDebug).toBe(false)
+      expect(systemProps?.osName).toBe('Linux')
+      expect(systemProps?.osVersion).toBe('5.15.0')
+
+      stopChecker()
+    })
+
+    it('props include channel, arch, appliance_models, appliance_count', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const ctx = { sessionId: 'sid', applianceSummary: () => ({ models: 'COMFORT600', count: 2 }) }
+      const stopChecker = startVersionChecker('v1.6.3', ctx)
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const props = (body[0] as Record<string, unknown>)?.props as Record<string, unknown>
+      expect(props?.channel).toBe('stable')
+      expect(props?.arch).toBe('arm64')
+      expect(props?.appliance_models).toBe('COMFORT600')
+      expect(props?.appliance_count).toBe(2)
+
+      stopChecker()
+    })
+
+    it('calls applianceSummary() lazily at each check (live fleet)', async () => {
+      let callCount = 0
+      const ctx = {
+        sessionId: 'sid',
+        applianceSummary: () => {
+          callCount++
+          return { models: `MODEL${callCount}`, count: callCount }
+        },
+      }
+      mockAxiosGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const stopChecker = startVersionChecker('v1.6.3', ctx)
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(3600 * 1000)
+
+      // Called once per check (2 checks: immediate + 1 interval tick)
+      expect(callCount).toBe(2)
+
+      stopChecker()
+    })
+
+    it('event timestamp is a valid ISO 8601 string', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockAxiosPost.mockResolvedValue({ data: {} })
+
+      const now = new Date('2026-06-25T10:00:00.000Z')
+      vi.setSystemTime(now)
+
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+
+      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const event = body[0] as Record<string, unknown>
+      expect(typeof event?.timestamp).toBe('string')
+      expect(new Date(event?.timestamp as string).toISOString()).toBe('2026-06-25T10:00:00.000Z')
 
       stopChecker()
     })
@@ -663,28 +834,24 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should send both telemetry and ntfy notification
       expect(mockAxiosPost).toHaveBeenCalledTimes(2)
 
-      // First call should be telemetry (v1.6.3 is stable → channel: 'stable')
+      // First call should be telemetry to Aptabase (v1.6.3 is stable → channel: 'stable')
       expect(mockAxiosPost).toHaveBeenNthCalledWith(
         1,
-        'https://e2m.devaus.eu/telemetry',
-        {
-          userHash: 'test-hash-123',
-          version: 'v1.6.3',
-          channel: 'stable',
-        },
-        expect.objectContaining({
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
+        'https://aptabase.devaus.eu/api/v0/events',
+        expect.arrayContaining([
+          expect.objectContaining({
+            eventName: 'version_check',
+            props: expect.objectContaining({ channel: 'stable' }),
+          }),
+        ]),
+        expect.objectContaining({ headers: expect.objectContaining({ 'App-Key': 'A-SH-2414786682' }) }),
       )
 
       // Second call should be ntfy notification
@@ -709,7 +876,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       // First check
       await vi.advanceTimersByTimeAsync(0)
@@ -739,7 +906,7 @@ describe('version-checker', () => {
         .mockResolvedValueOnce({ data: { success: true } }) // telemetry succeeds
         .mockRejectedValueOnce(new Error('ntfy server down')) // ntfy fails
 
-      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
       // Should not throw even if ntfy fails
       await vi.advanceTimersByTimeAsync(0)
 
@@ -759,7 +926,7 @@ describe('version-checker', () => {
         .mockRejectedValueOnce(axiosError) // ntfy fails with axios error
       vi.mocked(axios.isAxiosError).mockReturnValue(true)
 
-      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have attempted ntfy notification
@@ -784,7 +951,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(
@@ -800,7 +967,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(
@@ -825,7 +992,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).not.toHaveBeenCalledWith(expect.stringContaining('update-available'))
@@ -842,7 +1009,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(expect.stringContaining('update-available'))
@@ -870,7 +1037,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('v1.6.3', 'hash', mqtt)
+        const stop = mod.startVersionChecker('v1.6.3', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -897,7 +1064,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('v1.6.3', 'hash', mqtt)
+        const stop = mod.startVersionChecker('v1.6.3', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -924,7 +1091,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('v1.6.3', 'hash', mqtt)
+        const stop = mod.startVersionChecker('v1.6.3', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -933,7 +1100,7 @@ describe('version-checker', () => {
     })
 
     it('should publish development status and skip version fetch for development builds', async () => {
-      const stopChecker = startVersionChecker('development', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('development', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(
@@ -953,7 +1120,7 @@ describe('version-checker', () => {
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
       // Call without mqtt argument
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123')
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).not.toHaveBeenCalled()
@@ -969,7 +1136,7 @@ describe('version-checker', () => {
         .mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-02-01T12:00:00Z' }] })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
       await vi.advanceTimersByTimeAsync(0)
       expect(mockPublishInfo).toHaveBeenCalledTimes(1)
@@ -996,7 +1163,7 @@ describe('version-checker', () => {
       mockAxiosGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }] })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
       await vi.advanceTimersByTimeAsync(0)
       expect(mockPublishInfo).toHaveBeenCalledTimes(1)
@@ -1015,7 +1182,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(
@@ -1037,7 +1204,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(
@@ -1058,7 +1225,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       // Second check (periodic) throws
@@ -1080,7 +1247,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       const publishedPayload = JSON.parse(mockPublishInfo.mock.calls[0]?.[0])
@@ -1097,7 +1264,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
       // Must not throw or produce an unhandled rejection
       await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
@@ -1114,7 +1281,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       // 1.0.0 numeric parts < 1.6.3 — should publish 'up-to-date', not 'update-available'
@@ -1135,7 +1302,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
       // Must not throw or produce an unhandled rejection
       await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
@@ -1151,7 +1318,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
       await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
 
@@ -1186,7 +1353,7 @@ describe('version-checker', () => {
         })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stopChecker = startVersionChecker('v1.6.3', 'test-hash-123', mockMqtt)
+      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockPublishInfo).toHaveBeenCalledWith(
@@ -1233,7 +1400,7 @@ describe('version-checker', () => {
         const mockPublishInfoStable = vi.fn()
         const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
 
-        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', 'hash', mockMqttStable)
+        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', makeTelemetryCtx(), mockMqttStable)
         await vi.advanceTimersByTimeAsync(0)
 
         // No stable release found — should not publish update-available
@@ -1258,7 +1425,7 @@ describe('version-checker', () => {
         const mockPublishInfoStable = vi.fn()
         const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
 
-        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', 'hash', mockMqttStable)
+        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', makeTelemetryCtx(), mockMqttStable)
         await vi.advanceTimersByTimeAsync(0)
 
         // Should have identified v1.15.0 as latest stable and notified about it
@@ -1287,7 +1454,7 @@ describe('version-checker', () => {
         const mockPublishInfoStable = vi.fn()
         const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
 
-        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', 'hash', mockMqttStable)
+        const stopChecker = moduleWithStable.startVersionChecker('v1.14.0', makeTelemetryCtx(), mockMqttStable)
         await vi.advanceTimersByTimeAsync(0)
 
         // Should have detected v1.15.0 from tags, skipping the rc tag
@@ -1328,7 +1495,7 @@ describe('version-checker', () => {
         const mockPublishInfoBeta = vi.fn()
         const mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
 
-        const stopChecker = moduleWithBeta.startVersionChecker('v1.14.0', 'hash', mockMqttBeta)
+        const stopChecker = moduleWithBeta.startVersionChecker('v1.14.0', makeTelemetryCtx(), mockMqttBeta)
         await vi.advanceTimersByTimeAsync(0)
 
         // Beta channel includes rc — should see v1.15.1-rc.1 as the latest
@@ -1357,7 +1524,7 @@ describe('version-checker', () => {
         const mockPublishInfoBeta = vi.fn()
         const mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
 
-        const stopChecker = moduleWithBeta.startVersionChecker('v1.14.0', 'hash', mockMqttBeta)
+        const stopChecker = moduleWithBeta.startVersionChecker('v1.14.0', makeTelemetryCtx(), mockMqttBeta)
         await vi.advanceTimersByTimeAsync(0)
 
         // Beta channel: rc tag should surface
@@ -1404,7 +1571,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('1.18.5', 'hash', mqtt)
+        const stop = moduleStableIsPre.startVersionChecker('1.18.5', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1421,7 +1588,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('1.18.5', 'hash', mqtt)
+        const stop = moduleStableIsPre.startVersionChecker('1.18.5', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1437,7 +1604,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('1.17.0', 'hash', mqtt)
+        const stop = moduleStableIsPre.startVersionChecker('1.17.0', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1454,7 +1621,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('1.17.0', 'hash', mqtt)
+        const stop = moduleStableIsPre.startVersionChecker('1.17.0', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1470,7 +1637,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('2026.5.0', 'hash', mqtt)
+        const stop = moduleStableIsPre.startVersionChecker('2026.5.0', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1510,7 +1677,7 @@ describe('version-checker', () => {
         mockAxiosGet.mockResolvedValueOnce({
           data: [{ tag_name: latestTag, released_at: '2026-01-28T12:00:00Z' }],
         })
-        const stop = moduleCalVer.startVersionChecker(current, 'hash', mqttCalVer)
+        const stop = moduleCalVer.startVersionChecker(current, makeTelemetryCtx(), mqttCalVer)
         await vi.advanceTimersByTimeAsync(0)
         stop()
         const calls = pubFn.mock.calls
@@ -1581,7 +1748,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableMixed.startVersionChecker('1.18.5', 'hash', mqtt)
+        const stop = moduleStableMixed.startVersionChecker('1.18.5', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1622,7 +1789,7 @@ describe('version-checker', () => {
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleBetaMixed.startVersionChecker('1.18.5', 'hash', mqtt)
+        const stop = moduleBetaMixed.startVersionChecker('1.18.5', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1658,7 +1825,7 @@ describe('version-checker', () => {
         })
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('2026.6.0b1', 'hash', mqtt)
+        const stop = mod.startVersionChecker('2026.6.0b1', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
         expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
@@ -1674,7 +1841,7 @@ describe('version-checker', () => {
           .mockResolvedValueOnce({ data: [] })
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('2026.6.0', 'hash', mqtt)
+        const stop = mod.startVersionChecker('2026.6.0', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
         for (const call of pub.mock.calls) {
@@ -1686,7 +1853,7 @@ describe('version-checker', () => {
       it('development + unset channel → derives stable → logs derived channel', async () => {
         // development skips version check entirely; this test verifies channel resolution still logs
         const mod = await makeModule(undefined)
-        const stop = mod.startVersionChecker('development', 'hash')
+        const stop = mod.startVersionChecker('development', makeTelemetryCtx())
         await vi.advanceTimersByTimeAsync(0)
         stop()
         // Should log the resolved channel with a "derived" indicator
@@ -1705,7 +1872,7 @@ describe('version-checker', () => {
           .mockResolvedValueOnce({ data: [] })
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('2026.6.0b1', 'hash', mqtt)
+        const stop = mod.startVersionChecker('2026.6.0b1', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
         for (const call of pub.mock.calls) {
@@ -1723,7 +1890,7 @@ describe('version-checker', () => {
         })
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = mod.startVersionChecker('2026.5.0', 'hash', mqtt)
+        const stop = mod.startVersionChecker('2026.5.0', makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
         expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
@@ -1734,7 +1901,7 @@ describe('version-checker', () => {
       it('logs resolved channel and source (derived vs explicit) at startup', async () => {
         const mod = await makeModule(undefined)
         mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
-        const stop = mod.startVersionChecker('2026.6.0b1', 'hash')
+        const stop = mod.startVersionChecker('2026.6.0b1', makeTelemetryCtx())
         await vi.advanceTimersByTimeAsync(0)
         stop()
         const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
@@ -1745,7 +1912,7 @@ describe('version-checker', () => {
       it('logs resolved channel as explicit when updateChannel is set', async () => {
         const mod = await makeModule('stable')
         mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
-        const stop = mod.startVersionChecker('2026.6.0', 'hash')
+        const stop = mod.startVersionChecker('2026.6.0', makeTelemetryCtx())
         await vi.advanceTimersByTimeAsync(0)
         stop()
         const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
@@ -1863,7 +2030,7 @@ describe('version-checker', () => {
         // We test this through the startVersionChecker log output
         return import('@/version-checker.js').then((mod) => {
           startFn = mod.startVersionChecker
-          const stop = startFn('2026.6.4', 'hash', undefined, 'beta')
+          const stop = startFn('2026.6.4', makeTelemetryCtx(), undefined, 'beta')
           stop()
           const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
           expect(allInfoCalls.some((msg) => msg.includes('beta') && msg.includes('image'))).toBe(true)
@@ -1887,7 +2054,7 @@ describe('version-checker', () => {
         }))
         return import('@/version-checker.js').then((mod) => {
           startFn = mod.startVersionChecker
-          const stop = startFn('2026.6.4', 'hash', undefined, 'beta')
+          const stop = startFn('2026.6.4', makeTelemetryCtx(), undefined, 'beta')
           stop()
           const allInfoCalls = loggerSpies.info.mock.calls.map((c) => String(c[0]))
           expect(allInfoCalls.some((msg) => msg.includes('stable') && msg.includes('explicit'))).toBe(true)
@@ -1935,7 +2102,7 @@ describe('version-checker', () => {
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
       // Pass 'beta' as 4th arg (imageChannel baked into :next Docker image)
-      const stop = moduleReg.startVersionChecker('2026.6.4', 'hash', mqttReg, 'beta')
+      const stop = moduleReg.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqttReg, 'beta')
       await vi.advanceTimersByTimeAsync(0)
       stop()
 
@@ -1955,7 +2122,7 @@ describe('version-checker', () => {
         .mockResolvedValueOnce({ data: [] }) // tags fallback (beta filtered from stable releases)
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stop = moduleReg.startVersionChecker('2026.6.4', 'hash', mqttReg, 'stable')
+      const stop = moduleReg.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqttReg, 'stable')
       await vi.advanceTimersByTimeAsync(0)
       stop()
 
@@ -1992,7 +2159,7 @@ describe('version-checker', () => {
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
       // imageChannel=beta passed but explicit config=stable should win
-      const stop = mod.startVersionChecker('2026.6.4', 'hash', mqtt, 'beta')
+      const stop = mod.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqtt, 'beta')
       await vi.advanceTimersByTimeAsync(0)
       stop()
 
@@ -2011,7 +2178,7 @@ describe('version-checker', () => {
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
-      const stop = moduleReg.startVersionChecker('2026.6.4', 'hash', mqttReg, 'beta')
+      const stop = moduleReg.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqttReg, 'beta')
       await vi.advanceTimersByTimeAsync(0)
       stop()
 

@@ -7,6 +7,7 @@ import createLogger from './logger.js'
 import { runStartupMigrations } from './migrate.js'
 import Mqtt from './mqtt.js'
 import { Orchestrator } from './orchestrator.js'
+import { summarizeAppliances } from './telemetry.js'
 import { startVersionChecker } from './version-checker.js'
 
 const currentVersion = packageJson.version
@@ -15,13 +16,8 @@ logger.info({ version: currentVersion }, 'Starting Electrolux to MQTT')
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
 
-// Salt derived from partial config values, then hashed — unique per installation,
-// resistant to rainbow tables and not reversible to the original config fragments.
-const telemetrySalt = crypto
-  .createHash('sha256')
-  .update([config.mqtt.url.slice(-8), config.mqtt.username.slice(0, 4), config.electrolux.countryCode].join(':'))
-  .digest('hex')
-const userHash = crypto.createHmac('sha256', telemetrySalt).update(config.electrolux.username).digest('hex')
+// One UUID per process lifetime, used as Aptabase session identifier.
+const telemetrySessionId = crypto.randomUUID()
 
 const refreshInterval = client.refreshInterval * 1000
 const applianceDiscoveryInterval = config.electrolux.applianceDiscoveryInterval * 1000
@@ -126,7 +122,15 @@ export const main = async () => {
   // Start version checker.
   // process.env.E2M_IMAGE_CHANNEL is baked into the Docker image at build time (UPDATE_CHANNEL ARG).
   // It is NOT routed through config.ts so it is honoured in YAML-config mode too.
-  stopVersionChecker = startVersionChecker(currentVersion, userHash, mqtt, process.env.E2M_IMAGE_CHANNEL)
+  stopVersionChecker = startVersionChecker(
+    currentVersion,
+    {
+      sessionId: telemetrySessionId,
+      applianceSummary: () => summarizeAppliances(orchestrator.getApplianceInstances()),
+    },
+    mqtt,
+    process.env.E2M_IMAGE_CHANNEL,
+  )
 }
 
 if (process.env.VITEST !== 'true') {

@@ -3,6 +3,11 @@ import config from './config.js'
 import { disposableInterval } from './disposable.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
+import { getOsInfo } from './telemetry.js'
+
+const APTABASE_HOST = 'https://aptabase.devaus.eu'
+const APTABASE_APP_KEY = 'A-SH-2414786682'
+const APTABASE_EVENTS_URL = `${APTABASE_HOST}/api/v0/events`
 
 const logger = createLogger('version')
 
@@ -269,23 +274,46 @@ async function sendNtfyNotification(currentVersion: string, latestVersion: strin
   }
 }
 
-/**
- * Send telemetry data to backend
- */
-async function sendTelemetry(userHash: string, version: string, channel: 'stable' | 'beta'): Promise<void> {
-  try {
-    const telemetryUrl = 'https://e2m.devaus.eu/telemetry'
+type TelemetryContext = {
+  sessionId: string
+  applianceSummary: () => { models: string; count: number }
+}
 
-    await axios.post(
-      telemetryUrl,
-      { userHash, version, channel },
-      {
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+/**
+ * Send telemetry event to self-hosted Aptabase instance.
+ */
+async function sendTelemetry(context: TelemetryContext, version: string, channel: 'stable' | 'beta'): Promise<void> {
+  try {
+    const cleanVersion = version.replace(/^v/, '')
+    const { osName, osVersion, arch } = getOsInfo()
+    const { models, count } = context.applianceSummary()
+
+    const event = {
+      timestamp: new Date().toISOString(),
+      sessionId: context.sessionId,
+      eventName: 'version_check',
+      systemProps: {
+        appVersion: cleanVersion,
+        osName,
+        osVersion,
+        isDebug: false,
+        sdkVersion: `electrolux-to-mqtt@${cleanVersion}`,
       },
-    )
+      props: {
+        channel,
+        arch,
+        appliance_models: models,
+        appliance_count: count,
+      },
+    }
+
+    await axios.post(APTABASE_EVENTS_URL, [event], {
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/json',
+        'App-Key': APTABASE_APP_KEY,
+      },
+    })
 
     logger.debug('Telemetry sent successfully')
   } catch (error) {
@@ -305,7 +333,7 @@ function publishInfoIfChanged(mqtt: IMqtt | undefined, message: string): void {
 
 async function checkForUpdates(
   currentVersion: string,
-  userHash: string,
+  telemetryContext: TelemetryContext,
   updateChannel: 'stable' | 'beta',
   mqtt?: IMqtt,
 ): Promise<void> {
@@ -318,7 +346,7 @@ async function checkForUpdates(
 
   // Send telemetry (skipped when user has opted out)
   if (config.telemetryEnabled) {
-    await sendTelemetry(userHash, currentVersion, updateChannel)
+    await sendTelemetry(telemetryContext, currentVersion, updateChannel)
   } else {
     logger.debug('Telemetry disabled, skipping')
   }
@@ -381,7 +409,7 @@ async function checkForUpdates(
 /**
  * Start the version check interval
  * @param currentVersion - Running image version string
- * @param userHash - Anonymous installation hash for telemetry
+ * @param telemetryContext - Session ID and a live appliance summary getter for Aptabase telemetry
  * @param mqtt - Optional MQTT client for publishing version info
  * @param imageChannel - Raw value of E2M_IMAGE_CHANNEL env var baked into the Docker image at build time.
  *   Pass process.env.E2M_IMAGE_CHANNEL directly (may be undefined or empty string). NOT sourced from
@@ -390,7 +418,7 @@ async function checkForUpdates(
  */
 export function startVersionChecker(
   currentVersion: string,
-  userHash: string,
+  telemetryContext: TelemetryContext,
   mqtt?: IMqtt,
   imageChannel?: string,
 ): () => void {
@@ -416,13 +444,13 @@ export function startVersionChecker(
   logger.info(`Version check interval set to ${formatDuration(checkIntervalSeconds)}`)
 
   // Check immediately on start
-  checkForUpdates(currentVersion, userHash, updateChannel, mqtt).catch((error) => {
+  checkForUpdates(currentVersion, telemetryContext, updateChannel, mqtt).catch((error) => {
     logger.debug('Version check failed:', error)
   })
 
   // Set up periodic check
   const intervalDisposable = disposableInterval(() => {
-    checkForUpdates(currentVersion, userHash, updateChannel, mqtt).catch((error) => {
+    checkForUpdates(currentVersion, telemetryContext, updateChannel, mqtt).catch((error) => {
       logger.debug('Version check failed:', error)
     })
   }, checkIntervalMs)
