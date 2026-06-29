@@ -682,7 +682,7 @@ describe('version-checker', () => {
       const [url, body] = mockAxiosPost.mock.calls[0] as [string, unknown]
       expect(url).toBe('https://aptabase.devaus.eu/api/v0/events')
       expect(Array.isArray(body)).toBe(true)
-      expect((body as unknown[]).length).toBe(1)
+      expect(body).toHaveLength(1)
 
       stopChecker()
     })
