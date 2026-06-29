@@ -50,6 +50,6 @@ export function summarizeAppliances(instances: ReadonlyMap<string, BaseAppliance
   for (const appliance of instances.values()) {
     modelSet.add(appliance.getModelName())
   }
-  const models = [...modelSet].sort().join(',')
+  const models = [...modelSet].sort((a, b) => a.localeCompare(b)).join(',')
   return { models, count: instances.size }
 }
