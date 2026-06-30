@@ -13,7 +13,9 @@ set -euo pipefail
 ROOT=$(git rev-parse --show-toplevel)
 
 # Latest stable tag: vYYYY.M.MICRO or vMAJOR.MINOR.PATCH — no bN or -rc suffix.
-LATEST_STABLE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+# `|| true`: with no matching tags, grep exits 1 and `set -o pipefail` would abort here (set -e),
+# bypassing the friendly "no stable tag found" message below. Let it fall through to empty instead.
+LATEST_STABLE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
 
 if [ -z "${LATEST_STABLE}" ]; then
   echo "error: no stable tag found" >&2
