@@ -1,7 +1,13 @@
 import { Buffer } from 'node:buffer'
 import axios, { type AxiosInstance } from 'axios'
 import type { BaseAppliance } from './appliances/base.js'
-import { normalizeClimateMode, normalizeFanSpeed, normalizeOnOffState } from './appliances/normalizers.js'
+import {
+  isAppliance,
+  normalizeClimateMode,
+  normalizeFanSpeed,
+  normalizeOnOffState,
+  resolveCachedNormalizedState,
+} from './appliances/normalizers.js'
 import { cache } from './cache.js'
 import config from './config.js'
 import createLogger from './logger.js'
@@ -11,27 +17,6 @@ import type { Appliance, ApplianceInfo, ApplianceStub } from './types.js'
 
 const logger = createLogger('electrolux')
 const baseUrl = 'https://api.developer.electrolux.one'
-
-function isAppliance(value: unknown): value is Appliance {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'applianceId' in value &&
-    'properties' in value &&
-    typeof (value as Record<string, unknown>).properties === 'object'
-  )
-}
-
-function isNormalizedState(value: unknown): value is NormalizedState {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'applianceId' in value &&
-    'deviceId' in value &&
-    'mode' in value &&
-    !('properties' in value)
-  )
-}
 
 function isApplianceInfo(value: unknown): value is ApplianceInfo {
   return typeof value === 'object' && value !== null && 'applianceInfo' in value && 'capabilities' in value
@@ -775,13 +760,7 @@ export class ElectroluxClient implements AsyncDisposable {
     applianceId: string,
     cacheKey: string,
   ): void {
-    const cached = cache.get(cacheKey)
-    let cachedNormalizedState: NormalizedState | null = null
-    if (isAppliance(cached)) {
-      cachedNormalizedState = appliance.normalizeState(cached)
-    } else if (isNormalizedState(cached)) {
-      cachedNormalizedState = cached
-    }
+    const cachedNormalizedState = resolveCachedNormalizedState(cache.get(cacheKey), appliance)
 
     if (!cachedNormalizedState) {
       logger.warn('No cached state available for immediate feedback after command')
@@ -954,13 +933,7 @@ export class ElectroluxClient implements AsyncDisposable {
   }
 
   private revertStateFromCache(appliance: BaseAppliance, applianceId: string, cacheKey: string): void {
-    const cached = cache.get(cacheKey)
-    let cachedNormalizedState: NormalizedState | null = null
-    if (isAppliance(cached)) {
-      cachedNormalizedState = appliance.normalizeState(cached)
-    } else if (isNormalizedState(cached)) {
-      cachedNormalizedState = cached
-    }
+    const cachedNormalizedState = resolveCachedNormalizedState(cache.get(cacheKey), appliance)
 
     if (cachedNormalizedState) {
       this.mqtt.publish(`${applianceId}/state`, JSON.stringify(cachedNormalizedState))
@@ -972,13 +945,8 @@ export class ElectroluxClient implements AsyncDisposable {
     const cacheKey = cache.cacheKey(applianceId).state
 
     // Pre-validate command against mode-specific constraints
-    const cached = cache.get(cacheKey)
-    let currentMode: NormalizedClimateMode = 'off'
-    if (isAppliance(cached)) {
-      currentMode = appliance.normalizeState(cached).mode
-    } else if (isNormalizedState(cached)) {
-      currentMode = cached.mode
-    }
+    const currentMode: NormalizedClimateMode =
+      resolveCachedNormalizedState(cache.get(cacheKey), appliance)?.mode ?? 'off'
 
     const validation = appliance.validateCommand(rawCommand, currentMode)
     if (!validation.valid) {

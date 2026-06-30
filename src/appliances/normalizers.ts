@@ -13,6 +13,7 @@ import type {
   UpgradeState,
 } from '@/types/normalized.js'
 import type { Appliance } from '@/types.js'
+import type { BaseAppliance } from './base.js'
 
 /**
  * Utility functions for normalizing Electrolux API data to standard format
@@ -302,4 +303,57 @@ export function normalizeClimateAppliance(rawState: Appliance): NormalizedState 
     fourWayValveState: normalizeOnOffNullable(reported.fourWayValveState),
     evapDefrostState: normalizeOnOffNullable(reported.evapDefrostState),
   }
+}
+
+/**
+ * Type guard for a raw Electrolux appliance state (pre-normalization): identity
+ * fields at the top level with reported state nested under `properties`. This is
+ * what the poll path stores in the state cache.
+ */
+export function isAppliance(value: unknown): value is Appliance {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'applianceId' in value &&
+    'properties' in value &&
+    typeof (value as Record<string, unknown>).properties === 'object'
+  )
+}
+
+/**
+ * Type guard for an already-normalized appliance state: flat, lowercase, no
+ * `properties` key. This is what the bridge publishes to MQTT and what Home
+ * Assistant's discovery templates parse. The command-feedback path caches this
+ * shape directly.
+ */
+export function isNormalizedState(value: unknown): value is NormalizedState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'applianceId' in value &&
+    'deviceId' in value &&
+    'mode' in value &&
+    !('properties' in value)
+  )
+}
+
+/**
+ * Resolve a value read from the state cache into a normalized state ready to
+ * publish to MQTT. The cache holds a raw {@link Appliance} after a poll
+ * (`publishStateIfChanged`) but an already-normalized state after command
+ * feedback (`publishCommandFeedback`); normalize the former and pass the latter
+ * through. Returns null when the value is neither (e.g. an empty cache).
+ *
+ * Publishing the raw shape verbatim would break HA's discovery templates (they
+ * read flat, lowercase fields like `connectionState: 'connected'`), so every
+ * cache→MQTT republish path must go through this resolver.
+ */
+export function resolveCachedNormalizedState(cached: unknown, appliance: BaseAppliance): NormalizedState | null {
+  if (isAppliance(cached)) {
+    return appliance.normalizeState(cached)
+  }
+  if (isNormalizedState(cached)) {
+    return cached
+  }
+  return null
 }

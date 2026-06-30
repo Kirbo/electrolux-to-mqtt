@@ -1,5 +1,6 @@
 import type { BaseAppliance } from './appliances/base.js'
 import { createAppliance } from './appliances/factory.js'
+import { resolveCachedNormalizedState } from './appliances/normalizers.js'
 import { cache } from './cache.js'
 import type { ElectroluxClient } from './electrolux.js'
 import { writeHealthFile } from './health.js'
@@ -77,14 +78,14 @@ export class Orchestrator implements AsyncDisposable {
 
     this.mqtt.onReconnect(() => {
       logger.info('MQTT connected — republishing cached state for all appliances')
-      for (const [applianceId] of this.applianceInstances) {
+      for (const [applianceId, appliance] of this.applianceInstances) {
         const stateKey = cache.cacheKey(applianceId).state
-        const state = cache.get(stateKey)
-        if (state === undefined || state === null) {
+        const normalizedState = resolveCachedNormalizedState(cache.get(stateKey), appliance)
+        if (normalizedState === null) {
           logger.debug(`No cached state for appliance ${applianceId} — skipping reconnect republish`)
           continue
         }
-        this.mqtt.publish(`${applianceId}/state`, JSON.stringify(state))
+        this.mqtt.publish(`${applianceId}/state`, JSON.stringify(normalizedState))
       }
     })
   }
@@ -104,12 +105,12 @@ export class Orchestrator implements AsyncDisposable {
       }
 
       const stateKey = cache.cacheKey(applianceId).state
-      const state = cache.get(stateKey)
-      if (state === undefined || state === null) {
+      const normalizedState = resolveCachedNormalizedState(cache.get(stateKey), appliance)
+      if (normalizedState === null) {
         logger.debug(`No cached state for appliance ${applianceId} — skipping state republish`)
         continue
       }
-      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(state))
+      this.mqtt.publish(`${applianceId}/state`, JSON.stringify(normalizedState))
     }
   }
 
@@ -133,7 +134,9 @@ export class Orchestrator implements AsyncDisposable {
           logger.debug(`HA status message received with payload "${payload}" — ignoring (not a birth message)`)
           return
         }
-        logger.info('Home Assistant came online — republishing discovery config and cached state for all appliances')
+        logger.info(
+          `Home Assistant restart detected (birth message "${payload}" on "${this.config.haBirthTopic}") — republishing discovery config and cached state for all appliances`,
+        )
         this.republishAll()
       })
       .catch((err: unknown) => {

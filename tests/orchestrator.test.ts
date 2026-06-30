@@ -45,7 +45,10 @@ vi.mock('@/appliances/factory.js', () => ({
         getModelName: () => 'COMFORT600',
         getApplianceType: () => stub.applianceType,
         getCapabilitiesHash: () => 'mockhash000',
-        normalizeState: vi.fn(),
+        // Deterministic stand-in for real normalization: wraps the raw cached
+        // value so tests can assert the published payload is the NORMALIZED
+        // form, not the raw cache entry.
+        normalizeState: vi.fn((raw: unknown) => ({ normalized: raw })),
         transformMqttCommandToApi: vi.fn(),
         generateAutoDiscoveryConfig: vi.fn(() => ({ test: 'config' })),
         validateCommand: vi.fn(() => ({ valid: true })),
@@ -113,6 +116,13 @@ const mockStub: ApplianceStub = {
   applianceName: 'Test AC',
   applianceType: 'PORTABLE_AIR_CONDITIONER',
   created: '2024-01-01T00:00:00Z',
+}
+
+// A raw Electrolux appliance shape (identity at top level, reported state nested
+// under `properties`) — what the poll path stores in the state cache. The
+// republish paths must normalize this before publishing, not emit it verbatim.
+function rawCachedAppliance(applianceId: string): Record<string, unknown> {
+  return { applianceId, properties: { reported: { applianceState: 'on' } } }
 }
 
 describe('Orchestrator', () => {
@@ -912,10 +922,10 @@ describe('Orchestrator', () => {
       expect(mqtt.onReconnect).toHaveBeenCalledTimes(1)
     })
 
-    it('should republish cached state for each appliance on every connect event', async () => {
+    it('should republish the NORMALIZED cached state (not the raw appliance) on every connect event', async () => {
       const { cache } = await import('@/cache.js')
-      const cachedState = { mode: 'cool', targetTemperature: 22 }
-      vi.mocked(cache.get).mockReturnValue(cachedState)
+      const rawState = rawCachedAppliance('appliance-1')
+      vi.mocked(cache.get).mockReturnValue(rawState)
 
       await orchestrator.initializeAppliance(mockStub)
 
@@ -923,15 +933,17 @@ describe('Orchestrator', () => {
       const reconnectCb = vi.mocked(mqtt.onReconnect).mock.calls[0]?.[0]
       expect(reconnectCb).toBeDefined()
 
-      // First connect event (initial connect) should now also republish cached state
+      // First connect event (initial connect) should republish the normalized form.
       vi.mocked(mqtt.publish).mockClear()
       reconnectCb?.()
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify({ normalized: rawState }))
+      // Must NOT publish the raw cache entry verbatim — HA templates can't parse it.
+      expect(mqtt.publish).not.toHaveBeenCalledWith('appliance-1/state', JSON.stringify(rawState))
 
-      // Subsequent reconnect should also republish
+      // Subsequent reconnect should also republish the normalized form.
       vi.mocked(mqtt.publish).mockClear()
       reconnectCb?.()
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify({ normalized: rawState }))
     })
 
     it('should skip republish for an appliance with no cached state', async () => {
@@ -950,10 +962,10 @@ describe('Orchestrator', () => {
       expect(mqtt.publish).not.toHaveBeenCalled()
     })
 
-    it('should republish cached state for all initialized appliances on reconnect', async () => {
+    it('should republish normalized cached state for all initialized appliances on reconnect', async () => {
       const { cache } = await import('@/cache.js')
-      const cachedState1 = { mode: 'cool' }
-      const cachedState2 = { mode: 'heat' }
+      const rawState1 = rawCachedAppliance('appliance-1')
+      const rawState2 = rawCachedAppliance('appliance-2')
 
       const anotherStub: ApplianceStub = {
         applianceId: 'appliance-2',
@@ -963,8 +975,8 @@ describe('Orchestrator', () => {
       }
 
       vi.mocked(cache.get).mockImplementation((key: string) => {
-        if (key === 'appliance-1:state') return cachedState1
-        if (key === 'appliance-2:state') return cachedState2
+        if (key === 'appliance-1:state') return rawState1
+        if (key === 'appliance-2:state') return rawState2
         return undefined
       })
 
@@ -975,11 +987,11 @@ describe('Orchestrator', () => {
 
       vi.mocked(mqtt.publish).mockClear()
 
-      // Any connect event — both appliances get republished
+      // Any connect event — both appliances get republished in normalized form
       reconnectCb?.()
 
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState1))
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify(cachedState2))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify({ normalized: rawState1 }))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify({ normalized: rawState2 }))
       expect(mqtt.publish).toHaveBeenCalledTimes(2)
     })
   })
@@ -1058,10 +1070,10 @@ describe('Orchestrator', () => {
       expect(mqtt.subscribeAbsolute).not.toHaveBeenCalled()
     })
 
-    it('should republish discovery AND cached state for each appliance when birth payload matches', async () => {
+    it('should republish discovery AND normalized cached state for each appliance when birth payload matches', async () => {
       const { cache } = await import('@/cache.js')
-      const cachedState = { mode: 'cool', targetTemperature: 22 }
-      vi.mocked(cache.get).mockReturnValue(cachedState)
+      const rawState = rawCachedAppliance('appliance-1')
+      vi.mocked(cache.get).mockReturnValue(rawState)
 
       await orchestrator.initializeAppliance(mockStub)
 
@@ -1077,9 +1089,11 @@ describe('Orchestrator', () => {
       // Simulate HA coming online
       birthHandler('homeassistant/status', Buffer.from('online'))
 
-      // Both discovery and state must be republished
+      // Both discovery and state must be republished — state in NORMALIZED form
+      // (the raw cache entry's nested/capitalized shape breaks HA discovery templates).
       expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(cachedState))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify({ normalized: rawState }))
+      expect(mqtt.publish).not.toHaveBeenCalledWith('appliance-1/state', JSON.stringify(rawState))
     })
 
     it('should not republish when birth payload does not match (e.g. offline)', async () => {
@@ -1126,8 +1140,8 @@ describe('Orchestrator', () => {
 
     it('should republish for all appliances on birth', async () => {
       const { cache } = await import('@/cache.js')
-      const state1 = { mode: 'cool' }
-      const state2 = { mode: 'heat' }
+      const state1 = rawCachedAppliance('appliance-1')
+      const state2 = rawCachedAppliance('appliance-2')
       const anotherStub: ApplianceStub = {
         applianceId: 'appliance-2',
         applianceName: 'Another AC',
@@ -1156,8 +1170,8 @@ describe('Orchestrator', () => {
 
       expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
       expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-2', expect.any(String), { retain: true, qos: 2 })
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify(state1))
-      expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify(state2))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-1/state', JSON.stringify({ normalized: state1 }))
+      expect(mqtt.publish).toHaveBeenCalledWith('appliance-2/state', JSON.stringify({ normalized: state2 }))
     })
 
     it('should unsubscribe from birth topic on shutdown', async () => {

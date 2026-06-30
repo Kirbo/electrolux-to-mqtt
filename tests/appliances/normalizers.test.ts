@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import type { BaseAppliance } from '@/appliances/base.js'
 import {
   denormalizeClimateMode,
   denormalizeFanSpeed,
   extractReportedState,
+  isAppliance,
+  isNormalizedState,
   normalizeApplianceState,
   normalizeBaseFields,
   normalizeClimateAppliance,
@@ -16,7 +19,9 @@ import {
   normalizeOnOffState,
   normalizeTemperatureUnit,
   normalizeUpgradeState,
+  resolveCachedNormalizedState,
 } from '@/appliances/normalizers.js'
+import type { NormalizedState } from '@/types/normalized.js'
 import type { Appliance } from '@/types.js'
 
 describe('normalizers', () => {
@@ -455,6 +460,52 @@ describe('normalizers', () => {
       expect(result.fourWayValveState).toBe('on')
       expect(result.evapDefrostState).toBe('off')
       expect(result.hepaFilterLifeTime).toBe(2000)
+    })
+  })
+
+  describe('isAppliance', () => {
+    it('accepts a raw appliance with identity and a properties object', () => {
+      expect(isAppliance({ applianceId: 'a', properties: { reported: {} } })).toBe(true)
+    })
+
+    it('rejects an already-normalized (flat) state and non-objects', () => {
+      expect(isAppliance({ applianceId: 'a', deviceId: 'd', mode: 'cool' })).toBe(false)
+      expect(isAppliance(null)).toBe(false)
+      expect(isAppliance('online')).toBe(false)
+    })
+  })
+
+  describe('isNormalizedState', () => {
+    it('accepts a flat normalized state with no properties key', () => {
+      expect(isNormalizedState({ applianceId: 'a', deviceId: 'd', mode: 'cool' })).toBe(true)
+    })
+
+    it('rejects a raw appliance (has properties) and incomplete objects', () => {
+      expect(isNormalizedState({ applianceId: 'a', properties: { reported: {} } })).toBe(false)
+      expect(isNormalizedState({ applianceId: 'a' })).toBe(false)
+      expect(isNormalizedState(undefined)).toBe(false)
+    })
+  })
+
+  describe('resolveCachedNormalizedState', () => {
+    const normalizedSentinel = { applianceId: 'a', deviceId: 'd', mode: 'cool' } as unknown as NormalizedState
+    // Stub appliance: only normalizeState is exercised by the resolver.
+    const stubAppliance = { normalizeState: () => normalizedSentinel } as unknown as BaseAppliance
+
+    it('normalizes a raw cached appliance via the appliance (the poll-path cache shape)', () => {
+      const raw = { applianceId: 'a', properties: { reported: {} } }
+      expect(resolveCachedNormalizedState(raw, stubAppliance)).toBe(normalizedSentinel)
+    })
+
+    it('passes an already-normalized cached state through unchanged (the command-feedback cache shape)', () => {
+      const normalized = { applianceId: 'a', deviceId: 'd', mode: 'heat' } as unknown as NormalizedState
+      expect(resolveCachedNormalizedState(normalized, stubAppliance)).toBe(normalized)
+    })
+
+    it('returns null for an empty or unrecognized cache value', () => {
+      expect(resolveCachedNormalizedState(undefined, stubAppliance)).toBeNull()
+      expect(resolveCachedNormalizedState(null, stubAppliance)).toBeNull()
+      expect(resolveCachedNormalizedState({ random: true }, stubAppliance)).toBeNull()
     })
   })
 })
