@@ -1,7 +1,7 @@
 import packageJson from '../package.json' with { type: 'json' }
 import config from './config.js'
 import { disposableInterval, disposableTimeout } from './disposable.js'
-import { ElectroluxClient } from './electrolux.js'
+import { computeBackoffDelay, ElectroluxClient } from './electrolux.js'
 import createLogger from './logger.js'
 import { runStartupMigrations } from './migrate.js'
 import Mqtt from './mqtt.js'
@@ -54,10 +54,28 @@ process.on('SIGINT', shutdown)
 
 // Wait for client login — login() has its own exponential backoff retry
 const waitForLogin = async () => {
+  if (client.isLoggedIn) return
   if (!client.isLoggingIn) {
     await client.login()
   }
   await client.waitForLogin()
+}
+
+// Retries of main() (API failure / zero appliances) back off exponentially from
+// refreshInterval up to this cap, instead of hammering the API at a fixed rate.
+const MAIN_RETRY_MAX_DELAY_MS = 30 * 60_000
+
+let mainRetryCount = 0
+
+const scheduleMainRetry = (reason: string) => {
+  if (orchestrator.isShuttingDown) return
+  const delay = computeBackoffDelay(mainRetryCount, refreshInterval, MAIN_RETRY_MAX_DELAY_MS)
+  mainRetryCount++
+  logger.error(`${reason} Retrying in ${Math.round(delay / 1000)} seconds...`)
+  restartTimeoutDisposable = disposableTimeout(() => {
+    restartTimeoutDisposable = null
+    main().catch((err: unknown) => logger.error('Error in restart:', err))
+  }, delay)
 }
 
 export const main = async () => {
@@ -73,29 +91,18 @@ export const main = async () => {
 
   if (!appliances) {
     // API call failed (network error, DNS failure, etc.)
-    logger.error(`Failed to fetch appliances due to API error. Retrying in ${refreshInterval / 1000} seconds...`)
-    if (!orchestrator.isShuttingDown) {
-      restartTimeoutDisposable = disposableTimeout(() => {
-        restartTimeoutDisposable = null
-        main().catch((err: unknown) => logger.error('Error in restart:', err))
-      }, refreshInterval)
-    }
+    scheduleMainRetry('Failed to fetch appliances due to API error.')
     return
   }
 
   if (appliances.length === 0) {
-    logger.error(
-      `No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App. Retrying in ${refreshInterval / 1000} seconds...`,
+    scheduleMainRetry(
+      'No appliances found. Please check your configuration and ensure you have appliances registered in Electrolux Mobile App.',
     )
-    if (!orchestrator.isShuttingDown) {
-      restartTimeoutDisposable = disposableTimeout(() => {
-        restartTimeoutDisposable = null
-        main().catch((err: unknown) => logger.error('Error in restart:', err))
-      }, refreshInterval)
-    }
     return
   }
 
+  mainRetryCount = 0
   logger.info(`Found ${appliances.length} appliance(s), initializing...`)
 
   const totalAppliances = appliances.length

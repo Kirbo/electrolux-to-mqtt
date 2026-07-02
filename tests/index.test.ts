@@ -106,12 +106,21 @@ const MockElectroluxClientCtor = vi.fn(function (this: typeof mockClientInstance
   mockClientInstance = this
 })
 
+const mockComputeBackoffDelay = vi.fn((retryCount: number, baseMs: number, maxMs: number) =>
+  Math.min(baseMs * 2 ** retryCount, maxMs),
+)
+
 vi.mock('@/electrolux.js', () => ({
   ElectroluxClient: MockElectroluxClientCtor,
+  computeBackoffDelay: mockComputeBackoffDelay,
 }))
 
 vi.mock('@/version-checker.js', () => ({
   startVersionChecker: vi.fn().mockReturnValue(() => {}),
+}))
+
+vi.mock('@/migrate.js', () => ({
+  runStartupMigrations: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/logger.js', () => ({
@@ -230,6 +239,46 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
       expect(mockClientInstance.getAppliances).toHaveBeenCalledTimes(1)
       expect(vi.getTimerCount()).toBe(1)
+
+      vi.useRealTimers()
+    })
+
+    it('should skip client.login and waitForLogin when client is already logged in', async () => {
+      mockClientInstance.isLoggedIn = true
+      mockClientInstance.isLoggingIn = false
+      const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
+      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      vi.useFakeTimers()
+
+      await indexModule.main()
+
+      vi.useRealTimers()
+      expect(mockClientInstance.login).not.toHaveBeenCalled()
+      expect(mockClientInstance.waitForLogin).not.toHaveBeenCalled()
+    })
+
+    it('should back off exponentially across consecutive failed retries and reset on success', async () => {
+      vi.useFakeTimers()
+      mockClientInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
+
+      await indexModule.main()
+      expect(mockComputeBackoffDelay).toHaveBeenLastCalledWith(0, 30_000, expect.any(Number))
+
+      await vi.runOnlyPendingTimersAsync() // retry #1 fires and fails again
+      expect(mockComputeBackoffDelay).toHaveBeenLastCalledWith(1, 30_000, expect.any(Number))
+
+      await vi.runOnlyPendingTimersAsync() // retry #2 fires and fails again
+      expect(mockComputeBackoffDelay).toHaveBeenLastCalledWith(2, 30_000, expect.any(Number))
+
+      // Next retry succeeds — the counter must reset
+      const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
+      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      await vi.runOnlyPendingTimersAsync()
+
+      // A later failure starts from the base delay again
+      mockClientInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
+      await indexModule.main()
+      expect(mockComputeBackoffDelay).toHaveBeenLastCalledWith(0, 30_000, expect.any(Number))
 
       vi.useRealTimers()
     })
