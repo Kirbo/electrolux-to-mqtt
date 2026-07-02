@@ -417,7 +417,7 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockAxiosGet).toHaveBeenCalledWith(
-        'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases',
+        'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases?per_page=100',
         expect.any(Object),
       )
 
@@ -445,7 +445,7 @@ describe('version-checker', () => {
       // Should have called both releases and tags endpoints
       expect(mockAxiosGet).toHaveBeenCalledWith(expect.stringContaining('/releases'), expect.any(Object))
       expect(mockAxiosGet).toHaveBeenCalledWith(
-        'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/repository/tags',
+        'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/repository/tags?per_page=100',
         expect.any(Object),
       )
 
@@ -897,6 +897,81 @@ describe('version-checker', () => {
 
       // Should only have sent notification once
       expect(ntfyCallsAfterSecond).toBe(ntfyCallsAfterFirst)
+
+      stopChecker()
+    })
+
+    it('should retry the ntfy notification on the next check when the send failed', async () => {
+      const ntfyUrl = 'https://ntfy.sh/vB66ozQaRiqhTE9j'
+      mockAxiosGet.mockResolvedValue({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      let ntfyAttempts = 0
+      mockAxiosPost.mockImplementation((url: string) => {
+        if (url === ntfyUrl && ntfyAttempts++ === 0) {
+          return Promise.reject(new Error('ntfy server down'))
+        }
+        return Promise.resolve({ data: { success: true } })
+      })
+
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0) // check 1 — ntfy send fails
+      await vi.advanceTimersByTimeAsync(3600 * 1000) // check 2 — must retry, not mark as notified
+
+      const ntfyCalls = mockAxiosPost.mock.calls.filter((call) => call[0] === ntfyUrl).length
+      expect(ntfyCalls).toBe(2)
+
+      stopChecker()
+    })
+
+    it('should reset the per-version dedup when the checker is stopped and restarted', async () => {
+      const ntfyUrl = 'https://ntfy.sh/vB66ozQaRiqhTE9j'
+      mockAxiosGet.mockResolvedValue({
+        data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stop1 = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+      stop1()
+
+      const stop2 = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+      stop2()
+
+      const ntfyCalls = mockAxiosPost.mock.calls.filter((call) => call[0] === ntfyUrl).length
+      expect(ntfyCalls).toBe(2)
+    })
+
+    it('should pick the highest version, not the most recently released', async () => {
+      const ntfyUrl = 'https://ntfy.sh/vB66ozQaRiqhTE9j'
+      // Hotfix on the older series cut AFTER the newer release
+      mockAxiosGet.mockResolvedValue({
+        data: [
+          { tag_name: 'v2026.5.9', released_at: '2026-06-20T12:00:00Z' },
+          { tag_name: 'v2026.6.5', released_at: '2026-06-10T12:00:00Z' },
+        ],
+      })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = moduleWithNtfy.startVersionChecker('v2026.5.8', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+
+      const ntfyCall = mockAxiosPost.mock.calls.find((call) => call[0] === ntfyUrl)
+      expect(ntfyCall?.[1]).toContain('v2026.6.5')
+
+      stopChecker()
+    })
+
+    it('should request 100 entries per page from the GitLab API', async () => {
+      mockAxiosGet.mockResolvedValue({ data: [] })
+      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+
+      const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
+      await vi.advanceTimersByTimeAsync(0)
+
+      const releasesCall = mockAxiosGet.mock.calls.find((call) => String(call[0]).includes('/releases'))
+      expect(String(releasesCall?.[0])).toContain('per_page=100')
 
       stopChecker()
     })
@@ -1779,7 +1854,7 @@ describe('version-checker', () => {
         moduleBetaMixed = await import('@/version-checker.js')
       })
 
-      it('beta channel: picks 2026.6.0b2 (most recent by date) from mixed list', async () => {
+      it('beta channel: picks the highest version (stable 2026.6.0 over its own beta) from mixed list', async () => {
         // Use dates well in the past so the 1-hour new-release guard never suppresses the notification.
         mockAxiosGet.mockResolvedValueOnce({
           data: [
@@ -1796,8 +1871,9 @@ describe('version-checker', () => {
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
-        // Beta channel picks latest by date = v2026.6.0b2
-        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v2026.6.0b2"'))
+        // Highest by version comparison: 2026.6.0 stable outranks its pre-release 2026.6.0b2
+        // (beta users get promoted to the stable cut of the same version).
+        expect(pub).toHaveBeenCalledWith(expect.stringContaining('"latestVersion":"v2026.6.0"'))
       })
     })
   })

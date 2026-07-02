@@ -197,22 +197,37 @@ export function resolveUpdateChannel(args: {
   }
 }
 
+/**
+ * Pick the highest eligible version by version comparison — NOT by release date.
+ * A hotfix cut on an older series after a newer release must not shadow it.
+ */
+function pickLatest(candidates: LatestVersionInfo[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
+  const eligible = channel === 'stable' ? candidates.filter((c) => !isPreRelease(c.version)) : candidates
+  let best: LatestVersionInfo | null = null
+  for (const candidate of eligible) {
+    if (!best || compareVersions(candidate.version, best.version) > 0) {
+      best = candidate
+    }
+  }
+  return best
+}
+
 function pickLatestFromReleases(releases: GitLabRelease[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
-  const eligible = channel === 'stable' ? releases.filter((r) => !isPreRelease(r.tag_name)) : releases
-  const sorted = [...eligible].sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime())
-  const r = sorted[0]
-  return r ? { version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined } : null
+  return pickLatest(
+    releases.map((r) => ({ version: r.tag_name, releasedAt: r.released_at, description: r.description || undefined })),
+    channel,
+  )
 }
 
 function pickLatestFromTags(tags: GitLabTag[], channel: 'stable' | 'beta'): LatestVersionInfo | null {
-  const eligible = channel === 'stable' ? tags.filter((t) => !isPreRelease(t.name)) : tags
-  const sorted = [...eligible].sort(
-    (a, b) => new Date(b.commit.created_at).getTime() - new Date(a.commit.created_at).getTime(),
+  return pickLatest(
+    tags.map((t) => ({
+      version: t.name,
+      releasedAt: t.commit.created_at,
+      description: t.release?.description || undefined,
+    })),
+    channel,
   )
-  const t = sorted[0]
-  return t
-    ? { version: t.name, releasedAt: t.commit.created_at, description: t.release?.description || undefined }
-    : null
 }
 
 /**
@@ -223,7 +238,9 @@ function pickLatestFromTags(tags: GitLabTag[], channel: 'stable' | 'beta'): Late
 async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVersionInfo | null> {
   try {
     // Try releases first
-    const releasesUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/releases`
+    // per_page=100: GitLab defaults to 20/page — a burst of pre-releases must not
+    // push the newest stable release off the first page.
+    const releasesUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/releases?per_page=100`
     const releasesResponse = await axios.get<GitLabRelease[]>(releasesUrl, {
       timeout: 10000,
       headers: { Accept: 'application/json' },
@@ -235,7 +252,7 @@ async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVer
     }
 
     // Fallback to tags if no eligible releases found
-    const tagsUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/repository/tags`
+    const tagsUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/repository/tags?per_page=100`
     const tagsResponse = await axios.get<GitLabTag[]>(tagsUrl, {
       timeout: 10000,
       headers: { Accept: 'application/json' },
@@ -257,9 +274,15 @@ async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVer
 }
 
 /**
- * Send notification to ntfy.sh webhook
+ * Send notification to ntfy.sh webhook.
+ * @returns true when the webhook accepted the notification — the caller only
+ * marks the version as notified on success so a transient outage retries.
  */
-async function sendNtfyNotification(currentVersion: string, latestVersion: string, webhookUrl: string): Promise<void> {
+async function sendNtfyNotification(
+  currentVersion: string,
+  latestVersion: string,
+  webhookUrl: string,
+): Promise<boolean> {
   try {
     const message = `A newer version of Electrolux-to-MQTT is found. Latest version ${latestVersion}, you're running version ${currentVersion}`
 
@@ -271,12 +294,14 @@ async function sendNtfyNotification(currentVersion: string, latestVersion: strin
     })
 
     logger.debug(`Sent ntfy notification for version ${latestVersion}`)
+    return true
   } catch (error) {
     if (axios.isAxiosError(error)) {
       logger.debug(`Failed to send ntfy notification: ${error.message}`)
     } else {
       logger.debug('Failed to send ntfy notification:', error)
     }
+    return false
   }
 }
 
@@ -404,8 +429,10 @@ async function checkForUpdates(currentVersion: string, updateChannel: 'stable' |
     // Send ntfy notification if configured and we haven't already notified about this version
     const webhookUrl = config.versionCheck.ntfyWebhookUrl
     if (webhookUrl && hasNotifiedVersion !== latestVersion) {
-      await sendNtfyNotification(currentTag, versionTag, webhookUrl)
-      hasNotifiedVersion = latestVersion
+      const sent = await sendNtfyNotification(currentTag, versionTag, webhookUrl)
+      if (sent) {
+        hasNotifiedVersion = latestVersion
+      }
     }
   } else {
     logger.debug(`Running latest version: ${currentTag}`)
@@ -480,6 +507,9 @@ export function startVersionChecker(
   return () => {
     telemetryDisposable[Symbol.dispose]()
     checkDisposable[Symbol.dispose]()
+    // Reset module-level dedup state so a restarted checker notifies afresh
+    hasNotifiedVersion = null
+    lastPublishedInfo = null
     logger.debug('Version checker stopped')
   }
 }
