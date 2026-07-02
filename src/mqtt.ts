@@ -131,14 +131,22 @@ class Mqtt implements IMqtt {
 
   public autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions) {
     logger.info(`Publishing auto-discovery config for appliance: ${applianceId}`)
-    const parsed = JSON.parse(message)
-    logger.debug(`Auto-discovery config topics:`, {
-      availability_topic: parsed.availability_topic,
-      mode_state_topic: parsed.mode_state_topic,
-      mode_command_topic: parsed.mode_command_topic,
-      temperature_state_topic: parsed.current_temperature_topic,
-      temperature_command_topic: parsed.temperature_command_topic,
-    })
+    try {
+      const parsed: unknown = JSON.parse(message)
+      if (typeof parsed === 'object' && parsed !== null) {
+        const topics = parsed as Record<string, unknown>
+        logger.debug(`Auto-discovery config topics:`, {
+          availability_topic: topics.availability_topic,
+          mode_state_topic: topics.mode_state_topic,
+          mode_command_topic: topics.mode_command_topic,
+          temperature_state_topic: topics.current_temperature_topic,
+          temperature_command_topic: topics.temperature_command_topic,
+        })
+      }
+    } catch {
+      // Debug-only parse: callers always pass JSON.stringify output, but a
+      // malformed message must not crash the publish below.
+    }
     this._publish(`homeassistant/climate/${applianceId}/config`, message, {
       ...options,
       retain: true,
