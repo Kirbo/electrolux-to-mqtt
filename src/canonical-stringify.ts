@@ -20,6 +20,7 @@ export function canonicalStringify(value: unknown): string {
     // ordering would defeat that guarantee. Default `.sort()` works for our
     // ASCII-only capability keys but Sonar (S2871) prefers an explicit one.
     const sorted = Object.keys(value)
+      .filter((k) => value[k] !== undefined) // JSON.stringify parity: undefined-valued keys are omitted
       .sort((a, b) => {
         if (a < b) return -1
         if (a > b) return 1
@@ -29,5 +30,7 @@ export function canonicalStringify(value: unknown): string {
       .join(',')
     return `{${sorted}}`
   }
-  return JSON.stringify(value)
+  // JSON.stringify parity: undefined (e.g. an array element) serializes as null,
+  // never as the literal text `undefined` (which would produce invalid JSON).
+  return JSON.stringify(value) ?? 'null'
 }
