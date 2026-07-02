@@ -228,6 +228,39 @@ describe('Orchestrator', () => {
       expect(client.sendApplianceCommand).not.toHaveBeenCalled()
     })
 
+    it('should reject command payloads with no known command keys', async () => {
+      let capturedHandler: (topic: string, message: Buffer) => void = () => {}
+      vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {
+        capturedHandler = callback
+        return Promise.resolve()
+      })
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      // `{}`, junk keys, and non-object JSON must never reach the API — the
+      // transform would default them to executeCommand: 'ON' (powers the AC on).
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{}'))
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{"foo":1}'))
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('"on"'))
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('123'))
+
+      expect(client.sendApplianceCommand).not.toHaveBeenCalled()
+    })
+
+    it('should lowercase command values before forwarding', async () => {
+      let capturedHandler: (topic: string, message: Buffer) => void = () => {}
+      vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {
+        capturedHandler = callback
+        return Promise.resolve()
+      })
+
+      await orchestrator.initializeAppliance(mockStub)
+
+      capturedHandler('test_appliances/appliance-1/command', Buffer.from('{"mode":"FAN_ONLY"}'))
+
+      expect(client.sendApplianceCommand).toHaveBeenCalledWith(expect.anything(), { mode: 'fan_only' })
+    })
+
     it('should handle MQTT command for missing appliance instance', async () => {
       let capturedHandler: (topic: string, message: Buffer) => void = () => {}
       vi.mocked(mqtt.subscribe).mockImplementation((_topic, callback) => {

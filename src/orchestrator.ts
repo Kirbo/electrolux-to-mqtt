@@ -1,6 +1,6 @@
 import type { BaseAppliance } from './appliances/base.js'
 import { createAppliance } from './appliances/factory.js'
-import { resolveCachedNormalizedState } from './appliances/normalizers.js'
+import { parseMqttCommand, resolveCachedNormalizedState } from './appliances/normalizers.js'
 import { cache } from './cache.js'
 import type { ElectroluxClient } from './electrolux.js'
 import { writeHealthFile } from './health.js'
@@ -292,7 +292,12 @@ export class Orchestrator implements AsyncDisposable {
       // Subscribe to MQTT commands for this appliance
       await this.mqtt.subscribe(`${applianceId}/command`, (topic, message) => {
         try {
-          const command = JSON.parse(message.toString())
+          const rawPayload: unknown = JSON.parse(message.toString())
+          const command = parseMqttCommand(rawPayload)
+          if (command === null) {
+            logger.error(`Ignoring invalid command on topic ${topic}: ${message.toString()}`)
+            return
+          }
           logger.info('Received command on topic:', topic, 'Message:', command)
           const applianceInstance = this.applianceInstances.get(applianceId)
           if (applianceInstance) {

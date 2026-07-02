@@ -19,6 +19,7 @@ import {
   normalizeOnOffState,
   normalizeTemperatureUnit,
   normalizeUpgradeState,
+  parseMqttCommand,
   resolveCachedNormalizedState,
 } from '@/appliances/normalizers.js'
 import type { NormalizedState } from '@/types/normalized.js'
@@ -38,6 +39,57 @@ describe('normalizers', () => {
 
     it('should handle undefined', () => {
       expect(denormalizeClimateMode(undefined)).toBe('')
+    })
+
+    it('should convert FAN_ONLY case-insensitively to FANONLY', () => {
+      expect(denormalizeClimateMode('FAN_ONLY')).toBe('FANONLY')
+      expect(denormalizeClimateMode('Fan_Only')).toBe('FANONLY')
+    })
+  })
+
+  describe('parseMqttCommand', () => {
+    it('should accept a valid command and lowercase string fields', () => {
+      expect(parseMqttCommand({ mode: 'COOL', fanSpeedSetting: 'High', targetTemperatureC: 22 })).toEqual({
+        mode: 'cool',
+        fanSpeedSetting: 'high',
+        targetTemperatureC: 22,
+      })
+    })
+
+    it('should map API-style aliases (FANONLY, MIDDLE) to normalized values', () => {
+      expect(parseMqttCommand({ mode: 'FANONLY' })).toEqual({ mode: 'fan_only' })
+      expect(parseMqttCommand({ fanSpeedSetting: 'MIDDLE' })).toEqual({ fanSpeedSetting: 'medium' })
+    })
+
+    it('should accept on/off fields case-insensitively', () => {
+      expect(parseMqttCommand({ verticalSwing: 'ON', sleepMode: 'Off' })).toEqual({
+        verticalSwing: 'on',
+        sleepMode: 'off',
+      })
+    })
+
+    it('should reject non-object payloads', () => {
+      expect(parseMqttCommand('on')).toBeNull()
+      expect(parseMqttCommand(123)).toBeNull()
+      expect(parseMqttCommand(null)).toBeNull()
+      expect(parseMqttCommand([{ mode: 'cool' }])).toBeNull()
+    })
+
+    it('should reject objects with no known command keys', () => {
+      expect(parseMqttCommand({})).toBeNull()
+      expect(parseMqttCommand({ foo: 1 })).toBeNull()
+    })
+
+    it('should reject unknown enum values and wrong primitive types', () => {
+      expect(parseMqttCommand({ mode: 'turbo' })).toBeNull()
+      expect(parseMqttCommand({ verticalSwing: 'banana' })).toBeNull()
+      expect(parseMqttCommand({ sleepMode: 1 })).toBeNull()
+      expect(parseMqttCommand({ targetTemperatureC: '22' })).toBeNull()
+      expect(parseMqttCommand({ targetTemperatureC: Number.NaN })).toBeNull()
+    })
+
+    it('should drop unknown keys from an otherwise valid command', () => {
+      expect(parseMqttCommand({ mode: 'cool', injected: 'value' })).toEqual({ mode: 'cool' })
     })
   })
 

@@ -2,12 +2,7 @@ import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } 
 import type { NormalizedClimateMode, NormalizedState } from '@/types/normalized.js'
 import type { Appliance } from '@/types.js'
 import { BaseAppliance, type CommandValidationResult } from './base.js'
-import {
-  denormalizeClimateMode,
-  denormalizeFanSpeed,
-  normalizeClimateAppliance,
-  normalizeFanSpeed,
-} from './normalizers.js'
+import { denormalizeClimateMode, denormalizeFanSpeed, normalizeClimateAppliance } from './normalizers.js'
 
 /**
  * Runtime type guard for the fanSpeedSetting action shape returned by
@@ -260,7 +255,11 @@ export class Comfort600Appliance extends BaseAppliance {
     const requestedSpeed = denormalizeFanSpeed(fanSpeed)
 
     if (!allowedSpeeds.includes(requestedSpeed)) {
-      const normalizedAllowed = allowedSpeeds.map((s) => normalizeFanSpeed(s.toLowerCase())).join(', ')
+      // Lowercase with only the middle→medium alias — normalizeFanSpeed would
+      // misreport any future unknown API speed as 'auto'.
+      const normalizedAllowed = allowedSpeeds
+        .map((s) => (s.toLowerCase() === 'middle' ? 'medium' : s.toLowerCase()))
+        .join(', ')
       return {
         valid: false,
         reason: `fan speed '${fanSpeed}' is not allowed in '${mode}' mode (allowed: ${normalizedAllowed})`,
@@ -342,8 +341,7 @@ export class Comfort600Appliance extends BaseAppliance {
       json_attributes_topic: stateTopic,
       modes: this.getSupportedModes(),
       mode_state_topic: stateTopic,
-      mode_state_template:
-        "{{ 'off' if value_json.applianceState == 'off' else ('fan_only' if value_json.mode == 'fan_only' else value_json.mode | lower) }}",
+      mode_state_template: "{{ 'off' if value_json.applianceState == 'off' else value_json.mode }}",
       mode_command_topic: commandTopic,
       mode_command_template: '{ "mode": "{{ value }}" }',
       precision: 1,

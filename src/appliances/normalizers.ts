@@ -99,10 +99,65 @@ export function denormalizeFanSpeed(speed: string | undefined): string {
 }
 
 /**
- * Denormalize climate mode back to API format (fan_only → FANONLY)
+ * Denormalize climate mode back to API format (fan_only → FANONLY).
+ * Case-insensitive to mirror {@link denormalizeFanSpeed} — commands from
+ * non-HA publishers may arrive uppercase.
  */
 export function denormalizeClimateMode(mode: string | undefined): string {
-  return mode === 'fan_only' ? 'FANONLY' : (mode?.toUpperCase() ?? '')
+  return mode?.toLowerCase() === 'fan_only' ? 'FANONLY' : (mode?.toUpperCase() ?? '')
+}
+
+/**
+ * Parse and normalize an incoming MQTT command payload at the boundary.
+ *
+ * Accepts only a plain object with at least one known command field; string
+ * fields are lowercased (domain rule: normalize incoming commands before they
+ * merge with cached state) and checked against the normalized value sets, so
+ * junk like `{}`, `"on"`, or `{"verticalSwing":"banana"}` can never reach the
+ * API — the transform would otherwise default them to executeCommand 'ON'.
+ * Unknown keys are dropped; an invalid value rejects the whole command (null).
+ */
+export function parseMqttCommand(value: unknown): Partial<NormalizedState> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null
+  }
+  const record = value as Record<string, unknown>
+  const command: Record<string, unknown> = {}
+
+  const stringFields: ReadonlyArray<{ key: string; parse: (lower: string) => string | null }> = [
+    { key: 'mode', parse: (lower) => toValidSetMember(lower === 'fanonly' ? 'fan_only' : lower, VALID_CLIMATE_MODES) },
+    {
+      key: 'fanSpeedSetting',
+      parse: (lower) => toValidSetMember(lower === 'middle' ? 'medium' : lower, VALID_FAN_MODES),
+    },
+    { key: 'verticalSwing', parse: (lower) => toValidSetMember(lower, VALID_ON_OFF) },
+    { key: 'sleepMode', parse: (lower) => toValidSetMember(lower, VALID_ON_OFF) },
+  ]
+
+  for (const { key, parse } of stringFields) {
+    const raw = record[key]
+    if (raw === undefined) continue
+    if (typeof raw !== 'string') return null
+    const parsed = parse(raw.toLowerCase())
+    if (parsed === null) return null
+    command[key] = parsed
+  }
+
+  const temperature = record.targetTemperatureC
+  if (temperature !== undefined) {
+    if (typeof temperature !== 'number' || !Number.isFinite(temperature)) return null
+    command.targetTemperatureC = temperature
+  }
+
+  if (Object.keys(command).length === 0) {
+    return null
+  }
+  // Values were shaped and validated against the normalized sets above.
+  return command as Partial<NormalizedState>
+}
+
+function toValidSetMember(candidate: string, validSet: ReadonlySet<string>): string | null {
+  return validSet.has(candidate) ? candidate : null
 }
 
 /**
