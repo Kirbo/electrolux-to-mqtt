@@ -282,6 +282,50 @@ describe('Orchestrator', () => {
       expect(client.getApplianceState).not.toHaveBeenCalled()
     })
 
+    it('should skip an interval tick while the previous poll is still in flight', async () => {
+      const pending: Array<(v: undefined) => void> = []
+      vi.mocked(client.getApplianceState)
+        .mockResolvedValueOnce(undefined) // initial poll completes normally
+        .mockImplementation(() => new Promise((resolve) => pending.push(resolve)))
+
+      await orchestrator.initializeAppliance(mockStub, 0)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
+
+      // Tick 1 — poll hangs (e.g. auth outage keeps the request pending)
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+
+      // Tick 2 — previous poll still in flight, must be skipped (no unbounded queueing)
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+
+      // Once the hung poll settles, polling resumes on the next tick
+      pending.shift()?.(undefined)
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(3)
+    })
+
+    it('should not start a second polling loop when an appliance is removed and re-added during its initial delay', async () => {
+      // Old instance with its delayed initial poll still pending
+      await orchestrator.initializeAppliance(mockStub, 1000)
+
+      // Removed and re-discovered within the delay window
+      orchestrator.cleanupAppliance('appliance-1')
+      await orchestrator.initializeAppliance(mockStub, 0)
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
+
+      // The old instance's delayed timeout fires — it must not poll or start a second interval
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(1)
+
+      // Exactly one poll per interval afterwards (a leaked second interval would double it)
+      await vi.advanceTimersByTimeAsync(defaultConfig.refreshInterval)
+      expect(client.getApplianceState).toHaveBeenCalledTimes(2)
+    })
+
     it('should republish auto-discovery config when it changes', async () => {
       const { cache } = await import('@/cache.js')
 

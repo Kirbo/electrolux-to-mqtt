@@ -30,6 +30,7 @@ export class Orchestrator implements AsyncDisposable {
   private readonly applianceInstances = new Map<string, BaseAppliance>()
   private readonly applianceStateIntervals = new Map<string, NodeJS.Timeout>()
   private readonly applianceMissingSince = new Map<string, number>()
+  private readonly pollsInFlight = new Set<string>()
   private lastSuccessfulApiCall = Date.now()
   private _reconnectRegistered = false
   private _birthRegistered = false
@@ -92,7 +93,8 @@ export class Orchestrator implements AsyncDisposable {
 
   /**
    * Unconditionally republish discovery config and cached state for every active
-   * appliance. Used by the MQTT reconnect handler and the HA birth-message handler.
+   * appliance. Used by the HA birth-message handler (the MQTT reconnect handler
+   * deliberately republishes state only).
    *
    * Discovery is only emitted when autoDiscovery is enabled.
    * State is only emitted when there is a non-null cached value.
@@ -159,22 +161,51 @@ export class Orchestrator implements AsyncDisposable {
     const timeoutId = setTimeout(() => {
       this.activeTimeouts.delete(timeoutId)
       if (this.isShuttingDown) return
-      if (!this.applianceInstances.has(applianceId)) return
+      // Instance identity check (not just key presence): a remove + re-add during
+      // the delay registers a new instance whose own polling loop is already set
+      // up — the stale timeout must not start a second one.
+      if (this.applianceInstances.get(applianceId) !== appliance) return
 
-      this.client
-        .getApplianceState(appliance, applianceDiscoveryCallback)
-        .then((state) => {
-          this.trackApiResult(state, Date.now())
-          this.writeHealthStatus()
-        })
-        .catch((err: unknown) => {
-          logger.error(`Error on initial state poll for appliance ${applianceId}:`, err)
-        })
-        .finally(() => {
-          this._startIntervalPolling(applianceId, appliance, applianceDiscoveryCallback)
-        })
+      this._pollApplianceState(
+        applianceId,
+        appliance,
+        applianceDiscoveryCallback,
+        'Error on initial state poll for appliance',
+      ).finally(() => {
+        this._startIntervalPolling(applianceId, appliance, applianceDiscoveryCallback)
+      })
     }, delayMs)
     this.activeTimeouts.add(timeoutId)
+  }
+
+  /**
+   * Run one state poll for an appliance, skipping if the previous poll has not
+   * settled yet — during an auth outage a poll can pend far longer than the
+   * refresh interval, and stacking a new request per tick would queue unboundedly.
+   */
+  private _pollApplianceState(
+    applianceId: string,
+    appliance: BaseAppliance,
+    applianceDiscoveryCallback: (() => void) | undefined,
+    errorLabel: string,
+  ): Promise<void> {
+    if (this.pollsInFlight.has(applianceId)) {
+      logger.debug(`Skipping poll for appliance ${applianceId}: previous poll still in flight`)
+      return Promise.resolve()
+    }
+    this.pollsInFlight.add(applianceId)
+    return this.client
+      .getApplianceState(appliance, applianceDiscoveryCallback)
+      .then((state) => {
+        this.trackApiResult(state, Date.now())
+        this.writeHealthStatus()
+      })
+      .catch((err: unknown) => {
+        logger.error(`${errorLabel} ${applianceId}:`, err)
+      })
+      .finally(() => {
+        this.pollsInFlight.delete(applianceId)
+      })
   }
 
   private _startIntervalPolling(
@@ -183,22 +214,19 @@ export class Orchestrator implements AsyncDisposable {
     applianceDiscoveryCallback: (() => void) | undefined,
   ): void {
     if (this.isShuttingDown) return
-    if (!this.applianceInstances.has(applianceId)) return
+    if (this.applianceInstances.get(applianceId) !== appliance) return
 
     const intervalId = setInterval(() => {
       if (this.isShuttingDown) {
         clearInterval(intervalId)
         return
       }
-      this.client
-        .getApplianceState(appliance, applianceDiscoveryCallback)
-        .then((intervalState) => {
-          this.trackApiResult(intervalState, Date.now())
-          this.writeHealthStatus()
-        })
-        .catch((err: unknown) => {
-          logger.error(`Error polling state for appliance ${applianceId}:`, err)
-        })
+      void this._pollApplianceState(
+        applianceId,
+        appliance,
+        applianceDiscoveryCallback,
+        'Error polling state for appliance',
+      )
     }, this.config.refreshInterval)
 
     this.applianceStateIntervals.set(applianceId, intervalId)
