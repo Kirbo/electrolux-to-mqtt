@@ -19,13 +19,13 @@
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
   "license": "MIT",
   "dependencies": {
-    "@clickhouse/client": "^1.11.2"
+    "@clickhouse/client": "^1.23.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16",
+    "vite": "^8.1.2",
     "vitest": "^4.1.9"
   },
   "engines": {
