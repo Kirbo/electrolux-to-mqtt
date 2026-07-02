@@ -61,8 +61,18 @@ async function main(): Promise<void> {
 
   const server = startServer(store, forwarder, limiter, config.releasesPageUrl, config.port, serviceVersion)
 
+  // In-flight guard: a hung cycle (e.g. slow GitLab API) must not overlap the
+  // next tick — a slow old cycle finishing last would overwrite newer data.
+  let regenerating = false
   const intervalId = setInterval(() => {
-    void store.regenerate()
+    if (regenerating) {
+      console.warn('[telemetry-backend] Skipping badge cycle: previous regeneration still running')
+      return
+    }
+    regenerating = true
+    void store.regenerate().finally(() => {
+      regenerating = false
+    })
   }, config.badgeIntervalSeconds * 1000)
 
   const shutdown = async (): Promise<void> => {

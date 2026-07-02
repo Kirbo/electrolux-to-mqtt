@@ -20,8 +20,14 @@ async function main(): Promise<void> {
   })
 
   console.log('[telemetry-backend] One-shot badge regeneration starting...')
-  await store.regenerate()
+  const { telemetryOk, releasesOk } = await store.regenerate()
   await ch.close()
+
+  // The CI job runs this after a release — a silent failure would leave stale
+  // badges while the pipeline reports green.
+  if (!telemetryOk || !releasesOk) {
+    throw new Error(`Badge regeneration incomplete (telemetryOk=${telemetryOk}, releasesOk=${releasesOk})`)
+  }
   console.log('[telemetry-backend] One-shot badge regeneration complete')
 }
 

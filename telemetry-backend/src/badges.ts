@@ -29,7 +29,12 @@ export function splitParsedVersion(withoutV: string): { numeric: string; preRele
 export function parseVersion(raw: string): ParsedVersion {
   const withoutV = raw.replace(/^v/, '')
   const { numeric, preRelease } = splitParsedVersion(withoutV)
-  const [maj, min, pat] = numeric.split('.').map(Number)
+  // Number.isFinite folds NaN from garbage input to 0 — app_version in ClickHouse
+  // is client-supplied, and a NaN part would make the sort comparator inconsistent.
+  const [maj, min, pat] = numeric.split('.').map((n) => {
+    const parsed = Number(n)
+    return Number.isFinite(parsed) ? parsed : 0
+  })
   return {
     major: maj ?? 0,
     minor: min ?? 0,
@@ -38,7 +43,7 @@ export function parseVersion(raw: string): ParsedVersion {
   }
 }
 
-export function comparePreRelease(a: string, b: string): number {
+function comparePreRelease(a: string, b: string): number {
   // Extract all digits so both "rc.10" and "b2" compare numerically.
   // /\D/g removal is non-backtracking (single negated class) and avoids ReDoS.
   const numA = Number.parseInt(a.replace(/\D/g, '') || '0', 10)
@@ -80,7 +85,9 @@ export function compareVersionsDescending(a: string, b: string): number {
  * (e.g. "1.18.5-rc.1"). An optional leading "v" is ignored.
  */
 export function isPreReleaseVersion(version: string): boolean {
-  return version.includes('-') || /\db\d+$/.test(version)
+  // /i matches validation.ts's VERSION_RE — a legacy "2026.6.0B1" body must not
+  // silently classify as stable.
+  return version.includes('-') || /\db\d+$/i.test(version)
 }
 
 /**
@@ -150,18 +157,21 @@ export function buildReleaseBadgeSvg(label: string, version: string, color: stri
 
 export function isBetaTag(tagName: string): boolean {
   const withoutV = tagName.replace(/^v/, '')
-  return /b\d+$/.test(withoutV)
+  return /b\d+$/i.test(withoutV)
 }
 
-export function hasStringTagName(v: unknown): v is { tag_name: string } {
+function hasStringTagName(v: unknown): v is { tag_name: string } {
   return typeof v === 'object' && v !== null && 'tag_name' in v && typeof v.tag_name === 'string'
 }
+
+/** Abort a hung GitLab API call — matches the Aptabase forwarder's timeout. */
+const RELEASES_FETCH_TIMEOUT_MS = 10_000
 
 export async function fetchLatestReleases(
   url: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<{ stable: string | null; beta: string | null }> {
-  const res = await fetchFn(url)
+  const res = await fetchFn(url, { signal: AbortSignal.timeout(RELEASES_FETCH_TIMEOUT_MS) })
   if (!res.ok) {
     throw new Error(`GitLab releases API returned ${res.status}`)
   }

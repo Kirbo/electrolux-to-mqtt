@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createRateLimiter } from '../src/rate-limit.js'
+import { createRateLimiter, MAX_TRACKED_IPS } from '../src/rate-limit.js'
 
 describe('createRateLimiter', () => {
   it('allows the first request for a new IP', () => {
@@ -75,5 +75,18 @@ describe('createRateLimiter', () => {
     expect(limiter.size()).toBe(1)
 
     vi.useRealTimers()
+  })
+
+  it('denies new IPs once the hard entry cap is reached (memory backstop)', () => {
+    const limiter = createRateLimiter(5, 60_000)
+    for (let i = 0; i < MAX_TRACKED_IPS; i++) {
+      limiter.allow(`10.0.${Math.floor(i / 256)}.${i % 256}:${i}`)
+    }
+    expect(limiter.size()).toBe(MAX_TRACKED_IPS)
+    // New IP: denied, no new entry allocated
+    expect(limiter.allow('203.0.113.99')).toBe(false)
+    expect(limiter.size()).toBe(MAX_TRACKED_IPS)
+    // Existing IP keeps working
+    expect(limiter.allow('10.0.0.0:0')).toBe(true)
   })
 })

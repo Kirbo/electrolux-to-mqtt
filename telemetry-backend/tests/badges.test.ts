@@ -82,6 +82,13 @@ describe('parseVersion', () => {
   })
 })
 
+describe('parseVersion — garbage input', () => {
+  it('folds non-numeric parts to 0 instead of NaN (keeps the sort comparator consistent)', () => {
+    expect(parseVersion('garbage')).toMatchObject({ major: 0, minor: 0, patch: 0 })
+    expect(parseVersion('1.x.2')).toMatchObject({ major: 1, minor: 0, patch: 2 })
+  })
+})
+
 describe('compareVersionsDescending', () => {
   it('sorts stable before beta of same numeric version', () => {
     expect(compareVersionsDescending('2026.6.0', '2026.6.0b1')).toBeLessThan(0)
@@ -123,6 +130,10 @@ describe('isBetaTag', () => {
   it('returns false for a stable tag', () => {
     expect(isBetaTag('2026.6.0')).toBe(false)
     expect(isBetaTag('v2026.6.0')).toBe(false)
+  })
+
+  it('matches case-insensitively (validation accepts uppercase beta suffixes)', () => {
+    expect(isBetaTag('2026.6.0B1')).toBe(true)
   })
 })
 

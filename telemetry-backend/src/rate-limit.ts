@@ -15,8 +15,12 @@ export interface RateLimiter {
  * abuse protection on a low-traffic telemetry endpoint.
  *
  * Expired entries are pruned at most once per window (amortized O(n)) so the
- * tracked-IP map cannot grow unbounded under IP churn or an IP-spray.
+ * tracked-IP map cannot grow unbounded under IP churn or an IP-spray. A hard
+ * entry cap backstops the sweep: once reached, requests from NEW ips are
+ * denied until the next sweep frees room (existing entries keep working).
  */
+export const MAX_TRACKED_IPS = 10_000
+
 export function createRateLimiter(maxRequests: number, windowMs: number): RateLimiter {
   const windows = new Map<string, WindowState>()
   let lastSweep = Date.now()
@@ -36,6 +40,11 @@ export function createRateLimiter(maxRequests: number, windowMs: number): RateLi
       const state = windows.get(ip)
 
       if (!state || now - state.windowStart >= windowMs) {
+        // Memory backstop: an IP-spray (e.g. spoofed headers) must not OOM the
+        // container by allocating an entry per fake address.
+        if (!state && windows.size >= MAX_TRACKED_IPS) {
+          return false
+        }
         windows.set(ip, { count: 1, windowStart: now })
         return true
       }

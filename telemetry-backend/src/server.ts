@@ -75,7 +75,9 @@ function handleTelemetryJson(res: http.ServerResponse, json: string | null): voi
 
 /** `GET /stable` / `GET /beta` — 302 to the release page (fail-open to the releases list). */
 function handleReleaseRedirect(res: http.ServerResponse, releasesPageUrl: string, tag: string | null): void {
-  res.writeHead(302, { Location: tag ? `${releasesPageUrl}/${tag}` : releasesPageUrl })
+  // encodeURIComponent: the tag comes from the GitLab API — an unexpected header
+  // character would make writeHead throw inside the request listener (process exit).
+  res.writeHead(302, { Location: tag ? `${releasesPageUrl}/${encodeURIComponent(tag)}` : releasesPageUrl })
   res.end()
 }
 
@@ -159,32 +161,44 @@ export function createServer(
   return http.createServer((req, res) => {
     const method = req.method ?? 'GET'
     const url = req.url ?? '/'
+    // Route on the path only — `GET /health?x=1` must not 404 (proxies and
+    // uptime monitors commonly append query strings and use HEAD).
+    const pathname = url.split('?')[0] ?? url
+    // Node suppresses the response body for HEAD automatically, so HEAD can
+    // share the GET handlers.
+    const isRead = method === 'GET' || method === 'HEAD'
 
-    if (url === '/health') {
+    if (pathname === '/health') {
+      if (!isRead) {
+        res.writeHead(405, { Allow: 'GET, HEAD' })
+        res.end()
+        return
+      }
       handleHealth(res)
       return
     }
 
-    if (url === '/stable') {
-      handleReleaseRedirect(res, releasesPageUrl, store.getStableTag())
+    if (pathname === '/stable' || pathname === '/beta') {
+      if (!isRead) {
+        res.writeHead(405, { Allow: 'GET, HEAD' })
+        res.end()
+        return
+      }
+      const tag = pathname === '/stable' ? store.getStableTag() : store.getBetaTag()
+      handleReleaseRedirect(res, releasesPageUrl, tag)
       return
     }
 
-    if (url === '/beta') {
-      handleReleaseRedirect(res, releasesPageUrl, store.getBetaTag())
-      return
-    }
-
-    if (url === '/telemetry') {
+    if (pathname === '/telemetry') {
       if (method === 'POST') {
         void handleLegacyTelemetry(req, res, forwarder, limiter, serviceVersion)
         return
       }
-      if (method === 'GET') {
+      if (isRead) {
         handleTelemetryJson(res, store.getTelemetryJson())
         return
       }
-      res.writeHead(405, { Allow: 'GET, POST' })
+      res.writeHead(405, { Allow: 'GET, HEAD, POST' })
       res.end()
       return
     }

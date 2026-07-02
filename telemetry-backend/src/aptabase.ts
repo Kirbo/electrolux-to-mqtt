@@ -1,3 +1,4 @@
+import { isPreReleaseVersion } from './badges.js'
 import type { LegacyBody } from './validation.js'
 
 export type AptabaseEvent = {
@@ -17,11 +18,6 @@ export type AptabaseEvent = {
 
 export interface AptabaseForwarder {
   forward(event: AptabaseEvent, clientIp: string): Promise<void>
-}
-
-/** Returns true for CalVer beta (e.g. 2026.6.0b1) or SemVer pre-release (1.2.3-rc.1). */
-function isPreReleaseVersion(version: string): boolean {
-  return version.includes('-') || /\db\d+$/.test(version)
 }
 
 /**

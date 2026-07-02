@@ -66,8 +66,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 
 function parsePositiveInt(raw: string | undefined, name: string, defaultValue: number): number {
   if (raw === undefined) return defaultValue
+  // Whole-string digits check: Number.parseInt would silently accept "300abc" as 300.
+  if (!/^\d+$/.test(raw.trim())) {
+    throw new Error(`${PREFIX} FATAL: ${name} must be a positive integer, got: "${raw}"`)
+  }
   const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed < 1) {
+  if (parsed < 1) {
     throw new Error(`${PREFIX} FATAL: ${name} must be a positive integer, got: "${raw}"`)
   }
   return parsed

@@ -21,8 +21,14 @@ import { aggregateTelemetry } from './clickhouse.js'
  * On failure nothing is overwritten — the disk file and the in-memory value stay as
  * the last-good.
  */
+/** Per-half outcome of a regeneration cycle — lets one-shot callers fail loudly. */
+export interface RegenerateResult {
+  telemetryOk: boolean
+  releasesOk: boolean
+}
+
 export interface BadgeStore {
-  regenerate(): Promise<void>
+  regenerate(): Promise<RegenerateResult>
   /** Latest telemetry JSON (`GET /telemetry`), or null until the first successful cycle. */
   getTelemetryJson(): string | null
   /** Latest stable release tag (`GET /stable` redirect target), or null. */
@@ -62,7 +68,7 @@ export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
 
   const file = (name: string): string => path.join(outputDir, name)
 
-  async function regenerateTelemetry(): Promise<void> {
+  async function regenerateTelemetry(): Promise<boolean> {
     try {
       const result = await aggregateTelemetry(ch, appId)
       const json = JSON.stringify(result)
@@ -70,18 +76,20 @@ export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
       await writeFile(file('telemetry.json'), json)
       telemetryJson = json
       console.log(`[telemetry-backend] Telemetry updated: ${result.total} users`)
+      return true
     } catch (err) {
       console.error('[telemetry-backend] Telemetry cycle failed:', err)
+      return false
     }
   }
 
-  async function regenerateReleases(): Promise<void> {
+  async function regenerateReleases(): Promise<boolean> {
     try {
       const { stable, beta } = await releasesFetcher(releasesApiUrl)
 
       if (stable === null && beta === null) {
         console.log('[telemetry-backend] Release badges: no releases found — keeping last good')
-        return
+        return true
       }
 
       if (stable !== null) {
@@ -100,15 +108,18 @@ export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
         await writeFile(file('beta.svg'), INVISIBLE_SVG)
         console.log('[telemetry-backend] Release badge updated: beta=invisible (not newer than stable)')
       }
+      return true
     } catch (err) {
       console.error('[telemetry-backend] Release cycle failed:', err)
+      return false
     }
   }
 
   return {
-    async regenerate(): Promise<void> {
-      await regenerateTelemetry()
-      await regenerateReleases()
+    async regenerate(): Promise<RegenerateResult> {
+      const telemetryOk = await regenerateTelemetry()
+      const releasesOk = await regenerateReleases()
+      return { telemetryOk, releasesOk }
     },
     getTelemetryJson: () => telemetryJson,
     getStableTag: () => stableTag,

@@ -1,7 +1,7 @@
 import type http from 'node:http'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AptabaseEvent, AptabaseForwarder } from '../src/aptabase.js'
-import type { BadgeStore } from '../src/badge-store.js'
+import type { BadgeStore, RegenerateResult } from '../src/badge-store.js'
 import type { RateLimiter } from '../src/rate-limit.js'
 import { createServer } from '../src/server.js'
 
@@ -31,8 +31,8 @@ class FakeBadgeStore implements BadgeStore {
   getBetaTag(): string | null {
     return this._betaTag
   }
-  async regenerate(): Promise<void> {
-    /* no-op */
+  async regenerate(): Promise<RegenerateResult> {
+    return { telemetryOk: true, releasesOk: true }
   }
 }
 
@@ -139,6 +139,38 @@ describe('createServer', () => {
       expect(res.status).toBe(200)
       const body = (await res.json()) as { status: string }
       expect(body.status).toBe('ok')
+    })
+
+    it('ignores a query string when routing', async () => {
+      const res = await get(port, '/health?cachebuster=1')
+      expect(res.status).toBe(200)
+    })
+
+    it('answers HEAD like GET (uptime monitors use HEAD)', async () => {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, { method: 'HEAD' })
+      expect(res.status).toBe(200)
+    })
+
+    it('rejects non-read methods with 405', async () => {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, { method: 'POST' })
+      expect(res.status).toBe(405)
+      expect(res.headers.get('allow')).toBe('GET, HEAD')
+    })
+  })
+
+  describe('routing hardening', () => {
+    it('supports HEAD on /telemetry', async () => {
+      store.setTelemetryJson(SAMPLE_JSON)
+      const res = await fetch(`http://127.0.0.1:${port}/telemetry`, { method: 'HEAD' })
+      expect(res.status).toBe(200)
+    })
+
+    it('URL-encodes the release tag in the redirect Location', async () => {
+      // A hostile tag must not crash writeHead with an invalid header character
+      store.setStableTag('v1.0.0 bad')
+      const res = await fetch(`http://127.0.0.1:${port}/stable`, { redirect: 'manual' })
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toContain(encodeURIComponent('v1.0.0 bad'))
     })
   })
 
