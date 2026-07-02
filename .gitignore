@@ -4,7 +4,8 @@ node_modules
 docker-compose.yml
 docker-compose.local.yml
 !telemetry-backend/docker-compose.yml
-**config.yml**
+# Real credentials — must stay ignored (pattern matches at any depth)
+config.yml
 !tests/config.yml
 dist
 coverage
@@ -23,3 +24,7 @@ age-key.txt
 UNRELEASED-CHANGELOG.md
 audit-report.md
 README.dockerhub.md
+# sed -i.bak leftovers from an interrupted scripts/sync-versions.sh run
+*.bak
+# scripts/mr-description.sh documented usage writes MR.md
+MR.md
