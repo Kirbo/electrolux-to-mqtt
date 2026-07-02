@@ -117,7 +117,7 @@ healthCheck:
 # interval): app version, update channel (stable/beta), OS name and version, CPU architecture,
 # connected-appliance model id(s) and count, plus a stable per-install id (a one-way SHA-256
 # hash of your Electrolux username — never the username itself or any credential) so installs
-# can be counted over a rolling 24h window. Sent to a self-hosted Aptabase instance, which also
+# can be counted over a rolling ~24h (26h) window. Sent to a self-hosted Aptabase instance, which also
 # derives an approximate country from the request IP.
 # Default: true. Set to false to opt out entirely. Version checking still runs regardless.
 telemetryEnabled: true

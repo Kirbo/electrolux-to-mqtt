@@ -24,6 +24,18 @@ metadata:
 - Empty catches in `logger.ts` (timezone fallback), `mqtt.ts` (JSON.parse debug log), `electrolux.ts` (URL parse fallback), `health.ts` (read failure returns false), `config.ts` (write failure uses in-memory config) — all documented
 - `orchestrator.ts`: the MQTT-reconnect handler (`_registerReconnectHandler`) republishes **state only**, while the HA-birth handler (`_registerBirthHandler` → `republishAll`) republishes **discovery + state**. This asymmetry is INTENTIONAL, not duplicated-logic-gone-wrong — documented in shared memory `project_ha_birth_republish.md`. Do not flag the reconnect handler for "missing" discovery republish, and do not suggest collapsing the two into one. (Re-verified 2026-06-15 audit.)
 
+- 2026-07-02 hardening pass (post-audit fixes) added these — do not re-flag:
+  - `electrolux.ts`: `login()`/`refreshTokens()` are thin guards over `performLogin()`/`performRefreshTokens()` with shared in-flight promises; retry timeouts call `startLoginAttempt()`/`startRefreshAttempt()` directly (calling the public wrappers would deadlock/no-op — intentional).
+  - `orchestrator.ts`: `pollsInFlight` Set skips a tick when the previous poll hasn't settled; `_startPolling`/`_startIntervalPolling` check instance identity (`get(id) !== appliance`), not key presence.
+  - `normalizers.ts` `parseMqttCommand` is the command-boundary validator (orchestrator subscribes through it); `transformMqttCommandToApi` remains the sole denormalization authority downstream.
+  - `mqtt.ts` `autoDiscovery` try/catch around JSON.parse is debug-only, documented — not silent swallowing.
+  - `getApplianceState` returns `Appliance | NormalizedState | undefined`: the NormalizedState arm is the post-command skip window (healthy skip, counts as API success).
+  - `canonical-stringify.ts` `JSON.stringify(value) ?? 'null'` + undefined-key filter = JSON.stringify parity, not dead code.
+  - `logger.ts` uses `toLocaleString('sv-SE', …)` deliberately (locale-independent YYYY-MM-DD HH:mm:ss); `?? 'info'` on level guards partial config mocks in tests.
+  - telemetry-backend `ip.ts` prefers X-Real-IP, then LAST XFF hop (first hop is client-spoofable); `rate-limit.ts` has MAX_TRACKED_IPS backstop; `regenerate()` returns `{telemetryOk, releasesOk}` and the one-shot job fails on either false.
+  - Docker HEALTHCHECK imports `healthCheckEnabled` from dist/health.js (honors YAML config); `CHANGELOG.m[d]` COPY glob makes the CI-artifact file optional for local builds.
+  - Compose `3001:3001` binding kept on all interfaces DELIBERATELY (NPM-in-container can't reach host 127.0.0.1 — see compose comment); flagging it needs a topology decision from the user first.
+
 ## Tooling-config migrations (verify activation, not just acceptance)
 
 When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.recommended: true` → `linter.rules.preset: "recommended"` in Biome 2.5.0), a passing `pnpm check` only proves the config *parsed* — not that rules are still *active*. An unknown/renamed key can be silently ignored. To confirm activation, lint a throwaway snippet that should trip a known recommended rule: `printf 'if (x == 1) {}' > /tmp/t.ts && pnpm biome lint /tmp/t.ts` should flag `lint/suspicious/noDoubleEquals`. If it doesn't, the preset isn't applied. (Verified correct in the 2026-06-14 audit — `preset: "recommended"` does activate the recommended set.)
