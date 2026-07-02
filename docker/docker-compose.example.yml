@@ -8,7 +8,7 @@ services:
     volumes:
       - "/etc/localtime:/etc/localtime:ro"
       - "/etc/timezone:/etc/timezone:ro"
-      - ../config.yml:/app/config.yml
+      - ../config.yml:/app/config.yml:ro
     environment:
       - LOG_LEVEL=info                                                      # Log level (silent, fatal, error, warn, info, debug, trace)
       # ## Mandatory variables
@@ -46,5 +46,5 @@ services:
       # - VERSION_CHECK_UPDATE_CHANNEL=stable                               # Release channel: image default if omitted; 'stable' or 'beta' to pin
       # - HEALTH_CHECK_ENABLED=true                                          # Enable file-based health check for Docker HEALTHCHECK (default: true)
       # - HEALTH_CHECK_FILE_PATH=/tmp/e2m-health                             # Path to the health file (default: /tmp/e2m-health)
-      # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45                          # Minutes of sustained API failure before process.exit(1) triggers Docker restart (default: 45, min: 10, max: 1440)
+      # - HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES=45                          # Minutes of sustained API failure before container exits for Docker to restart (default: 45, range: 10-1440)
       # - E2M_TELEMETRY_ENABLED=true                                         # Send anonymous telemetry (version, channel, OS, arch, appliance models/count) to self-hosted Aptabase. Set to false to opt out.

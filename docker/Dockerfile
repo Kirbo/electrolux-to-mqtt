@@ -35,8 +35,10 @@ ENV NODE_ENV=production
 # Set working directory
 WORKDIR /app
 
-# Copy only dependency manifests first for better layer caching
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml CHANGELOG.md ./
+# Copy only dependency manifests first for better layer caching.
+# CHANGELOG.m[d] glob: the file is a CI artifact (generate changelog job) and does
+# not exist in a fresh clone — the glob makes it optional so local builds work.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml CHANGELOG.m[d] ./
 
 # Install dependencies (including dev dependencies for building)
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
@@ -79,9 +81,9 @@ RUN corepack enable && \
   corepack install && \
   DOCKER_BUILD=1 pnpm install --frozen-lockfile --prod --config.scripts-prepend-node-path=true
 
-# Copy built application from builder
+# Copy built application from builder (CHANGELOG optional — absent in local builds)
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/CHANGELOG.md ./CHANGELOG.md
+COPY --from=builder /app/package.json /app/CHANGELOG.m[d] ./
 
 
 

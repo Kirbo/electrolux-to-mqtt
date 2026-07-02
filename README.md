@@ -127,7 +127,7 @@ Choose one of the following methods and open the details.
 3. Run:
     ```bash
     docker pull kirbownz/electrolux-to-mqtt:latest
-    docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
+    docker run --rm -v ./config.yml:/app/config.yml:ro --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:latest
     ```
 </details>
 
@@ -284,7 +284,7 @@ To use the beta channel, replace `:latest` with `:next` in your setup:
 **docker:**
 ```bash
 docker pull kirbownz/electrolux-to-mqtt:next
-docker run --rm -v ./config.yml:/app/config.yml --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:next
+docker run --rm -v ./config.yml:/app/config.yml:ro --name electrolux-to-mqtt kirbownz/electrolux-to-mqtt:next
 ```
 
 **docker-compose / Portainer:** change the `image:` line:
