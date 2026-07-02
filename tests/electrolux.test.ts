@@ -1208,6 +1208,76 @@ describe('electrolux', () => {
         expect(mockAxiosInstance.post).toHaveBeenCalled()
       })
     })
+
+    describe('in-flight deduplication', () => {
+      it('should share a single attempt across concurrent login() calls', async () => {
+        vi.mocked(axios.get).mockResolvedValue(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        const results = await Promise.all([client.login(), client.login(), client.login()])
+
+        expect(results).toEqual([true, true, true])
+        // One CSRF fetch = one login attempt
+        expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(1)
+      })
+
+      it('should not start a new attempt while a failed login retry is pending', async () => {
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error('network down'))
+        vi.useFakeTimers()
+
+        await client.initialize()
+        const first = await client.login()
+        expect(first).toBe(false)
+        expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(1)
+
+        // Second call while the retry chain is pending must not fire a new attempt
+        vi.mocked(axios.get).mockResolvedValue(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+        await expect(client.login()).resolves.toBe(false)
+        expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(1)
+
+        // The scheduled retry (not a parallel chain) eventually succeeds
+        await vi.runAllTimersAsync()
+        vi.useRealTimers()
+
+        expect(client.isLoggedIn).toBe(true)
+        expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(2)
+      })
+
+      it('should share a single in-flight refresh across concurrent refreshTokens() calls', async () => {
+        mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
+
+        await client.initialize()
+        client.refreshToken = 'test-refresh-token'
+        await Promise.all([client.refreshTokens(), client.refreshTokens()])
+
+        expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    describe('missing redirectUrl handling', () => {
+      it('should surface "Authorization code not found" when login response has no redirectUrl', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          status: 200,
+          data: {},
+          statusText: 'OK',
+          headers: {},
+          config: {} as never,
+        })
+        vi.useFakeTimers()
+
+        const loginPromise = client.login()
+        vi.runAllTimers()
+        vi.useRealTimers()
+
+        await expect(loginPromise).resolves.toBe(false)
+        const errorMessages = loggerErrorSpy.mock.calls.map((call) => String(call[0]))
+        expect(errorMessages.some((msg) => msg.includes('Authorization code not found'))).toBe(true)
+        expect(errorMessages.some((msg) => msg.includes('Cannot read properties'))).toBe(false)
+      })
+    })
   })
 
   describe('ElectroluxClient - Appliance Operations', () => {
@@ -1373,6 +1443,65 @@ describe('electrolux', () => {
         // Should return undefined on error without publishing disconnected state
         expect(result).toBeUndefined()
         expect(mockMqtt.publish).not.toHaveBeenCalled()
+      })
+
+      it('should return undefined and not cache a malformed /state response', async () => {
+        const { cache } = await import('@/cache.js')
+        vi.mocked(cache.get).mockReturnValue(undefined)
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: { some: 'garbage' } })
+
+        await client.initialize()
+        vi.mocked(cache.set).mockClear()
+        vi.mocked(mockMqtt.publish).mockClear()
+        const result = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+
+        expect(result).toBeUndefined()
+        expect(cache.set).not.toHaveBeenCalled()
+        expect(mockMqtt.publish).not.toHaveBeenCalled()
+      })
+
+      it('should return the cached normalized state during the command delay window (healthy skip)', async () => {
+        const { cache } = await import('@/cache.js')
+        mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
+
+        await client.initialize()
+        await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
+
+        // After a command the cache holds a *normalized* state (publishCommandFeedback shape).
+        const cachedNormalized = {
+          applianceId: 'test-appliance-123',
+          deviceId: 'device-1',
+          mode: 'cool',
+        }
+        vi.mocked(cache.get).mockReturnValue(cachedNormalized)
+
+        const result = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
+
+        // The skip must not surface as an API failure (undefined) — the orchestrator
+        // counts undefined toward the unhealthy-restart threshold.
+        expect(result).toEqual(cachedNormalized)
+        expect(mockAxiosInstance.get).not.toHaveBeenCalled()
+      })
+
+      it('should diff against a cached normalized state after a command (not treat poll as first fetch)', async () => {
+        const { cache } = await import('@/cache.js')
+        const cachedNormalized = {
+          applianceId: 'test-appliance-123',
+          deviceId: 'device-1',
+          mode: 'heat',
+          targetTemperatureC: 25,
+        }
+        vi.mocked(cache.get).mockReturnValue(cachedNormalized)
+        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
+        const callback = vi.fn()
+
+        await client.initialize()
+        await client.getApplianceState(mockAppliance as unknown as BaseAppliance, callback)
+
+        // Fetched state differs from the cached normalized state → the discovery
+        // callback must fire (it was silently skipped while the cache read ignored
+        // the normalized shape and treated the poll as a first fetch).
+        expect(callback).toHaveBeenCalled()
       })
     })
 
@@ -2760,52 +2889,24 @@ describe('electrolux', () => {
     })
 
     describe('State publishing edge cases', () => {
-      it('should use cached state when normalizeState returns null for new data', async () => {
+      it('should return undefined without publishing when normalizeState throws on the API response', async () => {
         const { cache } = await import('@/cache.js')
 
-        const cachedNormalized = {
-          applianceId: 'test-appliance-123',
-          mode: 'cool',
-          targetTemperatureC: 22,
-        } as NormalizedState
-
-        // normalizeState: first call for cached state returns valid, second for new state returns null
-        const normalizeStateFn = vi.fn().mockReturnValueOnce(cachedNormalized).mockReturnValueOnce(null)
-
+        // Real normalizers throw on malformed state (extractReportedState) — they never return null.
         const mockAppl = createMockAppliance({
-          normalizeState: normalizeStateFn,
+          normalizeState: vi.fn(() => {
+            throw new Error('State missing properties.reported')
+          }) as unknown as MockAppliance['normalizeState'],
         })
 
-        vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
-        mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
-
-        await client.initialize()
-        const result = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
-
-        // normalizeState should have been called twice (cached + new)
-        expect(normalizeStateFn).toHaveBeenCalledTimes(2)
-        // Should not throw and return the response data
-        expect(result).toEqual(mockApplianceStateResponse)
-      })
-
-      it('should return early without publishing when both states are null', async () => {
-        const { cache } = await import('@/cache.js')
-
-        const normalizeStateAlwaysNull = (): NormalizedState | null => null
-
-        const mockAppl = createMockAppliance({
-          normalizeState: vi.fn(normalizeStateAlwaysNull) as MockAppliance['normalizeState'],
-        })
-
-        // No cached state
         vi.mocked(cache.get).mockReturnValue(undefined)
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
 
         await client.initialize()
         vi.mocked(mockMqtt.publish).mockClear()
-        await client.getApplianceState(mockAppl as unknown as BaseAppliance)
+        const result = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
 
-        // Should not publish
+        expect(result).toBeUndefined()
         expect(mockMqtt.publish).not.toHaveBeenCalled()
       })
 

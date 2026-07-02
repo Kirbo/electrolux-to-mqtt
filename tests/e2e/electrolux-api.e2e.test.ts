@@ -174,11 +174,12 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
         expect(state).toBeDefined()
 
-        if (state) {
+        // No command is sent in this test, so the raw Appliance shape is returned
+        // (the NormalizedState arm of the union only occurs inside the post-command window).
+        if (state && 'properties' in state) {
           expect(state).toHaveProperty('applianceId')
           expect(state).toHaveProperty('connectionState')
           expect(state).toHaveProperty('status')
-          expect(state).toHaveProperty('properties')
           expect(state.properties).toHaveProperty('reported')
 
           const reported = state.properties.reported

@@ -228,6 +228,8 @@ export class ElectroluxClient implements AsyncDisposable {
   private loginRetryCount = 0
   private refreshRetryCount = 0
   private loginWaiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
+  private loginInFlight: Promise<boolean> | null = null
+  private refreshInFlight: Promise<void> | null = null
 
   public isLoggingIn = false
   public isLoggedIn = false
@@ -342,7 +344,31 @@ export class ElectroluxClient implements AsyncDisposable {
     }
   }
 
-  public async login() {
+  public async login(): Promise<boolean> {
+    if (this.loginInFlight) {
+      return this.loginInFlight
+    }
+    if (this.isLoggingIn) {
+      // A retry chain is already scheduled — don't spawn a parallel chain (each
+      // would hammer the auth endpoint independently). Callers that need to block
+      // until login completes use waitForLogin().
+      logger.debug('Login retry already scheduled; not starting a parallel attempt')
+      return false
+    }
+    return this.startLoginAttempt()
+  }
+
+  private startLoginAttempt(): Promise<boolean> {
+    const attempt = this.performLogin().finally(() => {
+      if (this.loginInFlight === attempt) {
+        this.loginInFlight = null
+      }
+    })
+    this.loginInFlight = attempt
+    return attempt
+  }
+
+  private async performLogin(): Promise<boolean> {
     this.startLogin()
     logger.info('Attempting to fetch access token...')
 
@@ -400,7 +426,7 @@ export class ElectroluxClient implements AsyncDisposable {
         redirectUrl = response.data.redirectUrl
       }
 
-      const code = redirectUrl.match(/code=([^&]*)/)?.[1]
+      const code = redirectUrl?.match(/code=([^&]*)/)?.[1]
       if (!code) {
         logger.error(`Failed to extract code from redirectUrl: ${redirectUrl}`)
         throw new Error('Authorization code not found in login response')
@@ -444,7 +470,7 @@ export class ElectroluxClient implements AsyncDisposable {
 
       logger.info('Logged in successfully')
 
-      this.createApiClient()
+      await this.createApiClient()
 
       this.finishLogin(true)
       this.loginRetryCount = 0
@@ -462,7 +488,7 @@ export class ElectroluxClient implements AsyncDisposable {
       logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${this.loginRetryCount})...`)
       const retryTimeout = setTimeout(() => {
         activeTimeouts.delete(retryTimeout)
-        this.login().catch((err: unknown) => {
+        this.startLoginAttempt().catch((err: unknown) => {
           logger.error(`Unhandled error in login retry: ${formatAxiosError(err)}`)
         })
       }, delay)
@@ -521,7 +547,24 @@ export class ElectroluxClient implements AsyncDisposable {
     }
   }
 
-  public async refreshTokens() {
+  public async refreshTokens(): Promise<void> {
+    if (this.refreshInFlight) {
+      return this.refreshInFlight
+    }
+    return this.startRefreshAttempt()
+  }
+
+  private startRefreshAttempt(): Promise<void> {
+    const attempt = this.performRefreshTokens().finally(() => {
+      if (this.refreshInFlight === attempt) {
+        this.refreshInFlight = null
+      }
+    })
+    this.refreshInFlight = attempt
+    return attempt
+  }
+
+  private async performRefreshTokens(): Promise<void> {
     this.startLogin()
     try {
       if (!this.client) {
@@ -550,9 +593,6 @@ export class ElectroluxClient implements AsyncDisposable {
 
       this.finishLogin(true)
       this.refreshRetryCount = 0
-
-      // Small delay to ensure the new client is fully ready
-      await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (error) {
       logger.error(`Error refreshing access token: ${formatAxiosError(error)}`)
 
@@ -569,7 +609,9 @@ export class ElectroluxClient implements AsyncDisposable {
         this.isLoggedIn = false
         this.refreshRetryCount = 0
         try {
-          await this.login()
+          // Call startLoginAttempt() directly: login() would see isLoggingIn=true
+          // (set by this refresh) and wait for a login that nothing has started.
+          await this.startLoginAttempt()
         } catch (loginError) {
           logger.error(`Re-authentication failed after 401: ${formatAxiosError(loginError)}`)
         }
@@ -584,7 +626,7 @@ export class ElectroluxClient implements AsyncDisposable {
         logger.warn(`Retrying token refresh in ${Math.round(delay / 1000)}s (attempt ${this.refreshRetryCount})...`)
         const retryTimeout = setTimeout(() => {
           activeTimeouts.delete(retryTimeout)
-          this.refreshTokens().catch((err: unknown) => {
+          this.startRefreshAttempt().catch((err: unknown) => {
             logger.error(`Unhandled error in token refresh retry: ${formatAxiosError(err)}`)
           })
         }, delay)
@@ -814,22 +856,12 @@ export class ElectroluxClient implements AsyncDisposable {
     }, 'Error getting appliance info')
   }
 
-  private prepareStateForPublishing(
-    appliance: BaseAppliance,
-    normalizedState: NormalizedState | null,
-    cachedNormalizedState: NormalizedState | null,
-  ): NormalizedState | null {
+  private prepareStateForPublishing(appliance: BaseAppliance, normalizedState: NormalizedState): NormalizedState {
     const applianceId = appliance.getApplianceId()
 
     // Track last non-off mode from authoritative API state
-    if (normalizedState?.mode && normalizedState.mode !== 'off') {
+    if (normalizedState.mode && normalizedState.mode !== 'off') {
       this.lastActiveMode.set(applianceId, normalizedState.mode)
-    }
-
-    // If new state is incomplete, use cached normalized state for publishing
-    if (!normalizedState && cachedNormalizedState) {
-      logger.debug(`Using cached state for appliance ${applianceId} due to incomplete API response`)
-      return cachedNormalizedState
     }
 
     return normalizedState
@@ -886,15 +918,17 @@ export class ElectroluxClient implements AsyncDisposable {
     }
     const response = await this.client.get(`/api/v1/appliances/${applianceId}/state`)
 
-    const cachedData = cache.get(cacheKey)
-    const cachedRawState = isAppliance(cachedData) ? cachedData : null
-    const cachedNormalizedState = cachedRawState ? appliance.normalizeState(cachedRawState) : null
+    // Validate before caching — a malformed response must not poison the cache.
+    if (!isAppliance(response.data)) {
+      throw new Error(`Invalid /state response for appliance ${applianceId}: expected an Appliance object`)
+    }
+
+    // The cache may hold a raw Appliance (after a poll) or an already-normalized
+    // state (after command feedback) — resolve either shape for diffing.
+    const cachedNormalizedState = resolveCachedNormalizedState(cache.get(cacheKey), appliance)
     const normalizedState = appliance.normalizeState(response.data)
 
-    const stateToPublish = this.prepareStateForPublishing(appliance, normalizedState, cachedNormalizedState)
-    if (!stateToPublish) {
-      return response.data
-    }
+    const stateToPublish = this.prepareStateForPublishing(appliance, normalizedState)
 
     const differences = getStateDifferences(cachedNormalizedState, stateToPublish)
     const hasChanges = this.logStateChanges(appliance, differences)
@@ -910,7 +944,10 @@ export class ElectroluxClient implements AsyncDisposable {
     return response.data
   }
 
-  public async getApplianceState(appliance: BaseAppliance, callback?: () => void): Promise<Appliance | undefined> {
+  public async getApplianceState(
+    appliance: BaseAppliance,
+    callback?: () => void,
+  ): Promise<Appliance | NormalizedState | undefined> {
     const applianceId = appliance.getApplianceId()
     const cacheKey = cache.cacheKey(applianceId).state
 
@@ -922,8 +959,10 @@ export class ElectroluxClient implements AsyncDisposable {
       logger.debug(
         `Skipping state fetch for ${applianceId}: only ${Math.round(timeSinceCommand / 1000)}s since command was sent (waiting ${Math.round((COMMAND_STATE_DELAY_MS - timeSinceCommand) / 1000)}s more)`,
       )
-      const cached = cache.get(cacheKey)
-      return isAppliance(cached) ? cached : undefined
+      // The cache holds a normalized state right after a command (command feedback);
+      // resolve either shape so the deliberate skip is not miscounted as an API
+      // failure by the orchestrator's health tracking.
+      return resolveCachedNormalizedState(cache.get(cacheKey), appliance) ?? undefined
     }
 
     return this.handleApiRequest(async () => {
