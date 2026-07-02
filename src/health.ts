@@ -8,6 +8,13 @@ const healthFilePath = config.healthCheck.filePath
 const healthEnabled = config.healthCheck.enabled
 let hasWarnedAboutWriteFailure = false
 
+/**
+ * Effective health-check setting (YAML or env — whichever config mode is active).
+ * Consumed by the Docker HEALTHCHECK so it honors YAML-configured installs too,
+ * not only the HEALTH_CHECK_ENABLED env var.
+ */
+export const healthCheckEnabled = healthEnabled
+
 interface HealthStatus {
   mqttConnected: boolean
   apiConnected: boolean

@@ -75,6 +75,38 @@ describe('health', () => {
     })
   })
 
+  describe('healthCheckEnabled export', () => {
+    it('should mirror config.healthCheck.enabled (consumed by the Docker HEALTHCHECK)', async () => {
+      const { healthCheckEnabled } = await import('@/health.js')
+      expect(healthCheckEnabled).toBe(true)
+    })
+
+    it('should be false when the config disables the health check', async () => {
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          healthCheck: {
+            enabled: false,
+            filePath: HEALTH_FILE,
+          },
+        },
+      }))
+
+      const { healthCheckEnabled } = await import('@/health.js')
+      expect(healthCheckEnabled).toBe(false)
+
+      vi.resetModules()
+      vi.doMock('@/config.js', () => ({
+        default: {
+          healthCheck: {
+            enabled: true,
+            filePath: HEALTH_FILE,
+          },
+        },
+      }))
+    })
+  })
+
   describe('writeHealthFile when disabled', () => {
     afterEach(() => {
       vi.resetModules()

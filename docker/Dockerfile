@@ -131,11 +131,13 @@ WORKDIR /app
 # Add signal handling for graceful shutdown
 STOPSIGNAL SIGTERM
 
-# Health check — skips when HEALTH_CHECK_ENABLED is not 'true', otherwise
-# verifies the health file was updated within the last 60 seconds.
+# Health check — reads the app's effective healthCheck.enabled (YAML or env config,
+# via the healthCheckEnabled export) and, when enabled, verifies the health file was
+# updated within the last 60 seconds. Previously the check keyed only on the
+# HEALTH_CHECK_ENABLED env var, silently no-oping for YAML-configured installs.
 # Checks every 2s during the 5s startup period, then every 30s thereafter.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=5s --start-interval=2s \
-  CMD ["node", "-e", "if(process.env.HEALTH_CHECK_ENABLED!=='true')process.exit(0);import('./dist/health.js').then(m=>{process.exit(m.isHealthy(60)?0:1)}).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "import('./dist/health.js').then(m=>{if(!m.healthCheckEnabled)process.exit(0);process.exit(m.isHealthy(60)?0:1)}).catch(()=>process.exit(1))"]
 
 # Run the application
 CMD ["node", "dist/index.js"]
