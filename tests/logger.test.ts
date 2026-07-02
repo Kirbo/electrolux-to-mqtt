@@ -67,6 +67,45 @@ describe('logger', () => {
       expect(pinoChildSpy).toHaveBeenCalledWith({ name: 'ORCHESTRATOR' })
     })
 
+    it('should use the config log level, not the LOG_LEVEL env var (YAML/env never mixed)', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.stubEnv('LOG_LEVEL', 'trace')
+
+      vi.doMock('@/config.js', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false, logLevel: 'warn' } },
+      }))
+
+      const pinoMock = vi.fn().mockReturnValue({
+        child: vi.fn().mockReturnValue({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+      })
+      vi.doMock('pino', () => ({ default: pinoMock }))
+
+      await import('@/logger.js')
+
+      expect(pinoMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'warn' }))
+      vi.unstubAllEnvs()
+    })
+
+    it('should emit a locale-independent timestamp string', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      vi.doMock('@/config.js', () => ({
+        default: { logging: { showTimestamp: true, showVersionNumber: false, logLevel: 'info' } },
+      }))
+
+      const pinoMock = vi.fn().mockReturnValue({
+        child: vi.fn().mockReturnValue({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+      })
+      vi.doMock('pino', () => ({ default: pinoMock }))
+
+      await import('@/logger.js')
+
+      const options = pinoMock.mock.calls[0]?.[0] as { timestamp: () => string }
+      // Fixed `YYYY-MM-DD HH:mm:ss` shape regardless of server locale — the old
+      // toLocaleString(undefined, …) output broke pino-pretty on e.g. fi_FI.
+      expect(options.timestamp()).toMatch(/^,"time":"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"$/)
+    })
+
     it('should prepend version prefix when showVersionNumber is true and version is not development', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
@@ -215,8 +254,7 @@ describe('logger', () => {
       expect(logger).toBeDefined()
     })
 
-    it('should use LOG_LEVEL when explicitly set and apply showTimestamp:false config', async () => {
-      process.env.LOG_LEVEL = 'warn'
+    it('should construct a working logger with showTimestamp:false config', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
       vi.doMock('@/config.js', () => ({

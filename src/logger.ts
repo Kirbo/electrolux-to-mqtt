@@ -37,20 +37,23 @@ const timeZone = getTimezone()
 
 const showTimestamp = config.logging.showTimestamp
 
+// sv-SE renders as `YYYY-MM-DD HH:mm:ss` — a fixed, locale-independent shape.
+// Formatting with the server locale would produce strings pino-pretty cannot
+// render consistently (e.g. fi_FI's `2.7.2026 klo 15.30.45`).
+const formatTimestamp = () => new Date().toLocaleString('sv-SE', { timeZone })
+
 const baseLogger = pino({
-  level: process.env.LOG_LEVEL || config.logging.logLevel,
-  timestamp: showTimestamp
-    ? () =>
-        `,"time":"${new Date().toLocaleString(undefined, {
-          timeZone,
-        })}"`
-    : false,
+  // Log level comes from config only — env-mode installs route LOG_LEVEL through
+  // envSchema into config; reading process.env here would mix env into YAML mode.
+  level: config.logging.logLevel ?? 'info',
+  timestamp: showTimestamp ? () => `,"time":"${formatTimestamp()}"` : false,
   transport: {
     target: 'pino-pretty',
     options: {
       colorize: true,
       ignore: showTimestamp ? 'pid,hostname' : 'pid,hostname,time',
-      translateTime: showTimestamp ? 'SYS:yyyy-mm-dd HH:MM:ss' : false,
+      // time is already formatted above — re-parsing/translating would break it
+      translateTime: false,
     },
   },
 })
