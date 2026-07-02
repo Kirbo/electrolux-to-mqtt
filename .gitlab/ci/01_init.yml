@@ -46,7 +46,9 @@ bump version:
     - apk add --no-cache git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
-    - git fetch --tags --force || true
+    # Fail hard: computing a CalVer from a stale local tag list could reuse an
+    # existing version and overwrite its immutable Docker tag.
+    - git fetch --tags --force
   script:
     - |
       # CalVer, Home Assistant style: stable "YYYY.M.MICRO", beta "YYYY.M.MICRObN".

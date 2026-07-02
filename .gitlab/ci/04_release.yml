@@ -230,7 +230,17 @@ create gitlab prerelease:
   - echo "${SSH_KEY}" | base64 -d > ~/.ssh/id_rsa
   - chmod 700 ~/.ssh
   - chmod 600 ~/.ssh/id_rsa
-  - ssh-keyscan -t rsa ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
+  # Prefer a pinned host key (SSH_KNOWN_HOSTS CI variable, `ssh-keyscan <host>` output) —
+  # keyscanning at job time is trust-on-first-use on EVERY deploy, so a network-level
+  # MITM at the right moment would be accepted silently. Fallback keeps deploys working
+  # until the variable is set; drop the fallback once it is.
+  - |
+    if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+      echo "${SSH_KNOWN_HOSTS}" >> ~/.ssh/known_hosts
+    else
+      echo "WARNING: SSH_KNOWN_HOSTS CI variable not set — falling back to ssh-keyscan (TOFU)" >&2
+      ssh-keyscan ${TELEMETRY_HOST} >> ~/.ssh/known_hosts
+    fi
 
 # Pull latest on the server, decrypt telemetry-backend/.env from its committed SOPS .enc in the
 # runner (ci/decrypt-env.sh), and copy the plaintext .env to the server. The age key lives ONLY in
@@ -240,7 +250,9 @@ create gitlab prerelease:
 .deploy_backend_env: &deploy_backend_env
   - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && git fetch origin ${CI_COMMIT_BRANCH} && git checkout ${CI_COMMIT_BRANCH} && git pull origin ${CI_COMMIT_BRANCH}"
   - sh ci/decrypt-env.sh
-  - scp telemetry-backend/.env "${TELEMETRY_USER}@${TELEMETRY_HOST}:${TELEMETRY_PATH}/telemetry-backend/.env"
+  # Always remove the plaintext .env, even when scp fails — otherwise it lingers
+  # in the runner workspace until the next clone.
+  - scp telemetry-backend/.env "${TELEMETRY_USER}@${TELEMETRY_HOST}:${TELEMETRY_PATH}/telemetry-backend/.env" || { rm -f telemetry-backend/.env; exit 1; }
   - rm -f telemetry-backend/.env
 
 deploy telemetry-backend:

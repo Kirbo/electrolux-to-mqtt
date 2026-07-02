@@ -118,6 +118,8 @@ audit:
       changes:
         - package.json
         - pnpm-lock.yaml
+        # carries the security overrides (ws, esbuild) — editing them must re-scan
+        - pnpm-workspace.yaml
       when: on_success
     - when: never
   script:
