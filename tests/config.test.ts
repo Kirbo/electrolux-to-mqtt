@@ -137,6 +137,54 @@ homeAssistant:
       infoSpy.mockRestore()
     })
 
+    it('should treat empty numeric env vars as unset (defaults apply)', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      // Compose files commonly leave values empty: MQTT_QOS= must not coerce '' → 0
+      process.env.MQTT_QOS = ''
+      process.env.ELECTROLUX_REFRESH_INTERVAL = ''
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const content = createConfigFromEnv()
+
+      expect(content).toContain('qos: 2')
+      expect(content).toContain('refreshInterval: 30')
+
+      infoSpy.mockRestore()
+    })
+
+    it('should reject a malformed ntfy webhook URL', async () => {
+      process.env.MQTT_URL = 'mqtt://test'
+      process.env.MQTT_USERNAME = 'user'
+      process.env.MQTT_PASSWORD = 'pass'
+      process.env.ELECTROLUX_API_KEY = 'key'
+      process.env.ELECTROLUX_USERNAME = 'euser'
+      process.env.ELECTROLUX_PASSWORD = 'epass'
+      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+      process.env.VERSION_CHECK_NTFY_WEBHOOK_URL = 'ntfy.sh/topic-without-scheme'
+
+      vi.resetModules()
+      const { createConfigFromEnv } = await import('../src/config.js')
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+      const content = createConfigFromEnv()
+
+      expect(content).toBeUndefined()
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('VERSION_CHECK_NTFY_WEBHOOK_URL'))
+
+      errorSpy.mockRestore()
+      infoSpy.mockRestore()
+    })
+
     it('should validate refresh interval with Zod - value too low', async () => {
       process.env.MQTT_URL = 'mqtt://test'
       process.env.MQTT_USERNAME = 'user'

@@ -110,7 +110,10 @@ const configSchema = z.object({
         .min(60, 'must be at least 60 seconds')
         .max(86400, 'should not exceed 86400 seconds')
         .default(3600),
-      ntfyWebhookUrl: z.string().optional(),
+      ntfyWebhookUrl: z
+        .string()
+        .regex(/^https?:\/\/.+/, 'must be an http:// or https:// URL')
+        .optional(),
       updateChannel: z.enum(['stable', 'beta']).optional(),
       notifyGracePeriod: z
         .number()
@@ -135,6 +138,10 @@ const configSchema = z.object({
 type AppConfig = z.infer<typeof configSchema>
 
 // envSchema handles coercion only — constraints and defaults are in configSchema.
+// Empty-string numeric env vars (e.g. `MQTT_QOS=` in a compose file) mean "unset":
+// without the preprocess, z.coerce.number() would coerce '' → 0.
+const envNumber = z.preprocess((val) => (val === '' ? undefined : val), z.coerce.number().optional())
+
 const envSchema = z.object({
   MQTT_URL: z.string(),
   MQTT_USERNAME: z.string(),
@@ -149,13 +156,13 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  MQTT_QOS: z.coerce.number().optional(),
-  ELECTROLUX_REFRESH_INTERVAL: z.coerce.number().optional(),
-  ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: z.coerce.number().optional(),
-  ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: z.coerce.number().optional(),
-  ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: z.coerce.number().optional(),
-  ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: z.coerce.number().optional(),
-  ELECTROLUX_API_TIMEOUT_SECONDS: z.coerce.number().optional(),
+  MQTT_QOS: envNumber,
+  ELECTROLUX_REFRESH_INTERVAL: envNumber,
+  ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: envNumber,
+  ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: envNumber,
+  ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: envNumber,
+  ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: envNumber,
+  ELECTROLUX_API_TIMEOUT_SECONDS: envNumber,
   HOME_ASSISTANT_AUTO_DISCOVERY: z
     .string()
     .optional()
@@ -191,16 +198,16 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  VERSION_CHECK_INTERVAL: z.coerce.number().optional(),
+  VERSION_CHECK_INTERVAL: envNumber,
   VERSION_CHECK_NTFY_WEBHOOK_URL: z.string().optional(),
   VERSION_CHECK_UPDATE_CHANNEL: z.string().optional(),
-  VERSION_CHECK_NOTIFY_GRACE_PERIOD: z.coerce.number().optional(),
+  VERSION_CHECK_NOTIFY_GRACE_PERIOD: envNumber,
   HEALTH_CHECK_ENABLED: z
     .string()
     .optional()
     .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
   HEALTH_CHECK_FILE_PATH: z.string().optional(),
-  HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES: z.coerce.number().optional(),
+  HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES: envNumber,
   E2M_TELEMETRY_ENABLED: z
     .string()
     .optional()
