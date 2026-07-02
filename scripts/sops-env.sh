@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Run from the repo root — the find roots below are repo-relative.
+cd "$(git rev-parse --show-toplevel)"
+
 usage() {
   echo "Usage: $0 [encrypt|decrypt]" >&2
   exit 1

@@ -14,10 +14,12 @@ MISE_TOML="${REPO_ROOT}/mise.toml"
 
 # ── Parse mise.toml (no TOML lib needed — simple grep/sed) ─────────────────
 
+# `|| true`: under pipefail a non-matching grep would abort the script before
+# the friendly ERROR branches below can run.
 # node = "24"  →  24
-NODE=$(grep -E '^node\s*=\s*"[0-9]+"' "${MISE_TOML}" | sed 's/.*"\([0-9]*\)".*/\1/')
+NODE=$(grep -E '^node\s*=\s*"[0-9]+"' "${MISE_TOML}" | sed 's/.*"\([0-9]*\)".*/\1/' || true)
 # ALPINE_VERSION = "3.24"  →  3.24
-ALPINE=$(grep -E '^ALPINE_VERSION\s*=\s*"[0-9]+\.[0-9]+"' "${MISE_TOML}" | sed 's/.*"\([0-9]*\.[0-9]*\)".*/\1/')
+ALPINE=$(grep -E '^ALPINE_VERSION\s*=\s*"[0-9]+\.[0-9]+"' "${MISE_TOML}" | sed 's/.*"\([0-9]*\.[0-9]*\)".*/\1/' || true)
 
 if [[ -z "${NODE}" ]]; then
   echo "ERROR: could not parse node version from ${MISE_TOML}" >&2

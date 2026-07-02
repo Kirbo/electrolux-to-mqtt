@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Run from the repo root — the script uses repo-relative paths throughout.
+cd "$(git rev-parse --show-toplevel)"
+
+# Ensure an active 1Password session BEFORE generating a new keypair — an
+# expired session failing at step 3 would leave a half-rotated state.
+# shellcheck source=scripts/op-ensure-signin.sh
+. "${SCRIPT_DIR}/op-ensure-signin.sh"
+op_ensure_signin "my.1password.com"
+
 KEY_FILE="age-key.txt"
 GITIGNORE=".gitignore"
 SOPS_YAML=".sops.yaml"
@@ -40,7 +51,8 @@ while IFS= read -r src; do
 done <<< "${enc_files}"
 
 # 4. Update .sops.yaml with new public key
-sed -i '' "s/age: age1.*/age: ${NEW_PUBLIC_KEY}/" "${SOPS_YAML}"
+# -i.bak + rm: portable across GNU and BSD sed (GNU sed rejects `-i ''`)
+sed -i.bak "s/age: age1.*/age: ${NEW_PUBLIC_KEY}/" "${SOPS_YAML}" && rm -f "${SOPS_YAML}.bak"
 echo "Updated .sops.yaml"
 
 # 5. Re-encrypt all .env files with new key
@@ -80,7 +92,7 @@ rm "${KEY_FILE}"
 #    whole rotation — re-run `pnpm sops:sync-ci` once access is sorted. (1Password step 6 already
 #    updated the key the sync re-reads.)
 echo ""
-if "$(dirname "$0")/sync-ci-age-key.sh"; then
+if "${SCRIPT_DIR}/sync-ci-age-key.sh"; then
   echo "GitLab CI/CD SOPS_AGE_KEY_FILE updated to the new key."
 else
   echo "WARNING: couldn't sync the new key to GitLab CI/CD — re-run 'pnpm sops:sync-ci' after fixing." >&2

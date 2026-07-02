@@ -24,25 +24,42 @@ if [ "${BRANCH}" != "main" ]; then
   exit 0
 fi
 
-sonar-scanner
-CODE=$?
+# `|| CODE=$?`: under `set -e` a bare failing command would exit the script
+# before the dashboard-open below ever ran.
+CODE=0
+sonar-scanner || CODE=$?
 
 URL="https://sonarcloud.io/summary/new_code?id=kirbo_electrolux-to-mqtt&branch=${BRANCH}"
 BASE="https://sonarcloud.io/api"
-AUTH="${SONAR_TOKEN}:"
 PROJECT="kirbo_electrolux-to-mqtt"
+
+# Open a URL in the default browser, portable across macOS (open) and Linux
+# (xdg-open); never fails the script if neither exists.
+open_url() {
+  { command -v open >/dev/null 2>&1 && open "$1"; } ||
+    { command -v xdg-open >/dev/null 2>&1 && xdg-open "$1"; } ||
+    printf 'Open manually: %s\n' "$1"
+}
+
+# curl with the Sonar token passed via a config file on fd, never argv —
+# `-u token:` would expose the token in `ps`/`/proc/*/cmdline`.
+sonar_curl() {
+  curl -sf --config - <<EOF
+user = "${SONAR_TOKEN}:"
+url = "$1"
+EOF
+}
 
 # Gate failed — open dashboard and exit immediately
 if [ "${CODE}" -ne 0 ]; then
-  open "${URL}"
+  open_url "${URL}"
   exit "${CODE}"
 fi
 
 FOUND=0
 
 # ── New issues (bugs, vulnerabilities, code smells) ──────────────────────────
-ISSUES_JSON=$(curl -sf -u "${AUTH}" \
-  "${BASE}/issues/search?componentKeys=${PROJECT}&resolved=false&inNewCodePeriod=true&branch=${BRANCH}&ps=50")
+ISSUES_JSON=$(sonar_curl "${BASE}/issues/search?componentKeys=${PROJECT}&resolved=false&inNewCodePeriod=true&branch=${BRANCH}&ps=50")
 
 ISSUE_COUNT=$(printf '%s' "${ISSUES_JSON}" | node -e \
   "process.stdout.write(String(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).total||0))" 2>/dev/null || echo 0)
@@ -62,8 +79,7 @@ if [ "${ISSUE_COUNT}" -gt 0 ]; then
 fi
 
 # ── Unreviewed security hotspots ─────────────────────────────────────────────
-HOTSPOTS_JSON=$(curl -sf -u "${AUTH}" \
-  "${BASE}/hotspots/search?projectKey=${PROJECT}&status=TO_REVIEW&inNewCodePeriod=true&branch=${BRANCH}&ps=50")
+HOTSPOTS_JSON=$(sonar_curl "${BASE}/hotspots/search?projectKey=${PROJECT}&status=TO_REVIEW&inNewCodePeriod=true&branch=${BRANCH}&ps=50")
 
 HOTSPOT_COUNT=$(printf '%s' "${HOTSPOTS_JSON}" | node -e \
   "process.stdout.write(String((JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).paging||{}).total||0))" 2>/dev/null || echo 0)
@@ -81,7 +97,7 @@ if [ "${HOTSPOT_COUNT}" -gt 0 ]; then
       console.log('  key: ' + h.key);
     });
   " 2>/dev/null
-  open "${URL}"
+  open_url "${URL}"
 fi
 
 # Exit non-zero if anything needs attention
