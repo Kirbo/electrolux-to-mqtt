@@ -5,14 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const HEALTH_FILE = path.join(os.tmpdir(), `e2m-health-test-${process.pid}`)
 
-vi.mock('@/config.js', () => ({
+// Single mutable config shared with the vi.mock factory. Tests toggle
+// `enabled` and call vi.resetModules() instead of re-registering the mock via
+// vi.doMock — the doMock + dynamic-import ordering proved racy under vitest 4
+// (the import intermittently resolved the previously registered factory).
+const mockConfig = vi.hoisted(() => ({
   default: {
     healthCheck: {
       enabled: true,
-      filePath: HEALTH_FILE,
+      filePath: '',
     },
   },
 }))
+mockConfig.default.healthCheck.filePath = HEALTH_FILE
+
+vi.mock('@/config.js', () => mockConfig)
 
 const mockWarn = vi.fn()
 
@@ -82,54 +89,26 @@ describe('health', () => {
     })
 
     it('should be false when the config disables the health check', async () => {
+      mockConfig.default.healthCheck.enabled = false
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
-        default: {
-          healthCheck: {
-            enabled: false,
-            filePath: HEALTH_FILE,
-          },
-        },
-      }))
 
       const { healthCheckEnabled } = await import('@/health.js')
       expect(healthCheckEnabled).toBe(false)
 
+      mockConfig.default.healthCheck.enabled = true
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
-        default: {
-          healthCheck: {
-            enabled: true,
-            filePath: HEALTH_FILE,
-          },
-        },
-      }))
     })
   })
 
   describe('writeHealthFile when disabled', () => {
     afterEach(() => {
+      mockConfig.default.healthCheck.enabled = true
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
-        default: {
-          healthCheck: {
-            enabled: true,
-            filePath: HEALTH_FILE,
-          },
-        },
-      }))
     })
 
     it('should not write file when health check is disabled', async () => {
+      mockConfig.default.healthCheck.enabled = false
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
-        default: {
-          healthCheck: {
-            enabled: false,
-            filePath: HEALTH_FILE,
-          },
-        },
-      }))
 
       const { writeHealthFile } = await import('@/health.js')
       writeHealthFile()
@@ -227,17 +206,8 @@ describe('health', () => {
 
     beforeEach(() => {
       mockWarn.mockClear()
+      // Fresh module instance so the warn-once flag resets between tests.
       vi.resetModules()
-      // Re-register the enabled config mock so vi.doMock from the disabled-check
-      // test above does not bleed into these tests after module reset.
-      vi.doMock('@/config.js', () => ({
-        default: {
-          healthCheck: {
-            enabled: true,
-            filePath: HEALTH_FILE,
-          },
-        },
-      }))
       writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
         throw new Error('EROFS: read-only file system')
       })
@@ -281,15 +251,8 @@ describe('health', () => {
 
     beforeEach(() => {
       mockWarn.mockClear()
+      // Fresh module instance so the warn-once flag resets between tests.
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
-        default: {
-          healthCheck: {
-            enabled: true,
-            filePath: HEALTH_FILE,
-          },
-        },
-      }))
       writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
         const err = new Error('EACCES: permission denied, open HEALTH_FILE')
         ;(err as NodeJS.ErrnoException).code = 'EACCES'
