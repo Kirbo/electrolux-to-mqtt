@@ -21,6 +21,7 @@
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
 - [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
 - [esbuild vulns GHSA-gv7w-rqvm-qjhr + GHSA-g7r4-m6w7-qqqr](vuln_esbuild_GHSA-gv7w-rqvm-qjhr.md) — override esbuild>=0.28.1 in both pnpm-workspace.yaml; remove when vite/tsx/vitest bump floor
-- [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — Node 24 Alpine on catalog page 2 of 54 (down from 102), newest-first; checked June 2026
+- [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — Node 24 Alpine on catalog page 2 of 54 (down from 102), newest-first; rechecked July 2026, revisit ~Nov 2026
+- [TypeScript 7 native compiler adopted](dep_typescript7_native.md) — 7.0.2 applied 2026-07-24; static Go binaries, Alpine-safe; re-verify checklist on future TS majors
 - [pnpm override needs pnpm-workspace.yaml in every Dockerfile prod stage](dep_override_dockerfile_workspace.md) — else ERR_PNPM_LOCKFILE_CONFIG_MISMATCH; verify with docker build not just pnpm test
 - [vite vulns GHSA-fx2h-pf6j-xcff + GHSA-v6wh-96g9-6wx3](vuln_vite_GHSA-fx2h-pf6j-xcff.md) — override doesn't fix peer dep vulns; add vite as direct devDep in telemetry-backend instead
