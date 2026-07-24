@@ -382,6 +382,19 @@ function publishInfoIfChanged(mqtt: IMqtt | undefined, message: string): void {
   mqtt.publishInfo(message)
 }
 
+/**
+ * Send the ntfy notification for a newly found version, at most once per version.
+ * A failed send leaves the dedup marker unset so the next check retries.
+ */
+async function sendNtfyNotificationOnce(currentTag: string, versionTag: string, latestVersion: string): Promise<void> {
+  const webhookUrl = config.versionCheck.ntfyWebhookUrl
+  if (!webhookUrl || hasNotifiedVersion === latestVersion) return
+  const sent = await sendNtfyNotification(currentTag, versionTag, webhookUrl)
+  if (sent) {
+    hasNotifiedVersion = latestVersion
+  }
+}
+
 async function checkForUpdates(currentVersion: string, updateChannel: 'stable' | 'beta', mqtt?: IMqtt): Promise<void> {
   // Skip check if running development version
   if (currentVersion === 'development') {
@@ -426,14 +439,7 @@ async function checkForUpdates(currentVersion: string, updateChannel: 'stable' |
       }),
     )
 
-    // Send ntfy notification if configured and we haven't already notified about this version
-    const webhookUrl = config.versionCheck.ntfyWebhookUrl
-    if (webhookUrl && hasNotifiedVersion !== latestVersion) {
-      const sent = await sendNtfyNotification(currentTag, versionTag, webhookUrl)
-      if (sent) {
-        hasNotifiedVersion = latestVersion
-      }
-    }
+    await sendNtfyNotificationOnce(currentTag, versionTag, latestVersion)
   } else {
     logger.debug(`Running latest version: ${currentTag}`)
     publishInfoIfChanged(
