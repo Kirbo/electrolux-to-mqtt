@@ -76,7 +76,8 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 - Docs (`*.md`), examples, config files must sync with code.
 - **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in the `/engineer` skill (§ Config).
 - Follow the file checklists in the `/engineer` skill for code changes.
-- Node/Alpine/sops/age versions are pinned in `mise.toml` (single source); run `mise run sync-versions` (or `pnpm sync:versions`) to propagate to `.nvmrc`, `engines`, `@types/node` (both `package.json`), Dockerfiles, compose files, and CI; CI job `versions in sync` guards drift. `@types/node` must never lead the runtime major — `deps:update` re-runs the sync so `pnpm update --latest` can't leave it drifted.
+- Node/Alpine/sops/age versions are pinned in `mise.toml` (single source); run `mise run sync-versions` (or `pnpm sync:versions`) to propagate to `.nvmrc`, `engines`, `@types/node` (both `package.json`), Dockerfiles, compose files, and CI; CI job `versions in sync` guards drift. Bumping the Node major in `mise.toml` + running the sync updates every derived file **and** re-resolves both lockfiles — never hand-edit a derived value.
+- `@types/node` must never lead the Node runtime major. A version range cannot enforce that (`pnpm update --latest` rewrites the spec whatever it declares), so it is listed under `updateConfig.ignoreDependencies` in **both** `pnpm-workspace.yaml` files and `sync-versions.sh` is its only writer. Never run `pnpm update --latest @types/node` — naming a package explicitly overrides the ignore list.
 - When `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.
 

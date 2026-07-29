@@ -32,6 +32,10 @@ fi
 
 NODE_NEXT=$(( NODE + 1 ))
 
+# Captured before any rewrite so step 10 can tell whether the range actually moved
+# and only then pay for a re-resolve.
+TYPES_BEFORE=$(node -p "require('${REPO_ROOT}/package.json').devDependencies['@types/node'] ?? ''" 2>/dev/null || echo '')
+
 echo "Syncing: node=${NODE}  alpine=${ALPINE}"
 
 # ── Helper: report only changed lines ────────────────────────────────────────
@@ -153,5 +157,30 @@ changed "${REPO_ROOT}/.gitlab/ci/01_init.yml" \
   sed -i.bak -E "s|(echo \"NODE_VERSION=\\\$\(cat \.nvmrc\))-alpine[0-9]+\.[0-9]+|\1-alpine${ALPINE}|" \
     "${REPO_ROOT}/.gitlab/ci/01_init.yml"
 rm -f "${REPO_ROOT}/.gitlab/ci/01_init.yml.bak"
+
+# ── 10. Re-resolve lockfiles if the @types/node range moved ──────────────────
+# Rewriting the range in package.json does NOT re-resolve pnpm-lock.yaml, so the
+# installed types would stay on the old major until someone installs. Both
+# lockfiles are ignored by `pnpm update --latest` (updateConfig.ignoreDependencies
+# in each pnpm-workspace.yaml), which makes this script the only thing that ever
+# moves the range — so it also has to be what re-resolves it.
+TYPES_AFTER=$(node -p "require('${REPO_ROOT}/package.json').devDependencies['@types/node'] ?? ''" 2>/dev/null || echo '')
+if [[ "${TYPES_BEFORE}" != "${TYPES_AFTER}" ]]; then
+  echo "  @types/node: ${TYPES_BEFORE:-<unset>} -> ${TYPES_AFTER}"
+  # The CI "versions in sync" job runs this script on a bare alpine image with only
+  # bash/git/nodejs installed — no pnpm. Check for it rather than letting the shell
+  # emit "pnpm: command not found", which reads as a broken script when the real
+  # failure is the drift that the git-diff gate is about to report.
+  if command -v pnpm >/dev/null 2>&1; then
+    echo "  re-resolving lockfiles..."
+    (cd "${REPO_ROOT}" && pnpm install --silent) ||
+      echo "  WARNING: root 'pnpm install' failed — run it manually so pnpm-lock.yaml re-resolves." >&2
+    (cd "${REPO_ROOT}/telemetry-backend" && pnpm install --silent) ||
+      echo "  WARNING: telemetry-backend 'pnpm install' failed — run it manually." >&2
+  else
+    echo "  pnpm not available — skipping lockfile re-resolve."
+    echo "  Run 'pnpm install' in both packages so the lockfiles pick up the new range."
+  fi
+fi
 
 echo "Done."

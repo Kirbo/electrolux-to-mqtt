@@ -9,3 +9,17 @@ allowBuilds:
 overrides:
   ws: ">=8.20.1"
   esbuild: ">=0.28.1"
+
+# @types/node must never lead the Node runtime major — types ahead of the runtime
+# describe APIs that do not exist at execution time. A version RANGE cannot enforce
+# this: `pnpm update --latest` rewrites the spec regardless of what it declares
+# (verified — an explicit ">=24.0.0 <25.0.0" was rewritten to "^26.1.2"). Ignoring
+# the dependency here is what actually holds it.
+#
+# `scripts/sync-versions.sh` remains the single writer, deriving the range from
+# `mise.toml [tools] node`. To move it, bump mise.toml and run `pnpm sync:versions`
+# — never by hand, and never with `pnpm update --latest @types/node` (naming a
+# package explicitly overrides this list).
+updateConfig:
+  ignoreDependencies:
+    - "@types/node"

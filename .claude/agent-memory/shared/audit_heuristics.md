@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 98905752-6fe7-4789-adc0-1ffdffd4ca26
-  modified: 2026-07-29T12:42:14.724Z
+  modified: 2026-07-29T13:08:44.983Z
 ---
 
 ## Effective grep patterns
@@ -45,6 +45,18 @@ When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.re
 
 `scripts/sonar.sh` exits 0 with "Skipping SonarCloud: branch X is not main (free tier limitation)" on any non-`main` branch. This is documented behavior, not a regression. BUT it means cognitive-complexity analysis does NOT run on non-main work — manually inspect any new/changed function for complexity > 15 when auditing a `next`-branch change set, since Sonar won't catch it.
 
+## `scripts/sync-versions.sh` runs in a pnpm-less CI environment
+
+The CI job `versions in sync` (`.gitlab/ci/02_test.yml`) executes this script on `alpine:latest` with only `apk add --no-cache bash git nodejs` — **there is no pnpm, and no `node_modules`**. Anything added to the script must therefore either be pure bash/node, or be guarded with `command -v <tool>`. An unguarded call emits a raw `command not found` into the CI log, which reads as a broken script when the real failure is the drift the `git diff --exit-code` gate is about to report (hit and fixed 2026-07-29).
+
+Test any change to the script the way CI will run it:
+
+```sh
+env PATH="/usr/bin:/bin:$(dirname "$(command -v node)")" bash scripts/sync-versions.sh
+```
+
+The script must stay exit-0 and still rewrite the derived files in that environment — the git-diff gate, not the script's exit code, is what fails the job.
+
 ## Defect-density areas
 
 - `src/electrolux.ts` — most complex; login tries two payload structures in sequence; watch for new code duplicating pattern
@@ -76,6 +88,10 @@ A field typed as required in `src/types.d.ts` that the live API never returns be
 node -e "const r=require('./tests/e2e/snapshots/comfort600/appliance-state.json').properties.reported;
   console.log(Object.keys(r).sort().join('\n'))"   # compare against Appliance['properties']['reported']
 ```
+
+**Extract the type block by brace-matching, not a fixed-size slice.** `Appliance['properties']['reported']` is followed by the capabilities section, whose members are `access` / `type` / `values` / `step` / `schedulable`. A naive `src.slice(idx, idx+4000)` runs straight into it and reports those as required state fields — a false finding produced twice on 2026-07-29. Match braces from `reported: {` and filter to members at exactly 6-space indentation.
+
+As of 2026-07-29 only three `reported` fields are required — `applianceState`, `dataModelVersion`, `networkInterface` — and all three appear in the live snapshot. A new required-but-absent field means someone added one; re-run the check.
 
 The 2026-07-29 audit found `deviceId` this way. Two traps, both hit in that session:
 

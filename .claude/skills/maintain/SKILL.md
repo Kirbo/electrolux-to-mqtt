@@ -25,7 +25,11 @@ You run this yourself, in-loop, at the current session model. No subagent spawni
    - Read changelogs for breaking/deprecated/security notes. Check license compatibility.
 3. **Apply updates**
    - `pnpm deps:update` in root + `cd telemetry-backend && pnpm deps:update`.
-   - **`@types/node`** — `pnpm update --latest` silently drifts it ahead of the Node runtime major; types ahead of runtime surface APIs that don't exist at runtime. No longer a manual step: `sync-versions.sh` owns the range in **both** `package.json` files and both `deps:update` scripts re-run it before `pnpm install`. Verify with `git diff` that it still reads `^<Node-LTS-major>` — if it drifted, the sync didn't run.
+   - **`@types/node`** — types ahead of the runtime surface APIs that don't exist at runtime. Two mechanisms hold it, neither of them a version range (a range does NOT work — `pnpm update --latest` rewrites the spec whatever it declares; an explicit `>=24.0.0 <25.0.0` was observed being rewritten to `^26.1.2`):
+     1. `updateConfig.ignoreDependencies` in **both** `pnpm-workspace.yaml` files makes the updater skip it entirely. Never run `pnpm update --latest @types/node` — naming a package explicitly overrides the ignore list.
+     2. `sync-versions.sh` is its only writer, deriving the range from `mise.toml [tools] node`, and re-resolves both lockfiles when the range moves.
+
+     It will therefore show as permanently "outdated" in `pnpm outdated` (e.g. 24.x vs 26.x latest). That is the pin working, not a backlog item. Verify with `git diff` that it still reads `^<Node-LTS-major>`.
    - **pnpm self-update** — always run `corepack use pnpm@latest`; confirm the `packageManager` field in `package.json` was bumped. Non-optional — do it every run, even when no deps changed.
    - **pnpm install warnings** — read every line. "pnpm field in package.json is no longer read" means overrides/settings drifted back into `package.json`; migrate them to `pnpm-workspace.yaml` immediately (see Decision framework).
    - Dev tooling (Biome, Vitest, TypeScript): verify config still parses. For tooling config-key renames during a bump, confirm the rule set is still *active*, not merely *parsed* (a passing `pnpm check` only proves the config parsed). E.g. lint a throwaway snippet that should trip a known recommended rule.
