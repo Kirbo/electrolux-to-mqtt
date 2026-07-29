@@ -33,7 +33,7 @@ export interface BaseNormalizedFields {
   connectionState: ConnectionState
 
   // Device information
-  deviceId: string
+  deviceId?: string
   dataModelVersion: string
   version: number
   applianceData: {

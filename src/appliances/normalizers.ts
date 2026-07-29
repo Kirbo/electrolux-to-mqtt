@@ -251,10 +251,11 @@ export function extractReportedState(rawState: Appliance): Appliance['properties
     typeof rawState === 'object' &&
     rawState !== null &&
     'applianceState' in rawState &&
-    'deviceId' in rawState &&
     'dataModelVersion' in rawState
   ) {
-    // The three required reported fields are present, safe to treat as reported state
+    // Both genuinely-required reported fields are present, safe to treat as reported
+    // state. deviceId is deliberately NOT checked: the live API omits it and
+    // canonicalStringify drops undefined keys, so cached state has no such key.
     const reported: Appliance['properties']['reported'] = rawState as unknown as Appliance['properties']['reported']
     return reported
   }
@@ -386,8 +387,11 @@ export function isNormalizedState(value: unknown): value is NormalizedState {
     typeof value === 'object' &&
     value !== null &&
     'applianceId' in value &&
-    'deviceId' in value &&
     'mode' in value &&
+    // deviceId is not a valid discriminator — the live API omits it and the cache
+    // round-trip drops the key, so requiring it rejected valid cached state.
+    // 'mode' plus the absence of 'properties' already separates NormalizedState
+    // from Appliance and ApplianceStub.
     !('properties' in value)
   )
 }

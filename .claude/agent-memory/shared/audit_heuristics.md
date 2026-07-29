@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 98905752-6fe7-4789-adc0-1ffdffd4ca26
+  modified: 2026-07-29T12:42:14.724Z
 ---
 
 ## Effective grep patterns
@@ -20,7 +21,7 @@ metadata:
 - `mqtt.ts:11`: `config.mqtt.qos as QoS` — safe because `configSchema` enforces `int().min(0).max(2)` before this executes (comment on prior line documents the guard). (The old `?? 2` fallback was dropped as dead code in the 2026-06-01 review — schema guarantees the default; cast still required for the `0|1|2` narrowing.)
 - `telemetry-backend/src/utils.ts:65-67`: the trailing `version.length > 32` check **after** the regex passes is NOT redundant — `validateTelemetryPayload`'s version regex has no upper length bound on the pre-release group, so e.g. `1.0.0-`+30 chars passes the regex at length 36 and only this check rejects it. Do not "simplify" it away. (Nearly mis-flagged as redundant in the 2026-06-01 review.)
 - `electrolux.ts`: `tokenPayload as { exp: number; iat: number }` preceded by `typeof` checks both fields — safe
-- `normalizers.ts`: `rawState as unknown as Appliance['properties']['reported']` preceded by `'in'` checks three required fields — safe
+- `normalizers.ts`: `rawState as unknown as Appliance['properties']['reported']` preceded by `'in'` checks on `applianceState` + `dataModelVersion` — safe. It deliberately does NOT check `deviceId` (the live API omits it, and the cache drops the key); same for `isNormalizedState`. Don't "restore" either check.
 - Empty catches in `logger.ts` (timezone fallback), `mqtt.ts` (JSON.parse debug log), `electrolux.ts` (URL parse fallback), `health.ts` (read failure returns false), `config.ts` (write failure uses in-memory config) — all documented
 - `orchestrator.ts`: the MQTT-reconnect handler (`_registerReconnectHandler`) republishes **state only**, while the HA-birth handler (`_registerBirthHandler` → `republishAll`) republishes **discovery + state**. This asymmetry is INTENTIONAL, not duplicated-logic-gone-wrong — documented in shared memory `project_ha_birth_republish.md`. Do not flag the reconnect handler for "missing" discovery republish, and do not suggest collapsing the two into one. (Re-verified 2026-06-15 audit.)
 
@@ -66,6 +67,22 @@ Service is a single Node built-in `http` server (no Express, no Redis) that read
 ## E2E test gating vs live backends
 
 `tests/e2e/version-checker.e2e.test.ts` "should send telemetry to backend" uses `ctx.skip()` only on `axios 400 + 'userHash length is invalid'` — signalling `ALLOW_TEST_TELEMETRY=false` on live backend. Any other error (e.g. `429` rate-limit) correctly surfaces as a test failure by design (CLAUDE.md "no silent error swallowing"). When auditing, do NOT flag 429 or similar as a code regression — it's environmental flake on the live telemetry backend, not a gating gap.
+
+## Required-but-absent fields: check snapshots, then check the `'in'` guards
+
+A field typed as required in `src/types.d.ts` that the live API never returns becomes `undefined` at runtime, and strict mode will not catch it. Detection — diff snapshot keys against the type:
+
+```sh
+node -e "const r=require('./tests/e2e/snapshots/comfort600/appliance-state.json').properties.reported;
+  console.log(Object.keys(r).sort().join('\n'))"   # compare against Appliance['properties']['reported']
+```
+
+The 2026-07-29 audit found `deviceId` this way. Two traps, both hit in that session:
+
+1. **Trace `undefined` through every serializer, not just `JSON.stringify`.** MQTT publish uses `JSON.stringify` (drops the key harmlessly), but `Cache` uses `canonicalStringify` — a *different* path. Grep both: `grep -rn "JSON.stringify\|canonicalStringify" src/`.
+2. **Fixing serialization can move the bug rather than close it.** Once `canonicalStringify` omits undefined keys, cached objects lose the key *entirely* — so any `'field' in value` type guard using that field as a discriminator starts silently returning false. Whenever a field becomes optional, grep for it in guards: `grep -rn "'<field>' in " src/`.
+
+Corollary: any field in `normalizeBaseFields` without a `??` default is a raw passthrough that can be `undefined`. Those are the ones to check against snapshots.
 
 ## API type union maintenance
 

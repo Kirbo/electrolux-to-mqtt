@@ -26,7 +26,9 @@ export type Appliance = {
       compressorHeatingRuntime?: number
       compressorState?: 'on' | 'off'
       dataModelVersion: string
-      deviceId: string
+      // Optional: the live API omits this for COMFORT600 (verified against
+      // tests/e2e/snapshots/comfort600/appliance-state.json).
+      deviceId?: string
       evapDefrostState?: 'on' | 'off' | null
       fanSpeedSetting?: 'low' | 'middle' | 'high' | 'auto'
       filterRuntime?: number

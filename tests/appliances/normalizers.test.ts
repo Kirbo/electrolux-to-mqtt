@@ -273,31 +273,24 @@ describe('normalizers', () => {
   })
 
   describe('extractReportedState', () => {
-    it('should extract nested reported state', () => {
-      const appliance = {
-        applianceId: '123',
-        properties: {
-          reported: {
-            applianceState: 'ON',
-            mode: 'COOL',
-          },
-        },
-      } as unknown as Appliance
+    // The deviceId-less case matters: the live API omits deviceId and the cache
+    // round-trip drops the key, so it must not gate the flat-shape branch.
+    it.each([
+      {
+        label: 'a nested reported state',
+        raw: { applianceId: '123', properties: { reported: { applianceState: 'ON', mode: 'COOL' } } },
+      },
+      {
+        label: 'a flat structure',
+        raw: { applianceState: 'ON', mode: 'COOL', deviceId: 'device-123', dataModelVersion: '1.0.0' },
+      },
+      {
+        label: 'a flat structure without a deviceId',
+        raw: { applianceState: 'ON', mode: 'COOL', dataModelVersion: '1.0.0' },
+      },
+    ])('should extract reported state from $label', ({ raw }) => {
+      const result = extractReportedState(raw as unknown as Appliance)
 
-      const result = extractReportedState(appliance)
-      expect(result.applianceState).toBe('ON')
-      expect(result.mode).toBe('COOL')
-    })
-
-    it('should handle flat structure', () => {
-      const appliance = {
-        applianceState: 'ON',
-        mode: 'COOL',
-        deviceId: 'device-123',
-        dataModelVersion: '1.0.0',
-      } as unknown as Appliance
-
-      const result = extractReportedState(appliance)
       expect(result.applianceState).toBe('ON')
       expect(result.mode).toBe('COOL')
     })
@@ -536,6 +529,14 @@ describe('normalizers', () => {
       expect(isNormalizedState({ applianceId: 'a', properties: { reported: {} } })).toBe(false)
       expect(isNormalizedState({ applianceId: 'a' })).toBe(false)
       expect(isNormalizedState(undefined)).toBe(false)
+    })
+
+    // The live API omits deviceId, and canonicalStringify now drops undefined
+    // keys — so a cached normalized state comes back with no deviceId at all.
+    // Requiring it here silently rejected valid cached state, killing the
+    // post-command immediate-feedback path.
+    it('accepts a normalized state whose deviceId was dropped by the cache round-trip', () => {
+      expect(isNormalizedState({ applianceId: 'a', mode: 'cool' })).toBe(true)
     })
   })
 
