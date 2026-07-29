@@ -13,7 +13,7 @@
     "start": "node dist/index.js",
     "dev:docker": "NODE_VERSION=$(cat ../.nvmrc) docker compose down ; NODE_VERSION=$(cat ../.nvmrc) docker compose up --build",
     "deps:check": "pnpm outdated ; pnpm audit",
-    "deps:update": "pnpm update --latest && pnpm install"
+    "deps:update": "pnpm update --latest && bash ../scripts/sync-versions.sh && pnpm install"
   },
   "keywords": [],
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",

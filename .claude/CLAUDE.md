@@ -17,7 +17,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm sonar` | SonarQube scanner (reads `.env`) |
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
-| `pnpm sync:versions` | Propagate `mise.toml` Node/Alpine to all derived files (also: `mise run sync-versions`) |
+| `pnpm sync:versions` | Propagate `mise.toml` Node/Alpine to all derived files, incl. `@types/node` (also: `mise run sync-versions`) |
 
 Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter: `pnpm vitest run -t "pattern"`.
 
@@ -76,7 +76,7 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 - Docs (`*.md`), examples, config files must sync with code.
 - **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in the `/engineer` skill (§ Config).
 - Follow the file checklists in the `/engineer` skill for code changes.
-- Node/Alpine/sops/age versions are pinned in `mise.toml` (single source); run `mise run sync-versions` (or `pnpm sync:versions`) to propagate to `.nvmrc`, `engines`, Dockerfiles, compose files, and CI; CI job `versions in sync` guards drift.
+- Node/Alpine/sops/age versions are pinned in `mise.toml` (single source); run `mise run sync-versions` (or `pnpm sync:versions`) to propagate to `.nvmrc`, `engines`, `@types/node` (both `package.json`), Dockerfiles, compose files, and CI; CI job `versions in sync` guards drift. `@types/node` must never lead the runtime major — `deps:update` re-runs the sync so `pnpm update --latest` can't leave it drifted.
 - When `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.
 

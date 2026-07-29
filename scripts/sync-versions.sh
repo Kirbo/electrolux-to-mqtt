@@ -53,7 +53,11 @@ changed() {
 changed "${REPO_ROOT}/.nvmrc" \
   bash -c "printf '%s\n' '${NODE}' > '${REPO_ROOT}/.nvmrc'"
 
-# ── 2. root package.json engines.node ─────────────────────────────────────────
+# ── 2. root package.json — engines.node + devDependencies['@types/node'] ─────
+#
+# @types/node MUST track the Node major: `pnpm update --latest` otherwise drifts
+# it to the newest release line (^25, ^26, …) while the runtime stays on ${NODE},
+# so the type definitions describe APIs the runtime does not have.
 
 changed "${REPO_ROOT}/package.json" \
   node -e "
@@ -62,10 +66,20 @@ changed "${REPO_ROOT}/package.json" \
     const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
     pkg.engines = pkg.engines ?? {};
     pkg.engines.node = '>=${NODE}.0.0 <${NODE_NEXT}.0.0';
+    const typesNode = pkg.devDependencies?.['@types/node'];
+    if (typesNode) {
+      // Only correct the MAJOR. A more specific in-major floor (e.g. ^24.13.3)
+      // is a deliberate choice and still resolves to the newest 24.x, so leave
+      // it alone; rewriting it would flatten intent without preventing drift.
+      const major = /^\D*(\d+)\./.exec(typesNode)?.[1];
+      if (major !== '${NODE}') {
+        pkg.devDependencies['@types/node'] = '^${NODE}.0.0';
+      }
+    }
     fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
   "
 
-# ── 3. telemetry-backend/package.json engines.node ───────────────────────────
+# ── 3. telemetry-backend/package.json — same two fields ──────────────────────
 
 changed "${REPO_ROOT}/telemetry-backend/package.json" \
   node -e "
@@ -74,6 +88,16 @@ changed "${REPO_ROOT}/telemetry-backend/package.json" \
     const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
     pkg.engines = pkg.engines ?? {};
     pkg.engines.node = '>=${NODE}.0.0 <${NODE_NEXT}.0.0';
+    const typesNode = pkg.devDependencies?.['@types/node'];
+    if (typesNode) {
+      // Only correct the MAJOR. A more specific in-major floor (e.g. ^24.13.3)
+      // is a deliberate choice and still resolves to the newest 24.x, so leave
+      // it alone; rewriting it would flatten intent without preventing drift.
+      const major = /^\D*(\d+)\./.exec(typesNode)?.[1];
+      if (major !== '${NODE}') {
+        pkg.devDependencies['@types/node'] = '^${NODE}.0.0';
+      }
+    }
     fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
   "
 

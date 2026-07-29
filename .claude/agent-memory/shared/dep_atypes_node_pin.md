@@ -1,13 +1,19 @@
 ---
-name: @types/node pin to v24
-description: @types/node must be pinned to ^24 to match Node 24 LTS engines constraint; pnpm update --latest drifts it to ^25
-type: feedback
+name: types-node-tracks-the-node-major-automatically
+description: sync-versions.sh owns the @types/node range in both package.json files; no longer a manual re-pin after deps:update
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 8e79790b-579f-46f5-90c1-46337a5c35c3
+  modified: 2026-07-29T11:54:12.813Z
 ---
 
-`@types/node` must be kept at `^24` to match `engines.node: >=24.0.0 <25.0.0` and `.nvmrc: 24`.
+`@types/node` must never lead the Node runtime major (`mise.toml [tools] node`, `engines.node`, `.nvmrc`). As of 2026-07-29 this is **automated** — it is no longer a manual step.
 
-`pnpm update --latest` will silently bump it to `^25.x` (latest overall). After running `deps:update`, always verify `@types/node` range in both `package.json` files.
+`scripts/sync-versions.sh` rewrites `devDependencies['@types/node']` to `^<NODE>.0.0` in **both** `package.json` files (root + `telemetry-backend/`), alongside the `engines.node` range it already owned. Both `deps:update` scripts re-run the sync between `pnpm update --latest` and `pnpm install`, so the lockfiles re-resolve against the corrected range in one pass.
 
-**Why:** Node 25 is not LTS. Project is intentionally locked to Node 24 LTS per `engines` constraint added in commit dc9b355. @types/node v25 types may reference Node 25-only APIs not available at runtime.
+**Why:** `pnpm update --latest` resolves `@types/node` to the newest release line (^25, ^26, …) regardless of the runtime pin. Types ahead of the runtime describe APIs that don't exist at execution time — it typechecks, then fails in prod. This drifted repeatedly and was re-pinned by hand each time; making the sync script own it removes the human step.
 
-**How to apply:** If `@types/node` drifts to ^25 after a `pnpm update --latest` run, re-edit both `package.json` files to `^24` and run `pnpm install` (not `--latest`). The correct resolved version is `24.12.4` (or latest 24.x at time of install). Use `^24` (not `^24.12.4`) — the major constraint is sufficient and avoids needing to update the pin on every 24.x patch release.
+**How to apply:** Don't hand-edit the `@types/node` range — change `mise.toml [tools] node` and run `pnpm sync:versions`. CI job `versions in sync` re-runs the script and fails on a non-empty `git diff`, so drift can't land. If `@types/node` is ever found ahead of the runtime major, the sync didn't run rather than the pin being wrong. See [[project_repo_layout]].
+
+Node 24 (Krypton) is the current LTS as of 2026-07-29 — Node 25 and 26 are non-LTS.

@@ -16,7 +16,7 @@
 - [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = sha256(username); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
-- [@types/node must stay pinned to ^24](dep_atypes_node_pin.md) — pnpm update --latest drifts to ^25; re-pin after every deps:update run
+- [@types/node tracks the Node major automatically](dep_atypes_node_pin.md) — sync-versions.sh owns the range in both package.json files; no longer a manual re-pin
 - [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
 - [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
