@@ -20,6 +20,7 @@ Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This f
     audit/SKILL.md               # /audit — full phased audit: automated checks + manual review + report
     audit-fix/SKILL.md           # /audit-fix — full pipeline: audit → fix → verify → commit
     maintain/SKILL.md            # /maintain — dependency updates, vuln fixes, breakage resolution
+    merge-request/SKILL.md       # /merge-request — upsert the next → main MR (title + changelog)
   agent-memory/
     shared/                      # Single shared memory namespace (the one agent)
       MEMORY.md                  # Index of all memories (auto-loaded each session)
@@ -51,6 +52,7 @@ Skills are predefined workflows invoked as slash commands in Claude Code:
 | `/audit` | Full codebase audit: lint, typecheck, tests, then manual review against the checklist. The agent runs it in-loop and reports findings; it only fixes on explicit approval. |
 | `/audit-fix` | Full pipeline, all in-loop: audit → save report to `audit-report.md` → triage → fix → verify → user approves commit batches → commit. |
 | `/maintain` | Update all dependencies and pnpm, fix any breakage from updates. |
+| `/merge-request` | Sync the single `next` → `main` merge request: recomputes the CalVer title from today's date (so it rolls `2026.7.3` → `2026.8.0` across a month boundary), regenerates the description as the full `main..next` changelog, then updates the open MR or creates one. Safe to re-run after every batch of commits. Never pushes, commits, or merges. |
 
 ### Ad-hoc prompting
 
