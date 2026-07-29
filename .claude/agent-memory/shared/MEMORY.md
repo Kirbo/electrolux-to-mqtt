@@ -17,6 +17,7 @@
 - [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = sha256(username); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
+- [Node 26 LTS window — October 2026](project_node26_lts_window.md) — bump `mise.toml` to node 26 on/after 2026-10-28 (Node 24 → maintenance 2026-10-20); verify LTS status first, then `pnpm sync:versions`
 - [@types/node is held by ignoreDependencies, not a range](dep_atypes_node_pin.md) — a range can't stop `pnpm update --latest`; updateConfig.ignoreDependencies in both pnpm-workspace.yaml + sync-versions.sh as sole writer
 - [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
