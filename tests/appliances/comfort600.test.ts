@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Comfort600Appliance, isFanSpeedAction, isSleepAction, isTempAction } from '@/appliances/comfort600.js'
-import type { NormalizedState } from '@/types/normalized.js'
+import type { NormalizedClimateMode, NormalizedState } from '@/types/normalized.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
 
 // Mock data
@@ -472,13 +472,10 @@ describe('Comfort600Appliance', () => {
       expect(result.valid).toBe(true)
     })
 
-    it('should allow fan speed HIGH in cool mode', () => {
-      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'cool')
-      expect(result.valid).toBe(true)
-    })
-
-    it('should allow fan speed HIGH in heat mode', () => {
-      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'heat')
+    // 'off' stands for "current mode unknown" — no per-mode constraints apply, so the command passes.
+    const highFanAllowedModes: NormalizedClimateMode[] = ['cool', 'heat', 'fan_only', 'off']
+    it.each(highFanAllowedModes)('should allow fan speed HIGH in %s mode', (mode) => {
+      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, mode)
       expect(result.valid).toBe(true)
     })
 
@@ -517,23 +514,8 @@ describe('Comfort600Appliance', () => {
       expect(result.valid).toBe(false)
     })
 
-    it('should allow fan speed HIGH in fan_only mode', () => {
-      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'fan_only')
-      expect(result.valid).toBe(true)
-    })
-
     it('should allow mode changes without fan speed', () => {
       const result = appliance.validateCommand({ mode: 'dry' }, 'cool')
-      expect(result.valid).toBe(true)
-    })
-
-    it('should allow temperature changes', () => {
-      const result = appliance.validateCommand({ targetTemperatureC: 24 }, 'cool')
-      expect(result.valid).toBe(true)
-    })
-
-    it('should allow commands when current mode is unknown (off)', () => {
-      const result = appliance.validateCommand({ fanSpeedSetting: 'high' }, 'off')
       expect(result.valid).toBe(true)
     })
 
@@ -632,18 +614,12 @@ describe('Comfort600Appliance', () => {
       expect(result.valid === false && result.reason).toContain('disabled')
     })
 
-    it('should allow temperature changes in cool mode', () => {
-      const result = appliance.validateCommand({ targetTemperatureC: 24 }, 'cool')
-      expect(result.valid).toBe(true)
-    })
-
-    it('should allow temperature at exact minimum boundary', () => {
-      const result = appliance.validateCommand({ targetTemperatureC: 16 }, 'cool')
-      expect(result.valid).toBe(true)
-    })
-
-    it('should allow temperature at exact maximum boundary', () => {
-      const result = appliance.validateCommand({ targetTemperatureC: 32 }, 'cool')
+    it.each([
+      { temperature: 24, label: 'a mid-range temperature' },
+      { temperature: 16, label: 'the exact minimum boundary' },
+      { temperature: 32, label: 'the exact maximum boundary' },
+    ])('should allow $label ($temperature) in cool mode', ({ temperature }) => {
+      const result = appliance.validateCommand({ targetTemperatureC: temperature }, 'cool')
       expect(result.valid).toBe(true)
     })
 

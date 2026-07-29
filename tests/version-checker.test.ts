@@ -258,39 +258,32 @@ describe('version-checker', () => {
       return JSON.parse(firstArg as string) as Record<string, unknown>
     }
 
-    it('RC is older than stable with same core: 1.17.0-rc.7 < 1.17.0 → update-available', async () => {
-      const payload = await runCheck('1.17.0-rc.7', 'v1.17.0')
-      expect(payload?.status).toBe('update-available')
-    })
-
-    it('stable is newer than RC with same core: 1.17.0 > 1.17.0-rc.7 → up-to-date', async () => {
-      const payload = await runCheck('1.17.0', 'v1.17.0-rc.7')
-      expect(payload?.status).toBe('up-to-date')
-    })
-
-    it('older RC vs newer RC: 1.17.0-rc.7 < 1.17.0-rc.8 → update-available', async () => {
-      const payload = await runCheck('1.17.0-rc.7', 'v1.17.0-rc.8')
-      expect(payload?.status).toBe('update-available')
-    })
-
-    it('newer RC vs older RC: 1.17.0-rc.8 > 1.17.0-rc.7 → up-to-date', async () => {
-      const payload = await runCheck('1.17.0-rc.8', 'v1.17.0-rc.7')
-      expect(payload?.status).toBe('up-to-date')
-    })
-
-    it('same RC versions: 1.17.0-rc.7 === 1.17.0-rc.7 → up-to-date', async () => {
-      const payload = await runCheck('1.17.0-rc.7', 'v1.17.0-rc.7')
-      expect(payload?.status).toBe('up-to-date')
-    })
-
-    it('same stable versions: 1.17.0 === 1.17.0 → up-to-date', async () => {
-      const payload = await runCheck('1.17.0', 'v1.17.0')
-      expect(payload?.status).toBe('up-to-date')
-    })
-
-    it('older stable vs newer RC: 1.16.5 < 1.17.0-rc.1 → update-available (beta channel sees RC as newer)', async () => {
-      const payload = await runCheck('1.16.5', 'v1.17.0-rc.1')
-      expect(payload?.status).toBe('update-available')
+    it.each([
+      {
+        current: '1.17.0-rc.7',
+        latestTag: 'v1.17.0',
+        expected: 'update-available',
+        why: 'RC is older than stable with same core',
+      },
+      {
+        current: '1.17.0',
+        latestTag: 'v1.17.0-rc.7',
+        expected: 'up-to-date',
+        why: 'stable is newer than RC with same core',
+      },
+      { current: '1.17.0-rc.7', latestTag: 'v1.17.0-rc.8', expected: 'update-available', why: 'older RC vs newer RC' },
+      { current: '1.17.0-rc.8', latestTag: 'v1.17.0-rc.7', expected: 'up-to-date', why: 'newer RC vs older RC' },
+      { current: '1.17.0-rc.7', latestTag: 'v1.17.0-rc.7', expected: 'up-to-date', why: 'same RC versions' },
+      { current: '1.17.0', latestTag: 'v1.17.0', expected: 'up-to-date', why: 'same stable versions' },
+      {
+        current: '1.16.5',
+        latestTag: 'v1.17.0-rc.1',
+        expected: 'update-available',
+        why: 'older stable vs newer RC (beta channel sees RC as newer)',
+      },
+    ])('$why: $current vs $latestTag → $expected', async ({ current, latestTag, expected }) => {
+      const payload = await runCheck(current, latestTag)
+      expect(payload?.status).toBe(expected)
     })
   })
 
@@ -1334,25 +1327,6 @@ describe('version-checker', () => {
       stopChecker()
     })
 
-    it('should handle pre-release version tags like 1.0.0-rc.1 without crashing', async () => {
-      // The version comparison strips pre-release suffixes — only numeric X.Y.Z parts are compared.
-      // A pre-release tag from GitLab must not cause an unhandled rejection.
-      mockAxiosGet.mockResolvedValueOnce({
-        data: [{ tag_name: 'v1.0.0-rc.1', released_at: '2026-01-28T12:00:00Z' }],
-      })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
-
-      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
-
-      // Must not throw or produce an unhandled rejection
-      await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
-
-      // Should have called the GitLab API
-      expect(mockAxiosGet).toHaveBeenCalled()
-
-      stopChecker()
-    })
-
     it('should treat pre-release tag 1.0.0-rc.1 as lower than running version 1.6.3 (no update notification)', async () => {
       mockAxiosGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.0.0-rc.1', released_at: '2026-01-28T12:00:00Z' }],
@@ -1374,9 +1348,15 @@ describe('version-checker', () => {
       stopChecker()
     })
 
-    it('should handle a malformed tag like vvv1.0.0 without crashing', async () => {
+    // The version comparison strips pre-release suffixes — only numeric X.Y.Z parts are compared.
+    // A pre-release or otherwise unparseable tag from GitLab must not cause an unhandled rejection.
+    it.each([
+      { tag: 'v1.0.0-rc.1', label: 'a pre-release version tag like 1.0.0-rc.1' },
+      { tag: 'vvv1.0.0', label: 'a malformed tag like vvv1.0.0' },
+      { tag: 'not-a-version', label: 'a completely non-semver tag like not-a-version' },
+    ])('should handle $label without crashing', async ({ tag }) => {
       mockAxiosGet.mockResolvedValueOnce({
-        data: [{ tag_name: 'vvv1.0.0', released_at: '2026-01-28T12:00:00Z' }],
+        data: [{ tag_name: tag, released_at: '2026-01-28T12:00:00Z' }],
       })
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
 
@@ -1385,21 +1365,7 @@ describe('version-checker', () => {
       // Must not throw or produce an unhandled rejection
       await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
 
-      expect(mockAxiosGet).toHaveBeenCalled()
-
-      stopChecker()
-    })
-
-    it('should handle a completely non-semver tag like not-a-version without crashing', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
-        data: [{ tag_name: 'not-a-version', released_at: '2026-01-28T12:00:00Z' }],
-      })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
-
-      const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
-
-      await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
-
+      // Should have called the GitLab API
       expect(mockAxiosGet).toHaveBeenCalled()
 
       stopChecker()
@@ -1639,17 +1605,21 @@ describe('version-checker', () => {
         moduleStableIsPre = await import('@/version-checker.js')
       })
 
-      it('treats 2026.6.0b1 as pre-release (stable channel skips it)', async () => {
-        // stable channel must filter out beta tag → no update-available published
+      it.each([
+        { tag: 'v2026.6.0b1', current: '1.18.5', label: '2026.6.0b1' },
+        { tag: 'v1.18.5-rc.1', current: '1.17.0', label: '1.18.5-rc.1' },
+        { tag: 'v2026.6.0b1', current: '2026.5.0', label: 'v2026.6.0b1 (with v prefix)' },
+      ])('treats $label as pre-release (stable channel skips it)', async ({ tag, current }) => {
+        // stable channel must filter out the pre-release tag → no update-available published
         mockAxiosGet
           .mockResolvedValueOnce({
-            data: [{ tag_name: 'v2026.6.0b1', released_at: '2026-04-01T12:00:00Z' }],
+            data: [{ tag_name: tag, released_at: '2026-04-01T12:00:00Z' }],
           })
           .mockResolvedValueOnce({ data: [] })
 
         const pub = vi.fn()
         const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('1.18.5', makeTelemetryCtx(), mqtt)
+        const stop = moduleStableIsPre.startVersionChecker(current, makeTelemetryCtx(), mqtt)
         await vi.advanceTimersByTimeAsync(0)
         stop()
 
@@ -1673,25 +1643,6 @@ describe('version-checker', () => {
         expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
       })
 
-      it('treats 1.18.5-rc.1 as pre-release (stable channel skips it)', async () => {
-        mockAxiosGet
-          .mockResolvedValueOnce({
-            data: [{ tag_name: 'v1.18.5-rc.1', released_at: '2026-04-01T12:00:00Z' }],
-          })
-          .mockResolvedValueOnce({ data: [] })
-
-        const pub = vi.fn()
-        const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('1.17.0', makeTelemetryCtx(), mqtt)
-        await vi.advanceTimersByTimeAsync(0)
-        stop()
-
-        for (const call of pub.mock.calls) {
-          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
-          expect(payload.status).not.toBe('update-available')
-        }
-      })
-
       it('treats 1.18.5 as stable (stable channel includes it)', async () => {
         mockAxiosGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v1.18.5', released_at: '2026-04-01T12:00:00Z' }],
@@ -1704,25 +1655,6 @@ describe('version-checker', () => {
         stop()
 
         expect(pub).toHaveBeenCalledWith(expect.stringContaining('"status":"update-available"'))
-      })
-
-      it('treats v2026.6.0b1 (with v prefix) as pre-release', async () => {
-        mockAxiosGet
-          .mockResolvedValueOnce({
-            data: [{ tag_name: 'v2026.6.0b1', released_at: '2026-04-01T12:00:00Z' }],
-          })
-          .mockResolvedValueOnce({ data: [] })
-
-        const pub = vi.fn()
-        const mqtt = { publishInfo: pub } as unknown as IMqtt
-        const stop = moduleStableIsPre.startVersionChecker('2026.5.0', makeTelemetryCtx(), mqtt)
-        await vi.advanceTimersByTimeAsync(0)
-        stop()
-
-        for (const call of pub.mock.calls) {
-          const payload = JSON.parse(call[0] as string) as Record<string, unknown>
-          expect(payload.status).not.toBe('update-available')
-        }
       })
     })
 
@@ -2066,25 +1998,25 @@ describe('version-checker', () => {
     })
 
     describe('empty-string and junk image channel normalization', () => {
-      it('empty string imageChannel falls through to version-derived', () => {
-        // Running stable version → derived should be stable (not broken/empty)
-        const result = resolveUpdateChannel({ configured: undefined, imageChannel: '', currentVersion: '2026.6.4' })
-        expect(result).toEqual({ channel: 'stable', source: 'derived' })
-      })
-
-      it('empty string imageChannel + pre-release version falls through to beta-derived', () => {
-        const result = resolveUpdateChannel({ configured: undefined, imageChannel: '', currentVersion: '2026.6.0b1' })
-        expect(result).toEqual({ channel: 'beta', source: 'derived' })
-      })
-
-      it('"Beta" (capital B) imageChannel falls through to version-derived', () => {
-        const result = resolveUpdateChannel({ configured: undefined, imageChannel: 'Beta', currentVersion: '2026.6.4' })
-        expect(result).toEqual({ channel: 'stable', source: 'derived' })
-      })
-
-      it('"xyz" junk imageChannel falls through to version-derived', () => {
-        const result = resolveUpdateChannel({ configured: undefined, imageChannel: 'xyz', currentVersion: '2026.6.4' })
-        expect(result).toEqual({ channel: 'stable', source: 'derived' })
+      // A junk/empty image channel must be ignored so the channel is derived from the running version.
+      it.each([
+        { imageChannel: '', currentVersion: '2026.6.4', channel: 'stable', label: 'empty string imageChannel' },
+        {
+          imageChannel: '',
+          currentVersion: '2026.6.0b1',
+          channel: 'beta',
+          label: 'empty string imageChannel + pre-release version',
+        },
+        {
+          imageChannel: 'Beta',
+          currentVersion: '2026.6.4',
+          channel: 'stable',
+          label: '"Beta" (capital B) imageChannel',
+        },
+        { imageChannel: 'xyz', currentVersion: '2026.6.4', channel: 'stable', label: '"xyz" junk imageChannel' },
+      ])('$label falls through to $channel version-derived', ({ imageChannel, currentVersion, channel }) => {
+        const result = resolveUpdateChannel({ configured: undefined, imageChannel, currentVersion })
+        expect(result).toEqual({ channel, source: 'derived' })
       })
     })
 
