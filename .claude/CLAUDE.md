@@ -16,6 +16,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm test:e2e` | `tests/e2e/*.test.ts` with `E2E_TEST=true`. Override ntfy topic via `E2M_NTFY_TOPIC` |
 | `pnpm sonar` | SonarQube scanner (reads `.env`) |
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
+| `pnpm docker:test [prod\|local\|backend\|all]` | Build each image + smoke-run it offline; catches files missing from the build context. Substitutes a stock base when `dhi.io` is unreachable (CI has the entitlement, so it tests the real hardened image) |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
 | `pnpm sync:versions` | Propagate `mise.toml` Node/Alpine to all derived files, incl. `@types/node` (also: `mise run sync-versions`) |
 
@@ -83,6 +84,8 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 
 ### Docker
 - Prod Dockerfile (`docker/Dockerfile`) uses hardened `dhi.io/node` base images — don't change. `Dockerfile.local` uses standard Alpine.
+- **`.dockerignore` is an allowlist** (`*` then `!path`), not a denylist. Adding a file or directory that must reach an image therefore requires an explicit `!entry` — otherwise it is silently absent from the build context and the build fails (or worse, the file is only read at runtime and the image ships broken). All three Dockerfiles share the repo-root context, so the list is the union of their needs.
+- After changing `.dockerignore`, any `Dockerfile`, or anything an image consumes, run `pnpm docker:test` — it builds each image and smoke-runs it offline, which is the only check that catches a file missing from the build context. CI job `docker build test` (test stage, runs on every branch) enforces it before a release.
 
 ### Domain
 - Appliance classes extend `BaseAppliance` + register in factory.

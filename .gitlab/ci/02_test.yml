@@ -265,3 +265,40 @@ versions in sync:
         exit 1
       fi
   allow_failure: false
+
+docker build test:
+  extends: .docker_build_base
+  stage: test
+  # Runs in the TEST stage, before build/release, and on every branch including
+  # main/next — the point is to fail before a release ships an image that is
+  # missing files. `.dockerignore` is an allowlist, so a new file that an image
+  # needs is absent from the build context until explicitly re-included; no unit
+  # test can catch that, only an actual build + run.
+  rules:
+    - if: $SCHEDULE
+      when: never
+    - if: "$CI_COMMIT_TAG == null"
+      changes:
+        - .dockerignore
+        - .npmrc
+        - docker/Dockerfile
+        - docker/Dockerfile.local
+        - telemetry-backend/Dockerfile
+        - scripts/docker-build-test.sh
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - tsconfig.json
+        - src/**/*
+        - telemetry-backend/**/*
+      when: on_success
+    - when: never
+  needs: []
+  before_script:
+    # Keep the base's buildx setup and dhi.io login, then add bash — the image is
+    # docker:latest (alpine, sh only) and the script needs bash arrays/[[ ]].
+    - !reference [.docker_build_base, before_script]
+    - apk add --no-cache bash
+  script:
+    - bash scripts/docker-build-test.sh all
+  allow_failure: false

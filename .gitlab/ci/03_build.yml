@@ -9,6 +9,10 @@ try to build docker images:
     - if: '$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "next"'
       changes:
         - docker/Dockerfile
+        # .dockerignore is an allowlist — a change there can remove a file the
+        # image needs, so it must retrigger the build.
+        - .dockerignore
+        - .npmrc
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml

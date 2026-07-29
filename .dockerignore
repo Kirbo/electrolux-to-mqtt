@@ -1,78 +1,52 @@
-# Dependencies (will be installed in container)
-node_modules
-**/node_modules
-.pnpm-store
+# ALLOWLIST, not a denylist. Everything is excluded by default and re-included
+# below. Deliberate: a denylist fails OPEN — a new file or cache directory ships
+# into the build context until someone remembers to exclude it. `.semrel` reached
+# ~85 MB that way. This form fails CLOSED: anything new is excluded until it is
+# explicitly added here, and the build breaks loudly rather than bloating quietly.
+#
+# Three Dockerfiles build from this same repo-root context, so the list is the
+# union of what all three need:
+#   docker/Dockerfile          (prod)  — COPY . . in builder, runs `pnpm run build`
+#   docker/Dockerfile.local    (dev)   — COPY . ., runs `pnpm dev` (tsx watch src/)
+#   telemetry-backend/Dockerfile       — root package.json + telemetry-backend/
+#
+# Docker applies last-match-wins, so ordering matters: exclude-all, re-include,
+# then re-exclude junk nested inside the re-included directories.
 
-# Sensitive files
-config.yml
-*.pem
-*.key
-*.cert
+# ── Exclude everything ───────────────────────────────────────────────────────
+*
 
-# Build artifacts and generated files
-dist
-coverage
-.coverage
-*.log
-*.pid
-*.seed
-*.pid.lock
+# ── Application source ───────────────────────────────────────────────────────
+!src
+!telemetry-backend
 
-# Version control
-.git
-.gitignore
-.gitattributes
-.githooks
-
-# Testing
-tests
-*.test.ts
-*.test.js
-vitest.config.ts
-vitest.setup.ts
-
-# IDE and editor files
-.vscode
-.idea
-.DS_Store
-*.swp
-*.swo
-*~
-.editorconfig
-
-# Documentation
-*.md
-!README.md
+# ── Manifests and build config ───────────────────────────────────────────────
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+# engine-strict=true — enforces engines.node during the in-image `pnpm install`.
+# Excluding this silently drops that guard, so it must stay.
+!.npmrc
+# Optional: the [d] glob in the Dockerfiles makes it a no-op when absent locally.
 !CHANGELOG.md
-docs
-LICENSE
 
-# CI/CD
-.gitlab-ci.yml
-.github
-sonar-project.properties
-
-# Docker files (don't need these inside the image)
-docker
-Dockerfile*
-docker-compose*.yml
-.dockerignore
-
-# Local environment — the **/ variants matter: patterns without **/ match only at
-# the context root, and telemetry-backend/Dockerfile builds with the repo root as
-# context, so a bare `.env` would still COPY telemetry-backend/.env (decrypted
-# SOPS secrets) into the builder layer.
-.env
-.env.*
-.envrc
+# ── Re-exclude junk nested inside the re-included directories ────────────────
+# `!telemetry-backend` above would otherwise pull in its node_modules and build
+# output. Patterns must be re-stated here because the re-include came later.
+**/node_modules
+**/dist
+**/coverage
+**/tests
+**/*.test.ts
+**/vitest.config.ts
+**/vitest.setup.ts
+# Secrets must never enter the context, at any depth. telemetry-backend/.env
+# holds decrypted SOPS values on a developer machine.
 **/.env
 **/.env.*
 **/config.yml
-**/tests
-**/dist
-**/coverage
-
-# Temporary files
-tmp
-temp
-*.tmp
+**/*.pem
+**/*.key
+**/*.cert
+**/.DS_Store

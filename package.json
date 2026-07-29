@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "sonar": "sh scripts/sonar.sh",
     "osv-scan": "sh scripts/osv-scan.sh",
+    "docker:test": "bash scripts/docker-build-test.sh",
     "deps:check": "pnpm outdated ; pnpm audit ; pnpm osv-scan",
     "deps:update": "pnpm update --latest && pnpm sync:versions && pnpm install",
     "sops:decrypt": "scripts/sops-env.sh decrypt",
