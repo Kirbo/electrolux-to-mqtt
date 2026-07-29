@@ -7,6 +7,7 @@
 - [SOPS env-file encryption](project_sops_secrets.md) — age PQ (ML-KEM-768) key in 1Password "electrolux-to-mqtt age key"; needs age ≥ 1.3.0; `pnpm sops:*`; pending: rotate exposed SONAR_TOKEN
 - [Auto-update decision](project_auto_update_decision.md) — in-app image self-update rejected (Docker socket breaks hardening); Watchtower-via-compose-profile is the sanctioned path if revisited
 - [glab ci lint (merged)](reference_glab_ci_lint.md) — plain lint resolves includes server-side (stale for unpushed); merge root+includes into one file to validate local .gitlab/ci/ edits
+- [Fetch and sync the branch before committing](feedback_fetch_before_commit.md) — check ahead/behind at the START of any task ending in a commit; a stale branch caused 30-commits-behind duplicated work
 - [Write memory before commit](feedback_memory_before_commit.md) — capture pending learnings as memory files before the commit step so they ride in the same commit/push
 - [Repo layout](project_repo_layout.md) — standalone docs live in `docs/`; README/LICENSE + all config files stay at root for tool/platform auto-resolution (don't move config to tidy root)
 - [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it
