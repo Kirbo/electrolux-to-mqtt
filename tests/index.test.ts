@@ -119,10 +119,6 @@ vi.mock('@/version-checker.js', () => ({
   startVersionChecker: vi.fn().mockReturnValue(() => {}),
 }))
 
-vi.mock('@/migrate.js', () => ({
-  runStartupMigrations: vi.fn().mockResolvedValue(undefined),
-}))
-
 vi.mock('@/logger.js', () => ({
   default: vi.fn().mockReturnValue({
     info: vi.fn(),

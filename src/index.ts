@@ -3,7 +3,6 @@ import config from './config.js'
 import { disposableInterval, disposableTimeout } from './disposable.js'
 import { computeBackoffDelay, ElectroluxClient } from './electrolux.js'
 import createLogger from './logger.js'
-import { runStartupMigrations } from './migrate.js'
 import Mqtt from './mqtt.js'
 import { Orchestrator } from './orchestrator.js'
 import { deriveTelemetrySessionId, summarizeAppliances } from './telemetry.js'
@@ -11,7 +10,7 @@ import { startVersionChecker } from './version-checker.js'
 
 const currentVersion = packageJson.version
 const logger = createLogger('app')
-logger.info({ version: currentVersion }, 'Starting Electrolux to MQTT')
+logger.info(`Starting Electrolux to MQTT (version: ${currentVersion})`)
 const mqtt = new Mqtt()
 const client = new ElectroluxClient(mqtt)
 
@@ -79,7 +78,6 @@ const scheduleMainRetry = (reason: string) => {
 }
 
 export const main = async () => {
-  await runStartupMigrations()
   logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
 
   // Initialize the client
