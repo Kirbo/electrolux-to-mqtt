@@ -48,6 +48,10 @@ function isTokenRefreshResponse(value: unknown): value is { accessToken: string;
 
 // Configuration constants
 const RENEW_TOKEN_BEFORE_EXPIRY_MS = config.electrolux.renewTokenBeforeExpiry * 60 * 1000
+// The auth flow uses raw axios (not the timeout-configured client instance), so each
+// request needs an explicit timeout — a stalled connection would otherwise hang
+// performLogin indefinitely and block the retry chain from ever rescheduling.
+const AUTH_REQUEST_TIMEOUT_MS = config.electrolux.apiTimeoutSeconds * 1000
 const COMMAND_STATE_DELAY_MS = config.electrolux.commandStateDelaySeconds * 1000
 const ERROR_RESPONSE_MAX_LENGTH = 200 // Max length of error response to include in logs
 const LOGIN_RETRY_BASE_DELAY_MS = 5_000 // Initial retry delay for login (doubles each attempt)
@@ -323,6 +327,7 @@ export class ElectroluxClient implements AsyncDisposable {
     try {
       const response = await axios.get(
         'https://account.electrolux.one/ui/edp/login?response_type=code&client_id=HeiOpenApi&redirect_uri=https://developer.electrolux.one/loggedin',
+        { timeout: AUTH_REQUEST_TIMEOUT_MS },
       )
       const { headers } = response
 
@@ -398,6 +403,7 @@ export class ElectroluxClient implements AsyncDisposable {
           'x-csrf-token': xcsrfToken,
           Cookie: `_csrfSecret=${csrfSecret}`,
         },
+        timeout: AUTH_REQUEST_TIMEOUT_MS,
       }
 
       logger.debug(`Sending login request to account.electrolux.one`)
@@ -440,7 +446,9 @@ export class ElectroluxClient implements AsyncDisposable {
       }
 
       logger.debug('Exchanging authorization code for tokens...')
-      const cookies = await axios.post('https://api.developer.electrolux.one/api/v1/token', tokenBody)
+      const cookies = await axios.post('https://api.developer.electrolux.one/api/v1/token', tokenBody, {
+        timeout: AUTH_REQUEST_TIMEOUT_MS,
+      })
       logger.debug(`Token exchange response status: ${cookies.status}`)
 
       const setCookieHeader = cookies.headers['set-cookie']

@@ -1034,6 +1034,27 @@ describe('electrolux', () => {
         expect(client.isLoggingIn).toBe(false)
       })
 
+      it('should pass the configured timeout to every auth-flow request', async () => {
+        // The auth flow uses raw axios (not the timeout-configured instance from
+        // createApiClient) — without an explicit timeout a stalled connection
+        // would hang performLogin indefinitely and block the retry chain.
+        vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
+        vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
+
+        await client.initialize()
+        await client.login()
+
+        const expectedTimeout = 25_000 // apiTimeoutSeconds default (25) × 1000
+        expect(vi.mocked(axios.get)).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ timeout: expectedTimeout }),
+        )
+        expect(vi.mocked(axios.post).mock.calls.length).toBeGreaterThan(0)
+        for (const call of vi.mocked(axios.post).mock.calls) {
+          expect(call[2]).toEqual(expect.objectContaining({ timeout: expectedTimeout }))
+        }
+      })
+
       it('should handle login with flattened payload on invalid_request error', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post)
