@@ -84,7 +84,7 @@ Run E2E snapshot validation (see the `/audit` skill § E2E snapshots). Raw API u
 
 ### Badge serving + legacy ingest (`telemetry-backend/`)
 
-Single long-running HTTP service (Node built-in `http`, no Express/Redis): reads Aptabase ClickHouse behind `ClickHouseLike`, serves SVG badges + `/telemetry.json` in-memory, forwards legacy `POST /telemetry` via `AptabaseForwarder`. Regenerates every `BADGE_INTERVAL_SECONDS`.
+Single long-running HTTP service (Node built-in `http`, no Express/Redis): reads Aptabase ClickHouse behind `ClickHouseLike`, writes badge SVGs + `telemetry.json` to `OUTPUT_DIR` (served statically by the reverse proxy; `GET /telemetry` serves the JSON in-memory), forwards legacy `POST /telemetry` via `AptabaseForwarder`. Regenerates every `BADGE_INTERVAL_SECONDS`.
 - Behavior change → tests in `telemetry-backend/tests/` (Vitest + `FakeClickHouse` + `FakeBadgeStore` helpers).
 - Build / compose change → update `Dockerfile`, `docker-compose.yml`, `README.md`.
 

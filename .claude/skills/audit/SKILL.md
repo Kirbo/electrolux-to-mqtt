@@ -98,7 +98,7 @@ Extra robustness checks beyond the checklist:
 - [ ] Single Node `http` service (no Express/Redis); multi-stage Dockerfile, dev deps stripped
 - [ ] No hardcoded secrets / unsafe defaults
 - [ ] Input validation on all endpoints
-- [ ] Rate limiting on `POST /telemetry` runs **before** validation; GET badge routes serve cached in-memory SVGs
+- [ ] Rate limiting on `POST /telemetry` runs **before** validation; badge SVGs are written to `OUTPUT_DIR` (served statically by the reverse proxy), `GET /telemetry` serves the cached in-memory JSON
 - [ ] Request body size is bounded
 - [ ] `docker-compose.yml` env vars match code; `README.md` complete
 

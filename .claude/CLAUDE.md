@@ -2,7 +2,7 @@
 
 ## Project
 
-Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest. Standalone `telemetry-backend/` is a single HTTP service that serves SVG badges (in-memory from Aptabase ClickHouse) and forwards legacy `/telemetry` POSTs to Aptabase — delete the ingest half once `source=legacy` traffic drops to ~0.
+Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest. Standalone `telemetry-backend/` is a single HTTP service that generates SVG badges from Aptabase ClickHouse (written to a disk volume, served statically by the reverse proxy) and forwards legacy `/telemetry` POSTs to Aptabase — delete the ingest half once `source=legacy` traffic drops to ~0.
 
 ## Commands
 
@@ -38,7 +38,7 @@ Single long-running process. `src/index.ts` wires `ElectroluxClient`, `Mqtt`, `O
 - **`health.ts`** — Docker HEALTHCHECK file touch. Best-effort (read-only fs safe).
 
 `telemetry-backend/` standalone pnpm package. A single HTTP service (Node built-in `http`, no Express) that:
-1. Serves SVG badges in-memory — every `BADGE_INTERVAL_SECONDS` (default 300) it reads aggregates from self-hosted Aptabase ClickHouse (`ClickHouseLike` / `FakeClickHouse` in tests) and renders `/users.svg`, `/stable.svg`, `/beta.svg`, `/telemetry.json` (302 at `/`). Responds 503 until first cycle completes.
+1. Generates badge artifacts — every `BADGE_INTERVAL_SECONDS` (default 300) it reads aggregates from self-hosted Aptabase ClickHouse (`ClickHouseLike` / `FakeClickHouse` in tests) and writes `users.svg`, `stable.svg`, `beta.svg`, `telemetry.json` to `OUTPUT_DIR`, which the reverse proxy serves statically (incl. `/` → `302 /users.svg`). Its own routes: `GET /telemetry` (in-memory JSON, 503 until the first cycle completes), `GET /stable`·`/beta` (302 to the latest release page), `GET /health`. `regenerate-badges.ts` is the one-shot CI variant run after a release.
 2. Receives legacy `POST /telemetry {userHash, version, channel}` from old bridge versions and forwards them to Aptabase as `version_check` events (`AptabaseForwarder` interface, testable with a fake). Delete the ingest half once `source=legacy` traffic drops to ~0.
 
 API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. The `/engineer` skill holds the per-change-type file checklists; the `/audit` + `/maintain` skills hold the full audit + dependency workflows.
