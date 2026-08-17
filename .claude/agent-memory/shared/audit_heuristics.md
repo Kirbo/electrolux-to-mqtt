@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 98905752-6fe7-4789-adc0-1ffdffd4ca26
-  modified: 2026-07-29T13:08:44.983Z
+  modified: 2026-08-17T16:32:01.729Z
 ---
 
 ## Effective grep patterns
@@ -64,7 +64,7 @@ The script must stay exit-0 and still rewrite the derived files in that environm
 
 ## Telemetry-backend observations
 
-Service is a single Node built-in `http` server (no Express, no Redis) that reads Aptabase **ClickHouse** and serves in-memory SVG badges + `/telemetry.json`; legacy `POST /telemetry` forwards to Aptabase via `AptabaseForwarder`. (The old `express.json({ limit })` size-limit and Redis observations are obsolete — don't re-flag their absence.)
+Service is a single Node built-in `http` server (no Express, no Redis) that reads Aptabase **ClickHouse** and writes badge SVGs + `telemetry.json` to `OUTPUT_DIR` (served statically by the reverse proxy; `GET /telemetry` serves the cached in-memory JSON); legacy `POST /telemetry` forwards to Aptabase via `AptabaseForwarder`. (The old `express.json({ limit })` size-limit and Redis observations are obsolete — don't re-flag their absence.)
 - Rate limiting runs **before** forwarding on `POST /telemetry` — correct per CLAUDE.md checklist.
 - Request body is capped at `MAX_BODY_BYTES` (8 KB) in `readBody` (`server.ts`) → 413 + `Connection: close`; covered by a test. (Added in the 2026-06-26 audit — the cap had been missing, an OOM-the-64M-container vector.)
 - The per-IP rate-limiter (`rate-limit.ts`) prunes expired entries via an amortized once-per-window sweep and exposes `size()`; covered by a test. (Added in the same audit — the map had grown unbounded.)
@@ -114,6 +114,11 @@ As of 2026-04-13, `.claude/rules/` gone. The per-change-type checklists now live
 - `.claude/skills/` change → check `docs/AI_DEVELOPMENT.md` + `docs/CONTRIBUTING.md` for sync, including stale instruction-file paths.
 - README env var table vs `envSchema` field list → check after config changes.
 - `config.example.yml` vs `configSchema` fields → check after config changes.
+- **Post-pull staleness** (two-machine repo, ~monthly cross-pulls): after fast-forwarding through upstream commits, check `.claude/` skills/memories/docs for references to files those commits deleted: `git diff --name-status --diff-filter=D ORIG_HEAD..HEAD` then grep each deleted path across `.claude/ docs/`. The 2026-08-17 audit caught the audit skill still mandating a telemetry gate for `src/migrate.ts`, deleted upstream weeks earlier.
+
+## CI jobs must trigger on the scripts they run
+
+When a job's logic is extracted to `scripts/*.sh`, add that script to the job's `changes:` list — otherwise editing the script skips the job that exercises it (found 2026-08-17: `versions in sync` missing `scripts/sync-versions.sh`, `try to build docker images` missing `scripts/docker-buildx-release.sh`). Detection: for each job, compare `sh scripts/...` invocations in `script:` against its `changes:` list. Exception (intentional): the RELEASE-stage jobs gate on release paths only — `compute-version.sh`, `create-gitlab-release.sh`, `generate-release-notes.sh`, and `docker-buildx-release.sh` in release jobs are deliberately absent so script edits don't cut a release; the try-build job is where buildx-script bugs get caught pre-release.
 
 ## `config.yml` is gitignored — do not infer absence from git tooling
 

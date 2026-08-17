@@ -18,6 +18,8 @@ try to build docker images:
         - pnpm-workspace.yaml
         - src/**/*
         - tsconfig.json
+        # shared buildx script — a bug in it must fail here, not at release time
+        - scripts/docker-buildx-release.sh
       when: on_success
     - when: never
   variables:

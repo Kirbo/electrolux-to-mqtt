@@ -26,7 +26,7 @@
           {
             "type": "command",
             "if": "Bash(git commit*)",
-            "command": "PATH=\"/Users/kimmo.saari/.local/share/fnm/node-versions/v24.14.1/installation/bin:$PATH\" pnpm check",
+            "command": "if ! command -v pnpm >/dev/null 2>&1; then PATH=\"$HOME/.local/share/mise/shims:$PATH\"; fi; pnpm check",
             "timeout": 60,
             "statusMessage": "Running pnpm check before commit..."
           }

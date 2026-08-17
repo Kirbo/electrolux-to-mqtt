@@ -21,6 +21,10 @@ Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This f
     audit-fix/SKILL.md           # /audit-fix — full pipeline: audit → fix → verify → commit
     maintain/SKILL.md            # /maintain — dependency updates, vuln fixes, breakage resolution
     merge-request/SKILL.md       # /merge-request — upsert the next → main MR (title + changelog)
+  hooks/
+    check-origin-freshness.sh    # SessionStart — fetch-checks origin (6h marker in .git/), warns in-context when behind
+    require-branch-sync.sh       # PreToolUse — hard-blocks `git commit` while the branch is behind upstream
+  settings.json                  # Checked-in hook wiring (SessionStart + pre-commit checks) — shared across machines
   agent-memory/
     shared/                      # Single shared memory namespace (the one agent)
       MEMORY.md                  # Index of all memories (auto-loaded each session)

@@ -154,10 +154,7 @@ Reconciliation:
 - **Scope discipline**: audit recently changed code by default; the whole codebase only if the user says so. Doubt → ask.
 - **Evidence-based**: every finding cites a file path + line or specific command output. No vague claims.
 - **Documented conventions**: check findings against CLAUDE.md rules before flagging — documented patterns are intentional, not violations.
-- **Version-gated migration cleanup** — `src/migrate.ts:removeLegacyTokensFile()` is a one-time migration for pre-v1.17.0 upgrades. Before suggesting/flagging it for removal:
-  1. Fetch the deployed telemetry endpoint (`https://e2m.devaus.eu/telemetry.json`) and check the reported `versions`.
-  2. If any active version is below `1.17.0`: do NOT suggest removal, do NOT flag as dead code.
-  3. Only suggest removal (never remove autonomously) once all reported versions are `>= 1.17.0`.
+- **Version-gated cleanup** — before flagging backward-compat code (legacy endpoints, migration shims) as dead, fetch `https://e2m.devaus.eu/telemetry.json` and check the reported `versions` still in the wild; only suggest removal (never remove autonomously) once no active install needs it. (The pre-v1.17.0 `src/migrate.ts` shim was removed 2026-08 once all installs passed 1.17.0 — the same gate applies next time, e.g. the telemetry-backend legacy `/telemetry` ingest.)
 - **Cognitive complexity**: flag any function suspected > 15 even if SonarQube missed it (e.g. new code not yet analyzed, or a non-`main` branch where Sonar skipped).
 - **Self-verification**: before finalizing, re-scan findings and drop any without concrete evidence.
 - **Escalation**: an ambiguous rule, or a finding that conflicts with CLAUDE.md → surface it in the report, no silent judgment.

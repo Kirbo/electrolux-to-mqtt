@@ -243,6 +243,8 @@ versions in sync:
         - mise.toml
         - package.json
         - telemetry-backend/package.json
+        # the script this job runs — editing it must re-run the drift check
+        - scripts/sync-versions.sh
       when: on_success
     - when: never
   needs: []

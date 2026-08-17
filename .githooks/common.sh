@@ -71,82 +71,18 @@ find_node() {
   if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/mise.toml" ]; then
     NODE_VERSION=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' "$REPO_ROOT/mise.toml" | head -1)
   fi
-  
-  # Try common node manager locations with version matching
-  if [ -n "$NODE_VERSION" ]; then
-    # Try exact version match first, then glob pattern
-    for base_dir in "$HOME/.local/share/fnm/node-versions" "$HOME/.fnm/node-versions" "$HOME/.nvm/versions/node"; do
-      if [ -d "$base_dir" ]; then
-        # Try exact match first
-        if [ -x "$base_dir/v${NODE_VERSION}/installation/bin/node" ]; then
-          echo "$base_dir/v${NODE_VERSION}/installation/bin/node"
-          return 0
-        fi
-        if [ -x "$base_dir/v${NODE_VERSION}/bin/node" ]; then
-          echo "$base_dir/v${NODE_VERSION}/bin/node"
-          return 0
-        fi
-        
-        # Find highest matching version without relying on sort -V (BSD sort doesn't support it)
-        best_match=""
-        best_version=""
-        for candidate in "$base_dir"/v${NODE_VERSION}*; do
-          [ -d "$candidate" ] || continue
-          version=$(basename "$candidate" | sed 's/^v//')
-          if [ -z "$best_version" ]; then
-            best_version="$version"
-            best_match="$candidate"
-            continue
-          fi
 
-          # Bash 3.2 compatible version comparison
-          # Split version strings manually without using arrays
-          v_major=$(echo "$version" | cut -d. -f1)
-          v_minor=$(echo "$version" | cut -d. -f2)
-          v_patch=$(echo "$version" | cut -d. -f3)
-          b_major=$(echo "$best_version" | cut -d. -f1)
-          b_minor=$(echo "$best_version" | cut -d. -f2)
-          b_patch=$(echo "$best_version" | cut -d. -f3)
-          
-          # Default to 0 if part is empty
-          v_major=${v_major:-0}
-          v_minor=${v_minor:-0}
-          v_patch=${v_patch:-0}
-          b_major=${b_major:-0}
-          b_minor=${b_minor:-0}
-          b_patch=${b_patch:-0}
-          
-          # Compare major, minor, patch in order
-          if [ "$v_major" -gt "$b_major" ]; then
-            best_version="$version"
-            best_match="$candidate"
-          elif [ "$v_major" -eq "$b_major" ]; then
-            if [ "$v_minor" -gt "$b_minor" ]; then
-              best_version="$version"
-              best_match="$candidate"
-            elif [ "$v_minor" -eq "$b_minor" ]; then
-              if [ "$v_patch" -gt "$b_patch" ]; then
-                best_version="$version"
-                best_match="$candidate"
-              fi
-            fi
-          fi
-        done
-
-        if [ -n "$best_match" ]; then
-          if [ -x "${best_match}/installation/bin/node" ]; then
-            echo "${best_match}/installation/bin/node"
-            return 0
-          fi
-          if [ -x "${best_match}/bin/node" ]; then
-            echo "${best_match}/bin/node"
-            return 0
-          fi
-        fi
-      fi
-    done
+  # mise is the project toolchain: prefer its shims, then the versioned install
+  # (installs/node/<major>/bin — the major dir is a symlink mise maintains).
+  if [ -x "$HOME/.local/share/mise/shims/node" ]; then
+    echo "$HOME/.local/share/mise/shims/node"
+    return 0
   fi
-  
+  if [ -n "$NODE_VERSION" ] && [ -x "$HOME/.local/share/mise/installs/node/${NODE_VERSION}/bin/node" ]; then
+    echo "$HOME/.local/share/mise/installs/node/${NODE_VERSION}/bin/node"
+    return 0
+  fi
+
   # Try common locations without version
   for node_path in \
     "$HOME/.asdf/shims/node" \
