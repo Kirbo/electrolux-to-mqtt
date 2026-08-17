@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:latest
 
-# Define build argument for Node version (passed from docker-compose)
-ARG NODE_VERSION=24
+# Node version build-arg — REQUIRED, no default. Compose passes it; mise exports
+# it from mise.toml [vars] node_major. Build fails loudly if unset.
+ARG NODE_VERSION
+ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine
 
 # Use official Node image
-FROM node:${NODE_VERSION}-alpine
+FROM ${NODE_IMAGE}
 
 # Set development environment
 ENV NODE_ENV=development

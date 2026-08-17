@@ -336,8 +336,9 @@ cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 # Modify as needed
 code docker/docker-compose.local.yml
 
-# Run the stack (automatically uses Node version from .nvmrc)
-NODE_VERSION=$(cat .nvmrc) docker compose -f docker/docker-compose.local.yml down ; NODE_VERSION=$(cat .nvmrc) docker compose -f docker/docker-compose.local.yml up --build
+# Run the stack — NODE_VERSION comes from mise ([env] in mise.toml); without
+# mise, export NODE_VERSION=<major> yourself — the build fails loudly when unset
+docker compose -f docker/docker-compose.local.yml down ; docker compose -f docker/docker-compose.local.yml up --build
 
 # Or if you have pnpm installed:
 pnpm dev:docker

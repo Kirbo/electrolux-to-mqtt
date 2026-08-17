@@ -277,7 +277,7 @@ deploy telemetry-backend:
     - *ssh_deploy
   script:
     - *deploy_backend_env
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(cat .nvmrc) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
 
 # After a bridge release (new tag + GitLab release), regenerate the badges in the *running*
 # backend so the version badges reflect the new release immediately instead of waiting up to

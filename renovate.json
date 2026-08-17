@@ -34,7 +34,7 @@
       "groupName": null
     },
     {
-      "description": "Node.js engine + @types/node grouped; manual merge to coordinate with Docker base + .nvmrc + package.json engines.",
+      "description": "Node.js engine + @types/node grouped; manual merge to coordinate with Docker base + mise.toml [vars] + package.json engines.",
       "matchPackageNames": ["node", "@types/node"],
       "groupName": "node runtime",
       "automerge": false,

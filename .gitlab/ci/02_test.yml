@@ -241,15 +241,8 @@ versions in sync:
     - if: "$CI_COMMIT_TAG == null"
       changes:
         - mise.toml
-        - .nvmrc
         - package.json
         - telemetry-backend/package.json
-        - docker/Dockerfile
-        - docker/Dockerfile.local
-        - docker/docker-compose.local.example.yml
-        - telemetry-backend/Dockerfile
-        - telemetry-backend/docker-compose.yml
-        - .gitlab/ci/01_init.yml
       when: on_success
     - when: never
   needs: []
@@ -260,7 +253,7 @@ versions in sync:
     - |
       if ! git diff --exit-code; then
         echo ""
-        echo "ERROR: derived version files are out of sync with mise.toml."
+        echo "ERROR: package.json engines are out of sync with mise.toml [vars] node_major."
         echo "Run 'mise run sync-versions' (or 'pnpm sync:versions') locally and commit the result."
         exit 1
       fi
@@ -285,6 +278,7 @@ docker build test:
         - docker/Dockerfile.local
         - telemetry-backend/Dockerfile
         - scripts/docker-build-test.sh
+        - mise.toml
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml

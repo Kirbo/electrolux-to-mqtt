@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.local
       args:
-        - NODE_VERSION=${NODE_VERSION:-24}
+        - NODE_VERSION=${NODE_VERSION:?NODE_VERSION is not set - activate mise (exports it from mise.toml) or export it manually}
     mem_limit: 128mb
     memswap_limit: 256mb
     restart: unless-stopped

@@ -26,5 +26,7 @@
 - [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — Node 24 Alpine on catalog page 2 of 54 (down from 102), newest-first; rechecked July 2026, revisit ~Nov 2026
 - [TypeScript 7 native compiler adopted](dep_typescript7_native.md) — 7.0.2 applied 2026-07-24; static Go binaries, Alpine-safe; re-verify checklist on future TS majors
 - [.dockerignore is an allowlist](dep_dockerignore_allowlist.md) — `*` then `!path`; anything that must reach an image needs an explicit `!entry` or it's silently absent; verify with a real build
+- [Dockerfile required-arg guard placement](dep_dockerfile_required_arg_guard.md) — `${VAR:?"msg"}` must be quoted AND live in an ARG line, never FROM (space tokenization); NODE_VERSION has no defaults anywhere
+- [vitest 4 vi.doMock race](dep_vitest_domock_race.md) — doMock + dynamic import flaky; use vi.hoisted mutable mock object + resetModules; loop single file 10x to catch
 - [pnpm override needs pnpm-workspace.yaml in every Dockerfile prod stage](dep_override_dockerfile_workspace.md) — else ERR_PNPM_LOCKFILE_CONFIG_MISMATCH; verify with docker build not just pnpm test
 - [vite vulns GHSA-fx2h-pf6j-xcff + GHSA-v6wh-96g9-6wx3](vuln_vite_GHSA-fx2h-pf6j-xcff.md) — override doesn't fix peer dep vulns; add vite as direct devDep in telemetry-backend instead

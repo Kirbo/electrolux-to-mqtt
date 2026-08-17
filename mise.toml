@@ -1,14 +1,29 @@
 # Pinned dev/CI tooling, managed by mise (https://mise.jdx.dev).
-# This is the SINGLE SOURCE OF TRUTH for Node.js major and Alpine version.
-# After editing node or ALPINE_VERSION, run `mise run sync-versions` (or
-# `pnpm sync:versions`) to propagate the values to all derived files
-# (.nvmrc, package.json engines, Dockerfiles, compose files, CI init).
-# The CI job "versions in sync" enforces this — it fails if derived files
-# drift from this file.
+#
+# SINGLE SOURCE OF TRUTH for Node.js major + Alpine version ([vars] below).
+# pnpm version lives in package.json "packageManager" (read by mise via the
+# idiomatic-version-file support enabled below, and by corepack).
+#
+# After editing [vars], run `mise run sync-versions` (or `pnpm sync:versions`)
+# to propagate node_major to package.json engines (root + telemetry-backend).
+# Everything else reads this file directly: mise itself ([tools]/[env]),
+# GitLab CI (.gitlab/ci/01_init.yml parses node_major + alpine_version), the
+# git hooks (.githooks/common.sh), and docker compose (via the exported
+# NODE_VERSION — Dockerfiles/compose have no defaults and fail loudly without it).
+# The CI job "versions in sync" enforces the engines sync.
+[vars]
+# Node.js LTS major.
+node_major = "24"
+# Alpine minor used in the prod Docker image tag (dhi.io/node:<node>-alpine<alpine>)
+# and the CI node:<node>-alpine<alpine> images.
+alpine_version = "3.24"
+
+[settings]
+# Let mise read pnpm from package.json "packageManager".
+idiomatic_version_file_enable_tools = ["pnpm"]
+
 [tools]
-# Node.js LTS major. Propagated to .nvmrc, package.json engines, Dockerfiles,
-# compose args, and .gitlab/ci/01_init.yml by scripts/sync-versions.sh.
-node = "24"
+node = "{{ vars.node_major }}"
 # sops MUST be built against age >= 1.3.0 to decrypt the project's NATIVE
 # post-quantum (ML-KEM-768 + X25519) age recipient (`age1pq1…`). Older sops and the
 # Rust `rage` impl CANNOT decrypt these files. Pin to the version you run locally
@@ -19,10 +34,11 @@ sops = "3.13.1"
 age = "1.3.1"
 
 [env]
-# Alpine minor version used in the prod Docker image tag (dhi.io/node:<NODE>-alpine<ALPINE>)
-# and in the CI NODE_VERSION export. Propagated by scripts/sync-versions.sh.
-ALPINE_VERSION = "3.24"
+# Exported so `docker compose` (and manual docker builds) pick the Node major up
+# automatically — compose/Dockerfiles require it and fail loudly when unset.
+NODE_VERSION = "{{ vars.node_major }}"
+ALPINE_VERSION = "{{ vars.alpine_version }}"
 
 [tasks.sync-versions]
-description = "Propagate node + Alpine versions from mise.toml to all derived files"
+description = "Propagate node_major from mise.toml [vars] to package.json engines"
 run = "bash scripts/sync-versions.sh"

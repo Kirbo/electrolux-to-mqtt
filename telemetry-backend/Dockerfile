@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:latest
 
-# Define build argument for Node version (passed from docker-compose)
-ARG NODE_VERSION=24
+# Node version build-arg — REQUIRED, no default. Compose passes it; mise exports
+# it from mise.toml [vars] node_major. Build fails loudly if unset.
+ARG NODE_VERSION
+ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine
 
 # ── Stage 1: build ──────────────────────────────────────────────────
 # Standard Alpine image — not the hardened bridge container.
-FROM node:${NODE_VERSION}-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
 
 WORKDIR /app
 
@@ -29,7 +31,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
     pnpm run build
 
 # ── Stage 2: production ────────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine
+FROM ${NODE_IMAGE}
 
 WORKDIR /app
 

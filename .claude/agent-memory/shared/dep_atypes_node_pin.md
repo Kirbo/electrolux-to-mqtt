@@ -5,10 +5,10 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 8e79790b-579f-46f5-90c1-46337a5c35c3
-  modified: 2026-07-29T12:55:58.477Z
+  modified: 2026-08-17T16:08:50.078Z
 ---
 
-`@types/node` must never lead the Node runtime major (`mise.toml [tools] node`, `engines.node`, `.nvmrc`). Types ahead of the runtime describe APIs that don't exist at execution time — it typechecks, then fails in prod.
+`@types/node` must never lead the Node runtime major (`mise.toml [vars] node_major`, `engines.node`). Types ahead of the runtime describe APIs that don't exist at execution time — it typechecks, then fails in prod.
 
 **A version range does NOT enforce this.** Verified 2026-07-29: with the spec set to an explicit `>=24.0.0 <25.0.0`, `pnpm update --latest` rewrote it to `^26.1.2`. `--latest` ignores the declared range by design; a range only constrains plain `pnpm update` / `pnpm install`, which `^24.x` already did.
 
@@ -19,6 +19,6 @@ Two mechanisms actually hold it:
 
 **Consequence:** `@types/node` shows as permanently "outdated" in `pnpm outdated` (24.x vs 26.x latest). That is the pin working — not a backlog item.
 
-**How to move it:** bump `mise.toml [tools] node`, run `pnpm sync:versions`. Verified end-to-end 2026-07-29 (24 → 26 → 24): `.nvmrc`, both `engines.node`, both `@types/node`, all three Dockerfiles, both compose defaults, the CI alpine literal, and both lockfiles all followed. CI job `versions in sync` re-runs the script and fails on a non-empty `git diff`, so drift cannot land. `updateConfig` does not enter the lockfile's `settings` block, so it carries no `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` risk — confirmed with a real prod image build; see [[dep_override_dockerfile_workspace]].
+**How to move it:** bump `mise.toml [vars] node_major`, run `pnpm sync:versions`. Since 2026-08-17 the script's scope shrank: it syncs both `engines.node` + both `@types/node` and re-resolves both lockfiles — nothing else is derived anymore (`.nvmrc` deleted; Dockerfiles/compose have no defaults and require `NODE_VERSION`; CI sed-parses `mise.toml [vars]` directly). An end-to-end 24 → 26 → 24 roundtrip was verified 2026-07-29 under the old design. CI job `versions in sync` re-runs the script and fails on a non-empty `git diff`, so drift cannot land. `updateConfig` does not enter the lockfile's `settings` block, so it carries no `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` risk — confirmed with a real prod image build; see [[dep_override_dockerfile_workspace]].
 
 Node 24 (Krypton) is the current LTS as of 2026-07-29; Alpine 3.24 is the newest 3.x.

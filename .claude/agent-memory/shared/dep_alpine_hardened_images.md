@@ -20,4 +20,4 @@ Tag format for prod: `24-alpine3.XX` (non-dev, non-fips, non-sfw).
 
 **Why:** catalog is paginated; Node 24 appears on page 2 as of June 2026.
 
-**How to apply:** When Alpine bumps, update `ARG NODE_VERSION=24-alpineX.XX` in `docker/Dockerfile` AND the `echo "NODE_VERSION=$(cat .nvmrc)-alpineX.XX"` line in `.gitlab/ci/01_init.yml`. Telemetry-backend uses standard node:alpine, not hardened images — no change needed there.
+**How to apply:** When Alpine bumps, update `mise.toml` `[vars] alpine_version` — CI (`.gitlab/ci/01_init.yml`) sed-parses it into NODE_VERSION, and `docker/Dockerfile` has no default (NODE_VERSION build-arg comes from CI/mise). Telemetry-backend uses standard node:alpine, not hardened images — no change needed there.

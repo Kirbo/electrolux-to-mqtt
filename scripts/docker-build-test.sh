@@ -21,7 +21,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-NODE_MAJOR="$(cat .nvmrc)"
+# Node major + Alpine from mise.toml [vars] — the single source of truth.
+NODE_MAJOR="$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml | head -1)"
+ALPINE="$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' mise.toml | head -1)"
+if [[ -z "${NODE_MAJOR}" || -z "${ALPINE}" ]]; then
+  echo "ERROR: could not parse node_major/alpine_version from mise.toml" >&2
+  exit 1
+fi
 TAG_PREFIX="e2m-buildtest"
 FAILED=0
 BUILT_TAGS=()
@@ -75,7 +81,7 @@ build_prod() {
   # most developer machines do not. Rather than skip the most important image, the
   # FROM lines are rewritten to stock node images so the COPY/install/build logic
   # is still exercised. The substitution is announced — it is not a full check.
-  if ! docker manifest inspect "dhi.io/node:${NODE_MAJOR}-alpine$(grep -oE '[0-9]+\.[0-9]+' <<<"$(grep ALPINE_VERSION mise.toml)")" >/dev/null 2>&1; then
+  if ! docker manifest inspect "dhi.io/node:${NODE_MAJOR}-alpine${ALPINE}" >/dev/null 2>&1; then
     echo "  NOTE: dhi.io unreachable (no entitlement) — substituting stock node:${NODE_MAJOR}-alpine."
     echo "        Context/COPY/build logic is still verified; the hardened base is not."
     sed -E "s|^FROM \\\$\{NODE_IMAGE\}-dev|FROM node:${NODE_MAJOR}-alpine|; s|^FROM \\\$\{NODE_IMAGE\}|FROM node:${NODE_MAJOR}-alpine|" \
@@ -83,7 +89,10 @@ build_prod() {
     dockerfile=".docker-build-test.Dockerfile"
   fi
 
-  if ! docker build --network host -f "${dockerfile}" -t "${tag}" . >/tmp/e2m-bt-prod.log 2>&1; then
+  # NODE_VERSION is required by the Dockerfile (no default); in the substituted
+  # stock-image path the arg is simply unused.
+  if ! docker build --network host -f "${dockerfile}" \
+    --build-arg "NODE_VERSION=${NODE_MAJOR}-alpine${ALPINE}" -t "${tag}" . >/tmp/e2m-bt-prod.log 2>&1; then
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-prod.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")

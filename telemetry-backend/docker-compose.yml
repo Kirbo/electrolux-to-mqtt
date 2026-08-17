@@ -8,7 +8,7 @@ services:
       # can too — it is specific to the BuildKit build network. Do not remove.
       network: host
       args:
-        - NODE_VERSION=${NODE_VERSION:-24}
+        - NODE_VERSION=${NODE_VERSION:?NODE_VERSION is not set - activate mise (exports it from mise.toml) or export it manually}
     container_name: telemetry-backend
     restart: unless-stopped
     # Published on the host so the reverse proxy reaches it. Port 3001 matches the OLD

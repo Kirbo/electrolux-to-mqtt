@@ -11,7 +11,7 @@ overrides:
 # so the dependency is ignored by the updater instead. This package has its own
 # lockfile and is not a workspace member, so it needs its own copy of this stanza.
 # `scripts/sync-versions.sh` (at the repo root) is the single writer; it derives
-# the range from `mise.toml [tools] node` and rewrites BOTH package.json files.
+# the range from `mise.toml [vars] node_major` and rewrites BOTH package.json files.
 updateConfig:
   ignoreDependencies:
     - "@types/node"

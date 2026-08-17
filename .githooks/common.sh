@@ -65,11 +65,11 @@ find_node() {
     return 0
   fi
   
-  # Read node version from .nvmrc if it exists
+  # Read node major from mise.toml [vars] node_major if it exists
   NODE_VERSION=""
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/.nvmrc" ]; then
-    NODE_VERSION=$(tr -d '\n%' < "$REPO_ROOT/.nvmrc" | sed 's/^v//')
+  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/mise.toml" ]; then
+    NODE_VERSION=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' "$REPO_ROOT/mise.toml" | head -1)
   fi
   
   # Try common node manager locations with version matching

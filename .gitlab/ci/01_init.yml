@@ -28,7 +28,17 @@ initialise variables:
       dotenv: variables.env
   script:
     - touch variables.env
-    - echo "NODE_VERSION=$(cat .nvmrc)-alpine3.24" >> variables.env
+    # Node major + Alpine come from mise.toml [vars] — the single source of truth.
+    - NODE_MAJOR=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml)
+    - ALPINE=$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' mise.toml)
+    - test -n "${NODE_MAJOR}" || { echo "ERROR could not parse node_major from mise.toml"; exit 1; }
+    - test -n "${ALPINE}" || { echo "ERROR could not parse alpine_version from mise.toml"; exit 1; }
+    # NODE_VERSION stays the combined image tag — both stock node (node:24-alpine3.24)
+    # and dhi.io/node use the <major>-alpine<ver> suffix convention. The pieces are
+    # exported separately for jobs that need just one of them.
+    - echo "NODE_MAJOR=${NODE_MAJOR}" >> variables.env
+    - echo "ALPINE_VERSION=${ALPINE}" >> variables.env
+    - echo "NODE_VERSION=${NODE_MAJOR}-alpine${ALPINE}" >> variables.env
 
 bump version:
   stage: init
@@ -152,8 +162,8 @@ install dependencies:
     - corepack enable
     - corepack install
     - pnpm config set store-dir .pnpm-store
-    - echo "Node version from .nvmrc:"
-    - echo "$(cat .nvmrc)"
+    - echo "Node major from mise.toml [vars]:"
+    - sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml
     - node --version
     - npm --version
     - pnpm --version

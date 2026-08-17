@@ -3,6 +3,7 @@
 ### Build and publish the Docker image
 # docker buildx build \
 #   --platform linux/arm64,linux/amd64 \
+#   --build-arg NODE_VERSION=<major>-alpine<alpine> \  # from mise.toml [vars], REQUIRED
 #   --build-arg VERSION=$(git describe --tags --always) \
 #   --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
 #   --build-arg VCS_REF=$(git rev-parse --short HEAD) \
@@ -14,8 +15,10 @@
 # Check the base images from: https://hub.docker.com/hardened-images/catalog/dhi/node/images
 
 # Define build arguments
-ARG NODE_VERSION=24-alpine3.24
-ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION}
+# REQUIRED, no default — CI passes <major>-alpine<alpine> (e.g. 24-alpine3.24)
+# from mise.toml [vars]; build fails loudly if unset.
+ARG NODE_VERSION
+ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}
 ARG VERSION=development
 ARG BUILD_DATE
 ARG VCS_REF

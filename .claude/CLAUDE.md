@@ -18,7 +18,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
 | `pnpm docker:test [prod\|local\|backend\|all]` | Build each image + smoke-run it offline; catches files missing from the build context. Substitutes a stock base when `dhi.io` is unreachable (CI has the entitlement, so it tests the real hardened image) |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
-| `pnpm sync:versions` | Propagate `mise.toml` Node/Alpine to all derived files, incl. `@types/node` (also: `mise run sync-versions`) |
+| `pnpm sync:versions` | Sync `mise.toml` `[vars] node_major` to both `package.json` engines + `@types/node`, re-resolving lockfiles (also: `mise run sync-versions`) |
 
 Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter: `pnpm vitest run -t "pattern"`.
 
@@ -77,7 +77,7 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 - Docs (`*.md`), examples, config files must sync with code.
 - **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in the `/engineer` skill (§ Config).
 - Follow the file checklists in the `/engineer` skill for code changes.
-- Node/Alpine/sops/age versions are pinned in `mise.toml` (single source); run `mise run sync-versions` (or `pnpm sync:versions`) to propagate to `.nvmrc`, `engines`, `@types/node` (both `package.json`), Dockerfiles, compose files, and CI; CI job `versions in sync` guards drift. Bumping the Node major in `mise.toml` + running the sync updates every derived file **and** re-resolves both lockfiles — never hand-edit a derived value.
+- Version sources: Node major + Alpine in `mise.toml` `[vars]` (single source of truth), pnpm in `package.json` `packageManager` (mise + corepack both read it), sops/age in `mise.toml` `[tools]`. After editing `[vars]`, run `mise run sync-versions` (or `pnpm sync:versions`) to sync `engines` + `@types/node` in both `package.json` files (re-resolves both lockfiles when the range moves) — CI parses `mise.toml` directly and Dockerfiles/compose require `NODE_VERSION` explicitly (no defaults, loud failure); CI job `versions in sync` guards drift. Never hand-edit a derived value.
 - `@types/node` must never lead the Node runtime major. A version range cannot enforce that (`pnpm update --latest` rewrites the spec whatever it declares), so it is listed under `updateConfig.ignoreDependencies` in **both** `pnpm-workspace.yaml` files and `sync-versions.sh` is its only writer. Never run `pnpm update --latest @types/node` — naming a package explicitly overrides the ignore list.
 - When `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.

@@ -36,16 +36,16 @@ Please be respectful and considerate in all interactions. We're here to build gr
 
 ### Prerequisites
 
-- **Node.js**: Version specified in `.nvmrc` (use `fnm use` or `nvm use`). The canonical source is `mise.toml` `[tools] node` — `.nvmrc` is generated from it via `pnpm sync:versions`.
+- **Node.js**: Major pinned in `mise.toml` `[vars] node_major` — the canonical source (`mise install` provisions it; without mise, install the same major with your version manager of choice). After editing it, run `pnpm sync:versions` to sync `package.json` engines.
 - **pnpm**: Correct version is specified in `package.json` `packageManager` field
 - **Git**: For version control
-- **Tool versions (mise)**: Node.js, Alpine, sops, and age are all pinned in `mise.toml` at the repo root. After editing those values run `pnpm sync:versions` to propagate to all derived files — including the `@types/node` range in both `package.json` files, which must always track the Node major rather than the newest release line. A Node major bump therefore also moves `@types/node` and re-resolves both lockfiles in the same run. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+- **Tool versions (mise)**: Node.js, Alpine, sops, and age are all pinned in `mise.toml` at the repo root. After editing `[vars]` run `pnpm sync:versions` — it syncs `package.json` engines and the `@types/node` range in both packages (which must always track the Node major rather than the newest release line), re-resolving both lockfiles when the range moves. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
 
 ### Installation
 
 ```bash
-# Use correct Node.js version
-fnm use  # or: nvm use
+# Provision the toolchain (Node, sops, age — versions from mise.toml)
+mise install
 
 # Enable corepack (ships with Node.js 24 — reads packageManager field from package.json)
 corepack enable
