@@ -18,6 +18,7 @@ You run this yourself, in-loop, at the current session model. No subagent spawni
 ## Workflow (in order)
 
 1. **Survey state**
+   - Freshness: the SessionStart hook already fetch-checked origin (6h throttle — see CLAUDE.md § Commits). If it warned that the branch is behind or unverified, sync before continuing; a behind branch means the survey reads a stale tree and every conclusion after it is suspect. No warning → proceed, no manual fetch needed.
    - `pnpm deps:check` in root + `cd telemetry-backend && pnpm deps:check`
    - Check `package.json` pins, `pnpm-lock.yaml`, overrides.
 2. **Plan the update batch**

@@ -107,6 +107,8 @@ Run after every change. **Verification must pass before commit** — never commi
 
 ## Commits
 
+Origin freshness is automated — do NOT fetch manually before every task. A SessionStart hook (`.claude/hooks/check-origin-freshness.sh`, throttled to one fetch per 6h via a marker in `.git/`) injects a warning into context when the branch is behind, and a PreToolUse gate (`require-branch-sync.sh`) hard-blocks `git commit` on a behind branch. If the session-start warning fired (branch behind or fetch failed), tell the user and sync before starting commit-bound work — not after. Only fetch manually when a warning fired, the commit gate asks, or the session has clearly spanned days.
+
 Two triggers, both need user initiation:
 1. User explicitly asks ("commit", "commit this", "make a commit") → run verification (§ Verification) if any code changed, then generate message + commit.
 2. You think it's a good time to commit → ask, include the proposed message in the question, wait for explicit approval before executing.
