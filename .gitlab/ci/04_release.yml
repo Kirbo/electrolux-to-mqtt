@@ -27,28 +27,9 @@ build and deploy docker images:
     - job: generate changelog
       artifacts: true
   script:
-    - source build.env
-    - |
-      # :latest and :next are now SEPARATE images with different UPDATE_CHANNEL build args.
-      # :latest → UPDATE_CHANNEL=stable (version-checker defaults to stable channel)
-      # :next   → UPDATE_CHANNEL=beta   (version-checker defaults to beta channel, built by a parallel job)
-      # This ensures the correct channel is always baked in regardless of the running version number —
-      # a :next image carrying a promoted-stable version (e.g. 2026.6.4, no bN) would previously
-      # derive 'stable' from the version string; now it always gets 'beta' from the image default.
-      docker buildx build \
-        --builder "${BUILDER_NAME}" \
-        --build-arg NODE_VERSION=${NODE_VERSION} \
-        --build-arg VERSION=${VERSION} \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
-        --build-arg UPDATE_CHANNEL=stable \
-        --push \
-        --provenance=true \
-        --sbom=true \
-        --platform linux/amd64,linux/arm64 \
-        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION} \
-        -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:latest \
-        -f docker/Dockerfile .
+    # Pushes :${VERSION} + :latest with UPDATE_CHANNEL=stable baked in; tag/channel
+    # rationale lives in scripts/docker-buildx-release.sh (sources build.env itself).
+    - sh scripts/docker-buildx-release.sh stable
 
 create gitlab release:
   stage: release
@@ -82,32 +63,8 @@ create gitlab release:
   before_script:
     - apk add --no-cache curl jq
   script:
-    - source build.env
-    - TAG="v${VERSION}"
-    - |
-      # Create the stable release (and its tag, from CI_COMMIT_SHA) via the GitLab
-      # Releases API — no go-semantic-release. The description is the folded,
-      # pre-release-free changelog produced by the generate-changelog job.
-      HTTP_STATUS=$(curl --silent --output /tmp/release_response.json --write-out "%{http_code}" \
-        --request POST \
-        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-        --header "Content-Type: application/json" \
-        --data "$(jq -n \
-          --arg name "${TAG}" \
-          --arg tag_name "${TAG}" \
-          --arg ref "${CI_COMMIT_SHA}" \
-          --rawfile description UNRELEASED-CHANGELOG.md \
-          '{name: $name, tag_name: $tag_name, ref: $ref, description: $description}')" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases")
-      if [ "${HTTP_STATUS}" = "201" ]; then
-        echo "Release ${TAG} created"
-      elif [ "${HTTP_STATUS}" = "409" ]; then
-        echo "Release ${TAG} already exists, skipping"
-      else
-        echo "Failed to create release (HTTP ${HTTP_STATUS}):"
-        cat /tmp/release_response.json
-        exit 1
-      fi
+    # Release + tag via the GitLab Releases API; shared with the prerelease job.
+    - sh scripts/create-gitlab-release.sh
 
 build and deploy beta docker images:
   extends: .docker_build_base
@@ -136,32 +93,9 @@ build and deploy beta docker images:
     - job: generate changelog
       artifacts: true
   script:
-    - source build.env
-    - |
-      # The :next (beta-channel) image, built with UPDATE_CHANNEL=beta so beta-channel
-      # followers keep receiving beta notifications even when :next holds a promoted-stable
-      # version. This single job serves BOTH branches:
-      #   next branch → tag :${VERSION} (immutable beta pin) AND :next
-      #   main branch → tag :next ONLY; the :${VERSION} and :latest tags belong to the
-      #                 separate stable-channel "build and deploy docker images" job, so we
-      #                 must not clobber :${VERSION} with this beta-channel digest.
-      TAGS="-t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:next"
-      if [ "${CI_COMMIT_BRANCH}" = "next" ]; then
-        TAGS="${TAGS} -t ${DOCKER_REGISTRY}/${DOCKERHUB_REPOSITORY}:${VERSION}"
-      fi
-      docker buildx build \
-        --builder "${BUILDER_NAME}" \
-        --build-arg NODE_VERSION=${NODE_VERSION} \
-        --build-arg VERSION=${VERSION} \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        --build-arg VCS_REF=${CI_COMMIT_SHORT_SHA} \
-        --build-arg UPDATE_CHANNEL=beta \
-        --push \
-        --provenance=true \
-        --sbom=true \
-        --platform linux/amd64,linux/arm64 \
-        ${TAGS} \
-        -f docker/Dockerfile .
+    # Pushes :next (+ :${VERSION} on the next branch) with UPDATE_CHANNEL=beta baked
+    # in; tag/channel rationale lives in scripts/docker-buildx-release.sh.
+    - sh scripts/docker-buildx-release.sh beta
 
 create gitlab prerelease:
   stage: release
@@ -193,29 +127,8 @@ create gitlab prerelease:
   before_script:
     - apk add --no-cache curl jq
   script:
-    - source build.env
-    - TAG="v${VERSION}"
-    - |
-      HTTP_STATUS=$(curl --silent --output /tmp/release_response.json --write-out "%{http_code}" \
-        --request POST \
-        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-        --header "Content-Type: application/json" \
-        --data "$(jq -n \
-          --arg name "${TAG}" \
-          --arg tag_name "${TAG}" \
-          --arg ref "${CI_COMMIT_SHA}" \
-          --rawfile description UNRELEASED-CHANGELOG.md \
-          '{name: $name, tag_name: $tag_name, ref: $ref, description: $description}')" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases")
-      if [ "${HTTP_STATUS}" = "201" ]; then
-        echo "Release ${TAG} created"
-      elif [ "${HTTP_STATUS}" = "409" ]; then
-        echo "Release ${TAG} already exists, skipping"
-      else
-        echo "Failed to create release (HTTP ${HTTP_STATUS}):"
-        cat /tmp/release_response.json
-        exit 1
-      fi
+    # Same API call as "create gitlab release" — one shared script.
+    - sh scripts/create-gitlab-release.sh
 
 .ssh_deploy: &ssh_deploy
   - apk add --no-cache openssh-client curl bash

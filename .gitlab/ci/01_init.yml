@@ -60,43 +60,9 @@ bump version:
     # existing version and overwrite its immutable Docker tag.
     - git fetch --tags --force
   script:
-    - |
-      # CalVer, Home Assistant style: stable "YYYY.M.MICRO", beta "YYYY.M.MICRObN".
-      # MICRO is 0-based per month, betas are 1-based. The month is non-padded;
-      # BusyBox `date` has no %-m, so strip a single leading zero explicitly.
-      YEAR=$(date -u +%Y)
-      MONTH=$(date -u +%m); MONTH=${MONTH#0}
-      ALL_TAGS=$(git tag --list 'v*')
-      # Next stable base for this year.month: (highest stable micro)+1, else .0.
-      BASE=$(printf '%s\n' "$ALL_TAGS" | sh scripts/compute-calver-base.sh "$YEAR" "$MONTH")
-      echo "[bump-version] year=${YEAR} month=${MONTH} stable_base=${BASE}"
-      if [ "$CI_COMMIT_BRANCH" = "next" ]; then
-        # Beta track: append bN ((highest beta for this base)+1, else b1).
-        VERSION=$(printf '%s\n' "$ALL_TAGS" | sh scripts/compute-calver-beta.sh "$BASE")
-        # Incremental release notes: commits since the nearest tag (last beta/stable).
-        PREV=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
-        # Safeguard: the next branch must always carry a bN pre-release suffix.
-        case "$VERSION" in
-          *b[0-9]*) ;;
-          *) echo "[bump-version] ERROR: '${VERSION}' has no bN suffix on next branch"; exit 1 ;;
-        esac
-      else
-        # Stable track: the bare CalVer base.
-        VERSION=$BASE
-        # Release notes: commits since the last STABLE tag (beta/rc commits fold in).
-        PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*b[0-9]*' --exclude '*-rc.*' HEAD 2>/dev/null || true)
-      fi
-      # First release ever (no prior tag): fall back to the repo root commit.
-      if [ -z "$PREV" ]; then
-        PREV=$(git rev-list --max-parents=0 HEAD | tail -n 1)
-      fi
-      echo "[bump-version] version=${VERSION} range=${PREV}..HEAD"
-      printf '%s\n' "$VERSION" > .version-unreleased
-      {
-        printf 'VERSION=%s\n' "$VERSION"
-        printf 'CHANGELOG_RANGE=%s..HEAD\n' "$PREV"
-      } > build.env
-      printf 'sonar.projectVersion=%s\n' "$VERSION" >> sonar-project.properties
+    # CalVer computation lives in scripts/compute-version.sh; writes
+    # .version-unreleased, build.env, and appends sonar.projectVersion.
+    - sh scripts/compute-version.sh
     - cat build.env
 
 generate release notes:
@@ -121,24 +87,9 @@ generate release notes:
       - UNRELEASED-CHANGELOG.md
     expire_in: never
   script:
-    # VERSION + CHANGELOG_RANGE (e.g. "v1.19.0..HEAD") come from the bump job.
-    - . ./build.env
-    - |
-      set -e
-      # git-cliff produces the per-release notes in the go-semantic-release default
-      # format (see cliff.toml). It replaces go-semantic-release's GENERATOR only —
-      # combine-changelogs still AGGREGATES these into the full CHANGELOG.md.
-      # On main, pre-release tags inside the range (old -rc.N and new bN) fold into
-      # the stable section. git-cliff writes to a temp file rather than piping into
-      # sed, so a git-cliff failure fails the job instead of being masked by sed's
-      # exit code (dash has no reliable pipefail).
-      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
-        git-cliff --config cliff.toml --ignore-tags '(-rc\.[0-9]+|b[0-9]+)$' --tag "v${VERSION}" "${CHANGELOG_RANGE}" > notes.tmp
-      else
-        git-cliff --config cliff.toml --tag "v${VERSION}" "${CHANGELOG_RANGE}" > notes.tmp
-      fi
-      sed '1{/^$/d;}' notes.tmp > UNRELEASED-CHANGELOG.md
-      rm -f notes.tmp
+    # VERSION + CHANGELOG_RANGE come from build.env (bump version artifact);
+    # the git-cliff invocation lives in scripts/generate-release-notes.sh.
+    - sh scripts/generate-release-notes.sh
     - echo "===== UNRELEASED-CHANGELOG.md =====" && cat UNRELEASED-CHANGELOG.md
 
 install dependencies:
