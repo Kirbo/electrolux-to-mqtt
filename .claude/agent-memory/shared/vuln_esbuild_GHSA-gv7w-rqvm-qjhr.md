@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 8e79790b-579f-46f5-90c1-46337a5c35c3
-  modified: 2026-07-29T12:50:26.327Z
+  modified: 2026-08-29T17:57:19.360Z
 ---
 
 esbuild versions >=0.17.0 <0.28.1 carry two vulns: GHSA-gv7w-rqvm-qjhr (high, CVSS 8.1 — missing binary integrity verification enabling RCE via NPM_CONFIG_REGISTRY) and GHSA-g7r4-m6w7-qqqr (low, CVSS 2.5 — arbitrary file read on Windows dev server).
@@ -19,3 +19,5 @@ The vuln is transitive dev-only (via vite→esbuild and tsx→esbuild). Remove t
 **How to apply:** Check if vite/tsx/vitest have bumped their esbuild floor to >=0.28.1 before removing the override. Run `pnpm why esbuild` to confirm resolved version.
 
 Re-checked 2026-07-29 (tsx 4.23.1): tsx still declares `esbuild: ~0.28.0`, whose floor is the vulnerable 0.28.0, so the override remains load-bearing in both files. Resolves to esbuild@0.28.1. Do not remove.
+
+Re-checked 2026-08-29 (vite 8.2.2, tsx 4.23.12): both still declare `esbuild: ~0.28.0` — floor unchanged, override stays. Resolves to esbuild@0.28.2.
