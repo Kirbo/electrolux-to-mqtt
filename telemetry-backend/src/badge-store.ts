@@ -98,23 +98,26 @@ export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
   const file = (name: string): string => path.join(outputDir, name)
 
   /**
-   * Load the persisted peak history once. Any failure (unreadable, corrupt, foreign file)
-   * falls back to an empty history — documented fallback: peaks rebuild from now on rather
-   * than blocking the telemetry cycle.
+   * Load the persisted peak history once. A missing or corrupt file starts a fresh history
+   * (nothing worth preserving). A *failed read* (EACCES, EIO, …) is different: the file may
+   * hold a year of samples, so it must never be overwritten from that state — the cycle
+   * skips peak recording, the error is logged, and the read is retried next cycle.
+   * Documented fallback: peaks are absent for the cycle rather than blocking the badge.
    */
-  async function loadPeakHistory(): Promise<PeakHistory> {
+  async function loadPeakHistory(): Promise<PeakHistory | null> {
     if (peakHistory !== null) return peakHistory
-    const peaksPath = file(PEAKS_FILE)
-    let loaded: PeakHistory | null = null
+    let raw: string | null
     try {
-      const raw = await readFile(peaksPath)
-      if (raw !== null) {
-        loaded = parsePeakHistory(raw)
-        if (loaded === null)
-          console.warn(`[telemetry-backend] Ignoring corrupt ${PEAKS_FILE} — starting a fresh peak history`)
-      }
+      raw = await readFile(file(PEAKS_FILE))
     } catch (err) {
-      console.error(`[telemetry-backend] Could not read ${PEAKS_FILE} — starting a fresh peak history:`, err)
+      console.error(`[telemetry-backend] Could not read ${PEAKS_FILE} — skipping peak recording this cycle:`, err)
+      return null
+    }
+    let loaded: PeakHistory | null = null
+    if (raw !== null) {
+      loaded = parsePeakHistory(raw)
+      if (loaded === null)
+        console.warn(`[telemetry-backend] Ignoring corrupt ${PEAKS_FILE} — starting a fresh peak history`)
     }
     peakHistory = loaded ?? createEmptyPeakHistory()
     return peakHistory
@@ -124,16 +127,19 @@ export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
     try {
       const result = await aggregateTelemetry(ch, appId)
       const nowMs = now()
-      const history = recordSample(await loadPeakHistory(), result.total, nowMs)
-      const peaks = computePeaks(history, nowMs)
+      const loaded = await loadPeakHistory()
+      const history = loaded === null ? null : recordSample(loaded, result.total, nowMs)
+      const peaks = computePeaks(history ?? createEmptyPeakHistory(), nowMs)
       const json = JSON.stringify({ ...result, peaks })
       await writeFile(file('users.svg'), buildBadgeSvg(result.total))
       for (const { key } of PEAK_WINDOWS) {
         await writeFile(file(`peak-${key}.svg`), buildPeakBadgeSvg(key, peaks[key]))
       }
       await writeFile(file('telemetry.json'), json)
-      await writeFile(file(PEAKS_FILE), JSON.stringify(history))
-      peakHistory = history
+      if (history !== null) {
+        await writeFile(file(PEAKS_FILE), JSON.stringify(history))
+        peakHistory = history
+      }
       telemetryJson = json
       console.log(`[telemetry-backend] Telemetry updated: ${result.total} users`)
       return true

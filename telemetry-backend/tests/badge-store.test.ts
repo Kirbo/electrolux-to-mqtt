@@ -271,18 +271,29 @@ describe('createBadgeStore', () => {
       warn.mockRestore()
     })
 
-    it('starts fresh when reading the history throws', async () => {
+    it('skips the peak history for the cycle and retries next time when reading it throws', async () => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {})
       const { writeFile, files } = recordingWriter()
-      const store = makeStore({
-        ch: buildFakeCh(7),
-        releasesFetcher: noReleases,
-        writeFile,
-        readFile: () => Promise.reject(new Error('EACCES')),
+      const onDisk = JSON.stringify({ version: 1, buckets: [{ hour: T0 - HOUR, max: 50 }] })
+      let fail = true
+      const readFile = vi.fn<FileReader>(async () => {
+        if (fail) throw new Error('EACCES')
+        return onDisk
       })
+      const store = makeStore({ ch: buildFakeCh(7), releasesFetcher: noReleases, writeFile, readFile })
+
       await store.regenerate()
-      expect(peaksOf(files.get(telemetryFile))['365d']?.value).toBe(7)
+      // Badge + JSON still refresh, but the history on disk is never overwritten from a failed read.
+      expect(files.get(usersFile)).toContain('7')
+      expect(peaksOf(files.get(telemetryFile))['365d']).toBeNull()
+      expect(files.has(peaksFile)).toBe(false)
       expect(error).toHaveBeenCalledWith(expect.stringContaining('peaks-history.json'), expect.any(Error))
+
+      fail = false
+      await store.regenerate()
+      expect(readFile).toHaveBeenCalledTimes(2)
+      expect(peaksOf(files.get(telemetryFile))['24h']).toEqual({ value: 50, at: new Date(T0 - HOUR).toISOString() })
+      expect(files.has(peaksFile)).toBe(true)
       error.mockRestore()
     })
 
@@ -313,6 +324,28 @@ describe('createBadgeStore', () => {
         expect(peaksOf(json)['24h']).toEqual({ value: 30, at: new Date(T0).toISOString() })
       } finally {
         await fsp.rm(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('surfaces a non-ENOENT read error from the default reader instead of treating it as missing', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'e2m-badge-'))
+      try {
+        await fsp.mkdir(path.join(dir, 'peaks-history.json')) // a directory → EISDIR, not ENOENT
+        const store = createBadgeStore({
+          ch: buildFakeCh(3),
+          appId: 'test-app',
+          releasesApiUrl: 'https://example.com',
+          outputDir: dir,
+          releasesFetcher: noReleases,
+          // no `now` → default clock
+        })
+        await store.regenerate()
+        expect(error).toHaveBeenCalledWith(expect.stringContaining('peaks-history.json'), expect.any(Error))
+        expect(peaksOf(await fsp.readFile(path.join(dir, 'telemetry.json'), 'utf8'))['24h']).toBeNull()
+      } finally {
+        await fsp.rm(dir, { recursive: true, force: true })
+        error.mockRestore()
       }
     })
   })
