@@ -28,3 +28,6 @@ README.dockerhub.md
 *.bak
 # scripts/mr-description.sh documented usage writes MR.md
 MR.md
+
+# scripts/osv-scan.sh splits pnpm 12 multi-document lockfiles here while scanning
+.osv-scan-split/

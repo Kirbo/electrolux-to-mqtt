@@ -2,7 +2,7 @@
 #
 # SINGLE SOURCE OF TRUTH for Node.js major + Alpine version ([vars] below).
 # pnpm version lives in package.json "packageManager" (read by mise via the
-# idiomatic-version-file support enabled below, and by corepack).
+# exec template in [tools] below, and by corepack).
 #
 # After editing [vars], run `mise run sync-versions` (or `pnpm sync:versions`)
 # to propagate node_major to package.json engines (root + telemetry-backend).
@@ -18,12 +18,15 @@ node_major = "24"
 # and the CI node:<node>-alpine<alpine> images.
 alpine_version = "3.24"
 
-[settings]
-# Let mise read pnpm from package.json "packageManager".
-idiomatic_version_file_enable_tools = ["pnpm"]
-
 [tools]
 node = "{{ vars.node_major }}"
+# pnpm, version read from package.json "packageManager" (single source of truth —
+# bump it with `corepack use pnpm@latest`). Pinned to the aqua backend (GitHub-release
+# binary) on purpose: pnpm 12+ ships a native binary fetched by an npm postinstall
+# hook, and mise's idiomatic package.json support hardcodes the npm: backend, which
+# installs with --ignore-scripts and leaves a shebang-less placeholder Node cannot
+# run (verified broken on mise 2026.9.1 and 2026.9.8).
+"aqua:pnpm/pnpm" = """{{ exec(command="grep -m1 -o 'pnpm@[0-9.]*' " ~ config_root ~ "/package.json | cut -d@ -f2") }}"""
 # sops MUST be built against age >= 1.3.0 to decrypt the project's NATIVE
 # post-quantum (ML-KEM-768 + X25519) age recipient (`age1pq1…`). Older sops and the
 # Rust `rage` impl CANNOT decrypt these files. Pin to the version you run locally
