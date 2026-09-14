@@ -119,6 +119,12 @@ describe('compareVersionsDescending', () => {
   it('puts newer beta before older beta of same release', () => {
     expect(compareVersionsDescending('2026.6.0b2', '2026.6.0b1')).toBeLessThan(0)
   })
+
+  it('falls back to lexicographic order when pre-release numbers tie', () => {
+    expect(compareVersionsDescending('1.0.0-rc.1a', '1.0.0-rc.1b')).toBeGreaterThan(0)
+    expect(compareVersionsDescending('1.0.0-rc.1b', '1.0.0-rc.1a')).toBeLessThan(0)
+    expect(compareVersionsDescending('1.0.0-rc.1', '1.0.0-rc.1')).toBe(0)
+  })
 })
 
 describe('isPreReleaseVersion', () => {

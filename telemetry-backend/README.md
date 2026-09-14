@@ -127,7 +127,7 @@ cd telemetry-backend
 pnpm install
 pnpm dev          # tsx watch src/index.ts (requires .env with CH creds)
 pnpm typecheck
-pnpm test
+pnpm test         # Vitest + coverage (thresholds in vitest.config.ts are enforced)
 ```
 
 ## Docker
