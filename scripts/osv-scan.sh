@@ -3,6 +3,9 @@
 # below is a single tool invocation with no pipes, so pipefail isn't needed.
 set -eu
 
+# Lockfile paths below are repo-relative; make the script callable from anywhere.
+cd "$(dirname "$0")/.."
+
 HELP="Usage: $0 [root|backend|all]
 
   root     Scan pnpm-lock.yaml (main package)
