@@ -32,6 +32,7 @@ You run this yourself, in-loop, at the current session model. No subagent spawni
 
      It will therefore show as permanently "outdated" in `pnpm outdated` (e.g. 24.x vs 26.x latest). That is the pin working, not a backlog item. Verify with `git diff` that it still reads `^<Node-LTS-major>`.
    - **pnpm self-update** — always run `corepack use pnpm@latest`; confirm the `packageManager` field in `package.json` was bumped. Non-optional — do it every run, even when no deps changed.
+     pnpm 12+ writes the pin into `pnpm-lock.yaml` as a leading `packageManagerDependencies` YAML document — after a pnpm bump always run `pnpm osv-scan all` (read the package counts, the script splits the documents) and `pnpm docker:test all` (frozen installs). mise installs pnpm through `aqua:pnpm/pnpm` in `mise.toml`, not the npm backend (see memory `dep_pnpm12_migration`).
    - **pnpm install warnings** — read every line. "pnpm field in package.json is no longer read" means overrides/settings drifted back into `package.json`; migrate them to `pnpm-workspace.yaml` immediately (see Decision framework).
    - Dev tooling (Biome, Vitest, TypeScript): verify config still parses. For tooling config-key renames during a bump, confirm the rule set is still *active*, not merely *parsed* (a passing `pnpm check` only proves the config parsed). E.g. lint a throwaway snippet that should trip a known recommended rule.
    - Docker base image: check the hardened-image catalog for the latest LTS Node + Alpine tag.

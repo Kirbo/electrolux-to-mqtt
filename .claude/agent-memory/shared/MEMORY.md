@@ -19,6 +19,7 @@
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
 - [Node 26 LTS window — October 2026](project_node26_lts_window.md) — bump `mise.toml` to node 26 on/after 2026-10-28 (Node 24 → maintenance 2026-10-20); verify LTS status first, then `pnpm sync:versions`
 - [@types/node is held by ignoreDependencies, not a range](dep_atypes_node_pin.md) — a range can't stop `pnpm update --latest`; updateConfig.ignoreDependencies in both pnpm-workspace.yaml + sync-versions.sh as sole writer
+- [pnpm 12 migration quirks](dep_pnpm12_migration.md) — mise needs aqua:pnpm/pnpm; lockfile gains a leading packageManagerDependencies doc → osv-scan.sh splits it, backend Dockerfile must not inject packageManager
 - [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
 - [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
