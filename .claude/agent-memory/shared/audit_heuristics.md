@@ -73,6 +73,12 @@ Service is a single Node built-in `http` server (no Express, no Redis) that read
 
 ## Watch patterns
 
+### Coverage thresholds only bite when the test script asks for coverage
+`vitest.config.ts` `coverage.thresholds` are checked only under `vitest run --coverage`. A package whose `"test"` script is bare `vitest run` has dead thresholds — locally and in CI. Detection: `grep -n '"test"' package.json telemetry-backend/package.json` and compare with `grep -n thresholds */vitest.config.ts`. (telemetry-backend had 90/90/80 declared since 2026-04 but unenforced until the 2026-09-15 audit; it now runs `--coverage`.)
+
+### Read-once-then-persist state: a failed read must never become an overwrite
+Any module that reads a state file once and later writes the same path back (`badge-store.ts` ↔ `peaks-history.json`) must distinguish *missing/corrupt* (start fresh is fine) from *read error* (EACCES/EIO — the file may be intact; skip the write and retry the read next cycle). Treating a transient read error as "empty" silently destroys the history on the next write. Detection: `grep -n "readFile\|writeFile" telemetry-backend/src/*.ts src/*.ts` and check every path that appears in both.
+
 ### `noUncheckedIndexedAccess` + index-style loops
 `tsconfig.json` has `noUncheckedIndexedAccess: true`. `arr[i]` types as `T | undefined`; TypeScript does NOT narrow from bounds-check loop condition. Prefer `for...of` + `.entries()` over `for (let i = 0; i < arr.length; i++)`. Exception: `(T|undefined) || 0` coerces to number, accepted (see `version-checker.ts`'s `parts1[i] || 0`).
 
