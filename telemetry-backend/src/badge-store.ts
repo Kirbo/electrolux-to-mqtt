@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import {
   buildBadgeSvg,
+  buildPeakBadgeSvg,
   buildReleaseBadgeSvg,
   compareVersionsDescending,
   fetchLatestReleases,
@@ -9,11 +10,15 @@ import {
 } from './badges.js'
 import type { ClickHouseLike } from './clickhouse.js'
 import { aggregateTelemetry } from './clickhouse.js'
+import type { PeakHistory } from './peaks.js'
+import { computePeaks, createEmptyPeakHistory, PEAK_WINDOWS, parsePeakHistory, recordSample } from './peaks.js'
 
 /**
  * Regenerates the badge artifacts each cycle and keeps the backend's two roles fed:
- *  - writes `users.svg` / `stable.svg` / `beta.svg` / `telemetry.json` to `outputDir`,
+ *  - writes `users.svg` / `peak-<window>.svg` / `stable.svg` / `beta.svg` / `telemetry.json` to `outputDir`,
  *    which the reverse proxy serves statically (so badge GETs never hit this container);
+ *  - samples the user count into `peaks-history.json` (same dir) so the trailing-window
+ *    peaks in `telemetry.json` survive restarts — see `peaks.ts`;
  *  - holds the telemetry JSON and the latest release tags in memory for the HTTP
  *    endpoints `GET /telemetry`, `GET /stable`, `GET /beta`.
  *
@@ -43,6 +48,9 @@ export type ReleasesFetcher = (url: string) => Promise<{ stable: string | null; 
 /** Dependency-injected file writer — swappable in tests to avoid touching the real fs. */
 export type FileWriter = (filePath: string, content: string) => Promise<void>
 
+/** Dependency-injected file reader — resolves null when the file does not exist. */
+export type FileReader = (filePath: string) => Promise<string | null>
+
 export interface BadgeStoreDeps {
   ch: ClickHouseLike
   appId: string
@@ -50,30 +58,82 @@ export interface BadgeStoreDeps {
   outputDir: string
   releasesFetcher?: ReleasesFetcher
   writeFile?: FileWriter
+  readFile?: FileReader
+  /** Clock — injectable so peak bucketing is deterministic in tests. */
+  now?: () => number
 }
+
+const PEAKS_FILE = 'peaks-history.json'
 
 const defaultWriteFile: FileWriter = async (filePath, content) => {
   await fsp.mkdir(path.dirname(filePath), { recursive: true })
   await fsp.writeFile(filePath, content, 'utf8')
 }
 
+function isMissingFileError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'ENOENT'
+}
+
+const defaultReadFile: FileReader = async (filePath) => {
+  try {
+    return await fsp.readFile(filePath, 'utf8')
+  } catch (err) {
+    if (isMissingFileError(err)) return null
+    throw err
+  }
+}
+
 export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
   const { ch, appId, releasesApiUrl, outputDir } = deps
   const releasesFetcher: ReleasesFetcher = deps.releasesFetcher ?? ((url) => fetchLatestReleases(url))
   const writeFile: FileWriter = deps.writeFile ?? defaultWriteFile
+  const readFile: FileReader = deps.readFile ?? defaultReadFile
+  const now = deps.now ?? (() => Date.now())
 
   let telemetryJson: string | null = null
   let stableTag: string | null = null
   let betaTag: string | null = null
+  let peakHistory: PeakHistory | null = null
 
   const file = (name: string): string => path.join(outputDir, name)
+
+  /**
+   * Load the persisted peak history once. Any failure (unreadable, corrupt, foreign file)
+   * falls back to an empty history — documented fallback: peaks rebuild from now on rather
+   * than blocking the telemetry cycle.
+   */
+  async function loadPeakHistory(): Promise<PeakHistory> {
+    if (peakHistory !== null) return peakHistory
+    const peaksPath = file(PEAKS_FILE)
+    let loaded: PeakHistory | null = null
+    try {
+      const raw = await readFile(peaksPath)
+      if (raw !== null) {
+        loaded = parsePeakHistory(raw)
+        if (loaded === null)
+          console.warn(`[telemetry-backend] Ignoring corrupt ${PEAKS_FILE} — starting a fresh peak history`)
+      }
+    } catch (err) {
+      console.error(`[telemetry-backend] Could not read ${PEAKS_FILE} — starting a fresh peak history:`, err)
+    }
+    peakHistory = loaded ?? createEmptyPeakHistory()
+    return peakHistory
+  }
 
   async function regenerateTelemetry(): Promise<boolean> {
     try {
       const result = await aggregateTelemetry(ch, appId)
-      const json = JSON.stringify(result)
+      const nowMs = now()
+      const history = recordSample(await loadPeakHistory(), result.total, nowMs)
+      const peaks = computePeaks(history, nowMs)
+      const json = JSON.stringify({ ...result, peaks })
       await writeFile(file('users.svg'), buildBadgeSvg(result.total))
+      for (const { key } of PEAK_WINDOWS) {
+        await writeFile(file(`peak-${key}.svg`), buildPeakBadgeSvg(key, peaks[key]))
+      }
       await writeFile(file('telemetry.json'), json)
+      await writeFile(file(PEAKS_FILE), JSON.stringify(history))
+      peakHistory = history
       telemetryJson = json
       console.log(`[telemetry-backend] Telemetry updated: ${result.total} users`)
       return true

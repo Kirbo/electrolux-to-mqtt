@@ -1,8 +1,11 @@
+import fsp from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { FileWriter, ReleasesFetcher } from '../src/badge-store.js'
+import type { FileReader, FileWriter, ReleasesFetcher } from '../src/badge-store.js'
 import { createBadgeStore } from '../src/badge-store.js'
 import { INVISIBLE_SVG } from '../src/badges.js'
+import type { Peaks } from '../src/peaks.js'
 import { FakeClickHouse } from './fake-clickhouse.js'
 
 const OUT = '/out'
@@ -10,6 +13,9 @@ const usersFile = path.join(OUT, 'users.svg')
 const telemetryFile = path.join(OUT, 'telemetry.json')
 const stableFile = path.join(OUT, 'stable.svg')
 const betaFile = path.join(OUT, 'beta.svg')
+const peaksFile = path.join(OUT, 'peaks-history.json')
+const HOUR = 3_600_000
+const T0 = Date.UTC(2026, 8, 15, 12, 0, 0)
 
 function recordingWriter(): { writeFile: FileWriter; files: Map<string, string> } {
   const files = new Map<string, string>()
@@ -32,7 +38,13 @@ const bothReleases: ReleasesFetcher = async () => ({ stable: 'v2026.5.0', beta: 
 const betaOnlyReleases: ReleasesFetcher = async () => ({ stable: null, beta: 'v2026.6.0b1' })
 const noReleases: ReleasesFetcher = async () => ({ stable: null, beta: null })
 
-function makeStore(opts: { ch?: FakeClickHouse; releasesFetcher?: ReleasesFetcher; writeFile: FileWriter }) {
+function makeStore(opts: {
+  ch?: FakeClickHouse
+  releasesFetcher?: ReleasesFetcher
+  writeFile: FileWriter
+  readFile?: FileReader
+  now?: () => number
+}) {
   return createBadgeStore({
     ch: opts.ch ?? buildFakeCh(),
     appId: 'test-app',
@@ -40,7 +52,13 @@ function makeStore(opts: { ch?: FakeClickHouse; releasesFetcher?: ReleasesFetche
     outputDir: OUT,
     releasesFetcher: opts.releasesFetcher ?? stableRelease,
     writeFile: opts.writeFile,
+    readFile: opts.readFile ?? (async () => null),
+    now: opts.now ?? (() => T0),
   })
+}
+
+function peaksOf(json: string | undefined): Peaks {
+  return (JSON.parse(json ?? '{}') as { peaks: Peaks }).peaks
 }
 
 describe('createBadgeStore', () => {
@@ -171,6 +189,131 @@ describe('createBadgeStore', () => {
       expect(files.has(betaFile)).toBe(false)
       expect(store.getStableTag()).toBeNull()
       expect(store.getBetaTag()).toBeNull()
+    })
+  })
+
+  describe('peak history', () => {
+    it('reports the current total as every window peak on the first cycle and persists the history', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: buildFakeCh(42), releasesFetcher: noReleases, writeFile })
+      await store.regenerate()
+      const peaks = peaksOf(files.get(telemetryFile))
+      const expected = { value: 42, at: new Date(T0).toISOString() }
+      expect(peaks).toEqual({ '24h': expected, '7d': expected, '30d': expected, '182d': expected, '365d': expected })
+      expect(JSON.parse(files.get(peaksFile) ?? '')).toEqual({ version: 1, buckets: [{ hour: T0, max: 42 }] })
+    })
+
+    it('writes one peak badge per window', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: buildFakeCh(42), releasesFetcher: noReleases, writeFile })
+      await store.regenerate()
+      for (const key of ['24h', '7d', '30d', '182d', '365d']) {
+        const svg = files.get(path.join(OUT, `peak-${key}.svg`))
+        expect(svg).toContain(`>peak ${key}<`)
+        expect(svg).toContain('>42<')
+      }
+    })
+
+    it('keeps the earlier higher sample as the peak when the count drops', async () => {
+      const { writeFile, files } = recordingWriter()
+      let total = 10
+      let now = T0
+      const ch = new FakeClickHouse()
+      ch.onQuery('uniqExact(session_id) AS total', () => [{ total }])
+      ch.onQuery('GROUP BY channel', () => [])
+      ch.onQuery('GROUP BY version, channel', () => [])
+      const store = makeStore({ ch, releasesFetcher: noReleases, writeFile, now: () => now })
+      await store.regenerate()
+      total = 3
+      now = T0 + 2 * HOUR
+      await store.regenerate()
+      const peaks = peaksOf(files.get(telemetryFile))
+      expect(peaks['24h']).toEqual({ value: 10, at: new Date(T0).toISOString() })
+      expect((JSON.parse(files.get(telemetryFile) ?? '') as { total: number }).total).toBe(3)
+      expect(JSON.parse(files.get(peaksFile) ?? '')).toEqual({
+        version: 1,
+        buckets: [
+          { hour: T0, max: 10 },
+          { hour: T0 + 2 * HOUR, max: 3 },
+        ],
+      })
+    })
+
+    it('loads the persisted history from disk before the first cycle', async () => {
+      const { writeFile, files } = recordingWriter()
+      const onDisk = JSON.stringify({ version: 1, buckets: [{ hour: T0 - 3 * HOUR, max: 50 }] })
+      const readFile: FileReader = async (filePath) => (filePath === peaksFile ? onDisk : null)
+      const store = makeStore({ ch: buildFakeCh(7), releasesFetcher: noReleases, writeFile, readFile })
+      await store.regenerate()
+      expect(peaksOf(files.get(telemetryFile))['24h']).toEqual({ value: 50, at: new Date(T0 - 3 * HOUR).toISOString() })
+    })
+
+    it('reads the history only once across cycles', async () => {
+      const readFile = vi.fn<FileReader>(async () => null)
+      const store = makeStore({ releasesFetcher: noReleases, writeFile: recordingWriter().writeFile, readFile })
+      await store.regenerate()
+      await store.regenerate()
+      expect(readFile).toHaveBeenCalledTimes(1)
+    })
+
+    it('starts fresh and warns when the persisted history is corrupt', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({
+        ch: buildFakeCh(7),
+        releasesFetcher: noReleases,
+        writeFile,
+        readFile: async () => '{"version":99}',
+      })
+      await store.regenerate()
+      expect(peaksOf(files.get(telemetryFile))['365d']?.value).toBe(7)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('peaks-history.json'))
+      warn.mockRestore()
+    })
+
+    it('starts fresh when reading the history throws', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({
+        ch: buildFakeCh(7),
+        releasesFetcher: noReleases,
+        writeFile,
+        readFile: () => Promise.reject(new Error('EACCES')),
+      })
+      await store.regenerate()
+      expect(peaksOf(files.get(telemetryFile))['365d']?.value).toBe(7)
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('peaks-history.json'), expect.any(Error))
+      error.mockRestore()
+    })
+
+    it('does not record a sample when ClickHouse fails', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: new FakeClickHouse(), releasesFetcher: noReleases, writeFile })
+      await store.regenerate()
+      expect(files.has(peaksFile)).toBe(false)
+    })
+  })
+
+  describe('real filesystem (default reader/writer)', () => {
+    it('persists the peak history across store instances via the output dir', async () => {
+      const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'e2m-badge-'))
+      try {
+        const make = (total: number, now: number) =>
+          createBadgeStore({
+            ch: buildFakeCh(total),
+            appId: 'test-app',
+            releasesApiUrl: 'https://example.com',
+            outputDir: dir,
+            releasesFetcher: noReleases,
+            now: () => now,
+          })
+        await make(30, T0).regenerate() // no history file yet → ENOENT → fresh
+        await make(4, T0 + HOUR).regenerate() // second instance loads the file
+        const json = await fsp.readFile(path.join(dir, 'telemetry.json'), 'utf8')
+        expect(peaksOf(json)['24h']).toEqual({ value: 30, at: new Date(T0).toISOString() })
+      } finally {
+        await fsp.rm(dir, { recursive: true, force: true })
+      }
     })
   })
 

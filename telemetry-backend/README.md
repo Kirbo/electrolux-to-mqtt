@@ -8,12 +8,14 @@ A near drop-in for the old telemetry backend — same routes and port (3001) —
 
 1. **Badge generation (permanent)** — on startup and every `BADGE_INTERVAL_SECONDS` (default 300 s), reads aggregated usage data from Aptabase's ClickHouse and fetches the latest GitLab releases, then **writes** the artifacts to `OUTPUT_DIR` (a mounted volume). The reverse proxy serves these **statically**, so the high-traffic badge GETs never hit the container:
    - `users.svg` — users-today badge
+   - `peak-24h.svg`, `peak-7d.svg`, `peak-30d.svg`, `peak-182d.svg`, `peak-365d.svg` — trailing-window peak badges (invisible SVG until a sample exists; the root README embeds `30d` + `365d`)
    - `stable.svg` — latest stable release badge
    - `beta.svg` — latest beta release badge (invisible SVG if beta is not newer than stable)
-   - `telemetry.json` — raw aggregated telemetry (total + channels + per-version breakdown)
+   - `telemetry.json` — raw aggregated telemetry (total + channels + per-version breakdown + trailing-window peaks)
+   - `peaks-history.json` — persisted hourly-max samples of the user count that the peaks are computed from (see below)
 
 2. **Dynamic endpoints (served by the container)** — everything the old backend exposed dynamically:
-   - `GET /telemetry` — the aggregated JSON (also written to disk as `telemetry.json`)
+   - `GET /telemetry` — the aggregated JSON incl. `peaks` (also written to disk as `telemetry.json`)
    - `GET /stable` / `GET /beta` — 302 redirect to the latest release (fail-open to the releases page)
    - `GET /health` — 200 `{ status: 'ok' }`
    - `POST /telemetry` — **legacy ingest**: old bridge versions POST `{ userHash, version, channel }`; the service rate-limits, validates, and forwards to Aptabase as a `version_check` event tagged `source='legacy'` (204, best-effort). The `userHash` is mapped to a UUID-shaped `sessionId` because **Aptabase silently drops events whose `sessionId` is not GUID-parseable** (200 response, no row written). *Temporary* — see the delete checklist.
@@ -77,6 +79,36 @@ in `clickhouse.ts`), **not** Aptabase's `user_id`:
   window can shrink to ~1h (4× the 15-min ping) for a tighter, more live count.*
 - **`stable`/`beta` are distinct counts** from a dedicated `GROUP BY channel` query — not the
   over-counting sum of the per-version rows.
+
+### Peak user counts
+
+Aptabase only yields the *current* rolling-26h count, so the historical peaks are built by
+the service itself (`peaks.ts`): every badge cycle the `total` is sampled and folded into
+**hourly max buckets**, persisted as `peaks-history.json` in `OUTPUT_DIR` (the same mounted
+volume as the badges — so restarts and redeploys keep the history). Buckets older than
+365 days + 1 hour are trimmed, which caps the file at ~8.8k entries.
+
+`telemetry.json` / `GET /telemetry` expose them as `peaks`, one entry per trailing window
+(`null` until at least one sample exists):
+
+| Key | Window |
+|---|---|
+| `24h` | last 24 hours |
+| `7d` | last week |
+| `30d` | last ~1 month |
+| `182d` | last ~6 months |
+| `365d` | last ~12 months |
+
+```json
+"peaks": { "24h": { "value": 42, "at": "2026-09-15T12:00:00.000Z" }, "7d": { … }, … }
+```
+
+Each window is also rendered as a `peak-<key>.svg` badge (`peak 30d | 57`). `at` is the start of the hour bucket the peak was seen in. A bucket counts toward a window
+when any part of it overlaps the window. History only accumulates from the first deploy of
+this feature — there is no backfill from ClickHouse. A corrupt or unreadable history file is
+logged and replaced by a fresh one rather than blocking the cycle. The one-shot
+`regenerate-badges.ts` (CI, after a release) samples too; the long-running server's in-memory
+history is a superset, so its next write is authoritative.
 
 ### Per-install identity & GeoIP
 

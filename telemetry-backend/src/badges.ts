@@ -1,3 +1,5 @@
+import type { Peak, PeakWindowKey } from './peaks.js'
+
 export const INVISIBLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"/>'
 
 interface ParsedVersion {
@@ -119,6 +121,12 @@ export function buildBadgeSvg(total: number): string {
     <text x="72.5" y="14">${escapeXml(String(total))}</text>
   </g>
 </svg>`
+}
+
+/** Trailing-window peak badge (`peak 30d | 57`); invisible until at least one sample exists. */
+export function buildPeakBadgeSvg(key: PeakWindowKey, peak: Peak | null): string {
+  if (peak === null) return INVISIBLE_SVG
+  return buildReleaseBadgeSvg(`peak ${key}`, String(peak.value), '#007ec6')
 }
 
 export function buildReleaseBadgeSvg(label: string, version: string, color: string): string {

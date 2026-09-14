@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildBadgeSvg,
+  buildPeakBadgeSvg,
   buildReleaseBadgeSvg,
   compareVersionsDescending,
   escapeXml,
@@ -40,6 +41,19 @@ describe('buildBadgeSvg', () => {
   it('handles zero total', () => {
     const svg = buildBadgeSvg(0)
     expect(svg).toContain('0')
+  })
+})
+
+describe('buildPeakBadgeSvg', () => {
+  it('renders "peak <window>" with the value', () => {
+    const svg = buildPeakBadgeSvg('30d', { value: 57, at: '2026-09-15T12:00:00.000Z' })
+    expect(svg).toContain('>peak 30d<')
+    expect(svg).toContain('>57<')
+    expect(svg).toContain('#007ec6')
+  })
+
+  it('renders the invisible SVG when there is no peak yet', () => {
+    expect(buildPeakBadgeSvg('365d', null)).toBe(INVISIBLE_SVG)
   })
 })
 

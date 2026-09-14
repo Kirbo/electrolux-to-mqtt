@@ -4,6 +4,8 @@
 [![Latest Beta](https://e2m.devaus.eu/beta.svg)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases)
 [![Docker Pulls](https://badgen.net/docker/pulls/kirbownz/electrolux-to-mqtt)](https://hub.docker.com/r/kirbownz/electrolux-to-mqtt/)
 [![Active Users](https://e2m.devaus.eu/users.svg)](https://e2m.devaus.eu/telemetry)
+[![Peak Users 30d](https://e2m.devaus.eu/peak-30d.svg)](https://e2m.devaus.eu/telemetry)
+[![Peak Users 365d](https://e2m.devaus.eu/peak-365d.svg)](https://e2m.devaus.eu/telemetry)
 
 [![CI/CD Pipeline Status](https://gitlab.com/kirbodev/electrolux-to-mqtt/badges/main/pipeline.svg)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/pipelines)
 [![GitLab Last Commit](https://img.shields.io/gitlab/last-commit/kirbodev%2Felectrolux-to-mqtt)](https://gitlab.com/kirbodev/electrolux-to-mqtt/-/commits)
