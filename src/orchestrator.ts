@@ -166,7 +166,8 @@ export class Orchestrator implements AsyncDisposable {
       // up — the stale timeout must not start a second one.
       if (this.applianceInstances.get(applianceId) !== appliance) return
 
-      this._pollApplianceState(
+      // _pollApplianceState() catches and logs its own errors, so the chain never rejects
+      void this._pollApplianceState(
         applianceId,
         appliance,
         applianceDiscoveryCallback,

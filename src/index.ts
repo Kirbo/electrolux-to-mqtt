@@ -119,7 +119,8 @@ export const main = async () => {
       discoveryIntervalDisposable = null
       return
     }
-    orchestrator.discoverAppliances()
+    // discoverAppliances() catches and logs its own errors
+    void orchestrator.discoverAppliances()
   }, applianceDiscoveryInterval)
 
   logger.info(`Appliance discovery running every ${applianceDiscoveryInterval / 1000 / 60} minutes to detect changes`)
