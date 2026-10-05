@@ -34,3 +34,4 @@
 - [vite vulns GHSA-fx2h-pf6j-xcff + GHSA-v6wh-96g9-6wx3](vuln_vite_GHSA-fx2h-pf6j-xcff.md) — override doesn't fix peer dep vulns; add vite as direct devDep in telemetry-backend instead
 - [coreutils CVEs in the dhi hardened base](vuln_coreutils_dhi_base.md) — 3 Scout findings, no fix in any Alpine branch, unreachable (no shell, node-only runtime); base bump does not help
 - [tsc-alias → #/* subpath imports](dep_subpath_imports_braces.md) — removed for unfixable braces vuln; src runners need `--conditions=development` (after `watch`)
+- [Release/merge gotchas](reference_release_merge_gotchas.md) — non-gated MR needs manual main pipeline to release; cancelled release leaves Docker Hub tags; protected `next` is never deleted on merge
