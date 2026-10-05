@@ -9,7 +9,7 @@ services:
       network: host
       args:
         - NODE_VERSION=${NODE_VERSION:?NODE_VERSION is not set - activate mise (exports it from package.json engines.node) or export it manually}
-        - ALPINE_VERSION=${ALPINE_VERSION:?ALPINE_VERSION is not set - activate mise (exports it from mise.toml [vars] alpine_version) or export it manually}
+        - ALPINE_VERSION=${ALPINE_VERSION:?ALPINE_VERSION is not set - activate mise (exports it from package.json alpineVersion) or export it manually}
     container_name: telemetry-backend
     restart: unless-stopped
     # Published on the host so the reverse proxy reaches it. Port 3001 matches the OLD

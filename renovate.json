@@ -34,7 +34,7 @@
       "groupName": null
     },
     {
-      "description": "Node.js engine + @types/node grouped; manual merge to coordinate with Docker base + mise.toml [vars] + package.json engines.",
+      "description": "Node.js engine + @types/node grouped; manual merge — package.json engines.node is the single Node source; @types/node is derived by scripts/sync-versions.sh.",
       "matchPackageNames": ["node", "@types/node"],
       "groupName": "node runtime",
       "automerge": false,

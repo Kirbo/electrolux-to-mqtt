@@ -1,20 +1,17 @@
 # Pinned dev/CI tooling, managed by mise (https://mise.jdx.dev).
 #
 # Version sources of truth live in the root package.json, not here:
-#   - Node.js major: "engines.node" (read via scripts/node-major.sh)
+#   - Node.js major: "engines.node"   (read via scripts/node-major.sh)
+#   - Alpine:        "alpineVersion"  (read via scripts/alpine-version.sh) — the base
+#                    of every Node image (dhi.io/node and stock node:<major>-alpine<ver>)
 #   - pnpm:          "packageManager" (bump with `corepack use pnpm@latest`)
+# package.json is a release-gated CI path, so bumping any of them cuts a release.
 # Bumping Node = edit engines.node, then `pnpm sync:versions` to derive
 # telemetry-backend engines + both @types/node ranges (CI "versions in sync"
 # enforces it). Everything else reads package.json directly: mise itself
 # ([tools]/[env] below), GitLab CI, the git hooks, the deploy jobs, and docker
-# compose (via the exported NODE_VERSION — Dockerfiles/compose have no defaults
-# and fail loudly without it).
-# Alpine has no package.json home, so it stays in [vars] below — the single source
-# for every Node image (read via scripts/alpine-version.sh, exported as ALPINE_VERSION).
-[vars]
-# Alpine minor used in the prod Docker image tag (dhi.io/node:<node>-alpine<alpine>)
-# and the CI node:<node>-alpine<alpine> images.
-alpine_version = "3.24"
+# compose (via the exported NODE_VERSION/ALPINE_VERSION — Dockerfiles/compose have
+# no defaults and fail loudly without them).
 
 [tools]
 node = """{{ exec(command="sh " ~ config_root ~ "/scripts/node-major.sh") }}"""
@@ -35,10 +32,11 @@ sops = "3.13.1"
 age = "1.3.1"
 
 [env]
-# Exported so `docker compose` (and manual docker builds) pick the Node major up
-# automatically — compose/Dockerfiles require it and fail loudly when unset.
+# Exported so `docker compose` (and manual docker builds) pick the Node major and
+# Alpine version up automatically — compose/Dockerfiles require them and fail loudly
+# when unset. Only exported into an ACTIVATED shell (`mise activate`), not via shims.
 NODE_VERSION = """{{ exec(command="sh " ~ config_root ~ "/scripts/node-major.sh") }}"""
-ALPINE_VERSION = "{{ vars.alpine_version }}"
+ALPINE_VERSION = """{{ exec(command="sh " ~ config_root ~ "/scripts/alpine-version.sh") }}"""
 
 [tasks.sync-versions]
 description = "Derive telemetry-backend engines + @types/node from package.json engines.node"

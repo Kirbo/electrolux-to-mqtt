@@ -28,8 +28,8 @@ initialise variables:
       dotenv: variables.env
   script:
     - touch variables.env
-    # Node major from package.json engines.node, Alpine from mise.toml [vars] — each
-    # the single source of truth, parsed by its script (which fails loudly on a miss).
+    # Node major from package.json engines.node, Alpine from package.json alpineVersion —
+    # each the single source of truth, parsed by its script (which fails loudly on a miss).
     - NODE_MAJOR=$(sh scripts/node-major.sh)
     - ALPINE=$(sh scripts/alpine-version.sh)
     # NODE_VERSION stays the combined image tag — both stock node (node:24-alpine3.24)

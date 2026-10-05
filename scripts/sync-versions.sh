@@ -2,7 +2,7 @@
 # sync-versions.sh — derive Node-version-dependent fields from the root package.json.
 # Source of truth: package.json "engines.node" (major parsed by scripts/node-major.sh).
 # pnpm needs no sync — mise and corepack both read package.json "packageManager".
-# Alpine needs no sync — mise.toml [vars] alpine_version is read via scripts/alpine-version.sh.
+# Alpine needs no sync — package.json "alpineVersion" is read via scripts/alpine-version.sh.
 # Derived files: telemetry-backend/package.json engines.node + devDependencies['@types/node']
 # in both packages, re-resolving both lockfiles when the range moves.
 # Dockerfiles/compose files carry no version defaults — they require NODE_VERSION

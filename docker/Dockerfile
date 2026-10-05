@@ -3,7 +3,7 @@
 ### Build and publish the Docker image
 # docker buildx build \
 #   --platform linux/arm64,linux/amd64 \
-#   --build-arg NODE_VERSION=<major>-alpine<alpine> \  # package.json engines.node + mise.toml alpine_version, REQUIRED
+#   --build-arg NODE_VERSION=<major>-alpine<alpine> \  # package.json engines.node + alpineVersion, REQUIRED
 #   --build-arg VERSION=$(git describe --tags --always) \
 #   --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
 #   --build-arg VCS_REF=$(git rev-parse --short HEAD) \
@@ -16,7 +16,7 @@
 
 # Define build arguments
 # REQUIRED, no default — CI passes <major>-alpine<alpine> (e.g. 24-alpine3.24)
-# (major: package.json engines.node; alpine: mise.toml [vars]); fails loudly if unset.
+# (package.json engines.node major + alpineVersion); fails loudly if unset.
 ARG NODE_VERSION
 ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}
 ARG VERSION=development

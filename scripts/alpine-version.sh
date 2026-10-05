@@ -1,8 +1,9 @@
 #!/bin/sh
-# alpine-version.sh — print the Alpine version from mise.toml [vars] alpine_version.
+# alpine-version.sh — print the Alpine version from the root package.json "alpineVersion".
 #
 # SINGLE SOURCE OF TRUTH for the Alpine version of every Node image (the Node major
-# lives in package.json engines.node — see scripts/node-major.sh). Every consumer
+# is engines.node in the same file — see scripts/node-major.sh). It lives in
+# package.json so a bump touches a release-gated path and cuts a new image. Every consumer
 # reads it through this script or through the ALPINE_VERSION that mise exports:
 # GitLab CI (folded into NODE_VERSION=<major>-alpine<ver>), the telemetry deploy
 # jobs, and scripts/docker-build-test.sh. Dockerfiles/compose cannot read files, so
@@ -11,10 +12,10 @@
 # Plain POSIX sh + sed: runs on the bare alpine CI image before any tooling exists.
 set -eu
 
-MISE_TOML="$(dirname "$0")/../mise.toml"
-version=$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' "$MISE_TOML" | head -1)
+PKG="$(dirname "$0")/../package.json"
+version=$(sed -n 's/^[[:space:]]*"alpineVersion"[[:space:]]*:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' "$PKG" | head -1)
 if [ -z "$version" ]; then
-  echo "ERROR: could not parse [vars] alpine_version from $MISE_TOML" >&2
+  echo "ERROR: could not parse \"alpineVersion\" from $PKG" >&2
   exit 1
 fi
 echo "$version"

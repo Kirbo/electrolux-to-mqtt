@@ -12,7 +12,7 @@ overflow), CVE-2016-2781 (4.6, `chroot --userspec`, upstream/distro wontfix).
 Not ours to fix:
 - No Dockerfile does `apk add coreutils` — it ships inside the `dhi.io/node:<major>-alpine<minor>` base.
 - coreutils **9.11-r0 is the newest build in every Alpine branch incl. edge** (checked 2026-08-31), so
-  bumping `alpine_version` in `mise.toml` changes nothing. Re-check pkgs.alpinelinux.org for `9.11-r1`
+  bumping `alpineVersion` in `package.json` changes nothing. Re-check pkgs.alpinelinux.org for `9.11-r1`
   before assuming a base bump helps.
 - Unreachable: the runtime stage has no shell, runs as `node`, and executes only `node dist/index.js`
   plus the `node -e` HEALTHCHECK. All three CVEs need `uniq`/`unexpand`/`chroot` invoked with
