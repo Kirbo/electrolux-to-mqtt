@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# sync-versions.sh — propagate the Node.js major from mise.toml to derived files.
-# Source of truth: mise.toml [vars] node_major (Alpine: [vars] alpine_version —
-# read directly by CI and mise, nothing to sync).
-# pnpm needs no sync either — mise and corepack both read package.json "packageManager".
-# Derived files: package.json engines.node + devDependencies['@types/node']
-# (root + telemetry-backend), re-resolving both lockfiles when the range moves.
+# sync-versions.sh — derive Node-version-dependent fields from the root package.json.
+# Source of truth: package.json "engines.node" (major parsed by scripts/node-major.sh).
+# pnpm needs no sync — mise and corepack both read package.json "packageManager".
+# Alpine lives in mise.toml [vars] alpine_version, read directly by CI and mise.
+# Derived files: telemetry-backend/package.json engines.node + devDependencies['@types/node']
+# in both packages, re-resolving both lockfiles when the range moves.
 # Dockerfiles/compose files carry no version defaults — they require NODE_VERSION
 # at build time (exported by mise, passed explicitly in CI).
-# Run after editing mise.toml [vars]. Idempotent: running twice produces no diff.
+# Run after editing engines.node. Idempotent: running twice produces no diff.
 #
 # Usage:
 #   bash scripts/sync-versions.sh          # from repo root
@@ -16,19 +16,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MISE_TOML="${REPO_ROOT}/mise.toml"
 
-# ── Parse mise.toml [vars] (no TOML lib needed — simple sed) ─────────────────
-
-# node_major = "24"  →  24
-NODE=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' "${MISE_TOML}" | head -1)
-
-if [[ -z "${NODE}" ]]; then
-  echo "ERROR: could not parse [vars] node_major from ${MISE_TOML}" >&2
-  exit 1
-fi
-
-NODE_NEXT=$(( NODE + 1 ))
+NODE=$(sh "${REPO_ROOT}/scripts/node-major.sh")
+ENGINES=$(node -p "require('${REPO_ROOT}/package.json').engines.node")
 
 # Captured before any rewrite so the final step can tell whether the range
 # actually moved and only then pay for a re-resolve.
@@ -50,53 +40,34 @@ changed() {
   fi
 }
 
-# ── 1. root package.json — engines.node + devDependencies['@types/node'] ─────
+# ── 1. Derived package.json fields ───────────────────────────────────────────
 #
-# @types/node MUST track the Node major: `pnpm update --latest` otherwise drifts
-# it to the newest release line (^25, ^26, …) while the runtime stays on ${NODE},
-# so the type definitions describe APIs the runtime does not have.
+# telemetry-backend engines.node: copied verbatim from the root (the source).
+# devDependencies['@types/node'] in both packages: MUST track the Node major —
+# `pnpm update --latest` otherwise drifts it to the newest release line (^25, ^26, …)
+# while the runtime stays on ${NODE}, so the types describe APIs the runtime lacks.
 
-changed "${REPO_ROOT}/package.json" \
-  node -e "
-    const fs = require('fs');
-    const path = '${REPO_ROOT}/package.json';
-    const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-    pkg.engines = pkg.engines ?? {};
-    pkg.engines.node = '>=${NODE}.0.0 <${NODE_NEXT}.0.0';
-    const typesNode = pkg.devDependencies?.['@types/node'];
-    if (typesNode) {
-      // Only correct the MAJOR. A more specific in-major floor (e.g. ^24.13.3)
-      // is a deliberate choice and still resolves to the newest 24.x, so leave
-      // it alone; rewriting it would flatten intent without preventing drift.
-      const major = /^\D*(\d+)\./.exec(typesNode)?.[1];
-      if (major !== '${NODE}') {
-        pkg.devDependencies['@types/node'] = '^${NODE}.0.0';
+for pkg_json in "${REPO_ROOT}/package.json" "${REPO_ROOT}/telemetry-backend/package.json"; do
+  changed "${pkg_json}" \
+    node -e "
+      const fs = require('fs');
+      const path = '${pkg_json}';
+      const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+      pkg.engines = pkg.engines ?? {};
+      pkg.engines.node = '${ENGINES}';
+      const typesNode = pkg.devDependencies?.['@types/node'];
+      if (typesNode) {
+        // Only correct the MAJOR. A more specific in-major floor (e.g. ^24.13.3)
+        // is a deliberate choice and still resolves to the newest 24.x, so leave
+        // it alone; rewriting it would flatten intent without preventing drift.
+        const major = /^\D*(\d+)\./.exec(typesNode)?.[1];
+        if (major !== '${NODE}') {
+          pkg.devDependencies['@types/node'] = '^${NODE}.0.0';
+        }
       }
-    }
-    fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
-  "
-
-# ── 2. telemetry-backend/package.json — same two fields ──────────────────────
-
-changed "${REPO_ROOT}/telemetry-backend/package.json" \
-  node -e "
-    const fs = require('fs');
-    const path = '${REPO_ROOT}/telemetry-backend/package.json';
-    const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-    pkg.engines = pkg.engines ?? {};
-    pkg.engines.node = '>=${NODE}.0.0 <${NODE_NEXT}.0.0';
-    const typesNode = pkg.devDependencies?.['@types/node'];
-    if (typesNode) {
-      // Only correct the MAJOR. A more specific in-major floor (e.g. ^24.13.3)
-      // is a deliberate choice and still resolves to the newest 24.x, so leave
-      // it alone; rewriting it would flatten intent without preventing drift.
-      const major = /^\D*(\d+)\./.exec(typesNode)?.[1];
-      if (major !== '${NODE}') {
-        pkg.devDependencies['@types/node'] = '^${NODE}.0.0';
-      }
-    }
-    fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
-  "
+      fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+    "
+done
 
 # ── 3. Re-resolve lockfiles if the @types/node range moved ──────────────────
 # Rewriting the range in package.json does NOT re-resolve pnpm-lock.yaml, so the

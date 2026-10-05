@@ -65,11 +65,11 @@ find_node() {
     return 0
   fi
   
-  # Read node major from mise.toml [vars] node_major if it exists
+  # Read node major from package.json engines.node (via scripts/node-major.sh)
   NODE_VERSION=""
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/mise.toml" ]; then
-    NODE_VERSION=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' "$REPO_ROOT/mise.toml" | head -1)
+  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/node-major.sh" ]; then
+    NODE_VERSION=$(sh "$REPO_ROOT/scripts/node-major.sh" 2>/dev/null || true)
   fi
 
   # mise is the project toolchain: prefer its shims, then the versioned install

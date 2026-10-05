@@ -36,15 +36,15 @@ Please be respectful and considerate in all interactions. We're here to build gr
 
 ### Prerequisites
 
-- **Node.js**: Major pinned in `mise.toml` `[vars] node_major` — the canonical source (`mise install` provisions it; without mise, install the same major with your version manager of choice). After editing it, run `pnpm sync:versions` to sync `package.json` engines.
+- **Node.js**: Major pinned in the root `package.json` `engines.node` — the canonical source, read everywhere through `scripts/node-major.sh` (`mise install` provisions it; without mise, install the same major with your version manager of choice). After editing it, run `pnpm sync:versions` to derive the `telemetry-backend` engines and both `@types/node` ranges.
 - **pnpm**: Correct version is specified in `package.json` `packageManager` field
 - **Git**: For version control
-- **Tool versions (mise)**: Node.js, Alpine, sops, and age are all pinned in `mise.toml` at the repo root. After editing `[vars]` run `pnpm sync:versions` — it syncs `package.json` engines and the `@types/node` range in both packages (which must always track the Node major rather than the newest release line), re-resolving both lockfiles when the range moves. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+- **Tool versions (mise)**: Alpine (`[vars]`), sops, and age are pinned in `mise.toml` at the repo root; Node.js and pnpm come from the root `package.json` (`engines.node`, `packageManager`), which mise reads. After editing `engines.node` run `pnpm sync:versions` — it derives the `telemetry-backend` engines and the `@types/node` range in both packages (which must always track the Node major rather than the newest release line), re-resolving both lockfiles when the range moves. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
 
 ### Installation
 
 ```bash
-# Provision the toolchain (Node, sops, age — versions from mise.toml)
+# Provision the toolchain (Node + pnpm from package.json; sops, age from mise.toml)
 mise install
 
 # Enable corepack (ships with Node.js 24 — reads packageManager field from package.json)

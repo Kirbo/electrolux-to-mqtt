@@ -17,7 +17,7 @@ overrides:
 # the dependency here is what actually holds it.
 #
 # `scripts/sync-versions.sh` remains the single writer, deriving the range from
-# `mise.toml [vars] node_major`. To move it, bump mise.toml and run `pnpm sync:versions`
+# package.json `engines.node`. To move it, bump engines.node and run `pnpm sync:versions`
 # — never by hand, and never with `pnpm update --latest @types/node` (naming a
 # package explicitly overrides this list).
 updateConfig:

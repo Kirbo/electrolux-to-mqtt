@@ -190,7 +190,7 @@ deploy telemetry-backend:
     - *ssh_deploy
   script:
     - *deploy_backend_env
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sh scripts/node-major.sh) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
 
 # After a bridge release (new tag + GitLab release), regenerate the badges in the *running*
 # backend so the version badges reflect the new release immediately instead of waiting up to
@@ -229,9 +229,9 @@ refresh telemetry badges:
     - *ssh_deploy
   script:
     # NODE_VERSION: compose interpolates ${NODE_VERSION:?...} (build.args) even for
-    # `exec`, so the remote shell needs it set; $(sed) expands runner-side from the
-    # checked-out mise.toml, same as the deploy job above.
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml) docker compose -f telemetry-backend/docker-compose.yml exec -T telemetry-backend node dist/regenerate-badges.js"
+    # `exec`, so the remote shell needs it set; $(sh scripts/node-major.sh) expands
+    # runner-side from the checked-out package.json, same as the deploy job above.
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sh scripts/node-major.sh) docker compose -f telemetry-backend/docker-compose.yml exec -T telemetry-backend node dist/regenerate-badges.js"
 
 prepare dockerhub readme:
   stage: release

@@ -1,6 +1,6 @@
 ---
 name: node-26-lts-window-october-2026
-description: Node 26 becomes LTS on 2026-10-28 and Node 24 drops to maintenance 2026-10-20; that is when to bump mise.toml
+description: Node 26 becomes LTS on 2026-10-28 and Node 24 drops to maintenance 2026-10-20; that is when to bump package.json engines.node
 metadata: 
   node_type: memory
   type: project
@@ -8,7 +8,7 @@ metadata:
   modified: 2026-07-29T13:00:53.472Z
 ---
 
-The project pins `mise.toml [tools] node = "24"`. Node 24 (Krypton) is the active LTS **until October 2026**; Node 26 is Current, not LTS, until then.
+The project pins Node 24 in root `package.json` `engines.node` (`>=24.0.0 <25.0.0`) — the Node source of truth since 2026-10-05. Node 24 (Krypton) is the active LTS **until October 2026**; Node 26 is Current, not LTS, until then.
 
 Dates from the official schedule (`https://raw.githubusercontent.com/nodejs/Release/main/schedule.json`), read 2026-07-29:
 
@@ -23,7 +23,7 @@ curl -s https://nodejs.org/dist/index.json | node -e "const a=JSON.parse(require
   const v=a.find(r=>r.version.startsWith('v26.')); console.log(v.version, v.lts)"   # lts must be a codename, not false
 ```
 
-**Then:** edit `mise.toml` to `node = "26"` and run `pnpm sync:versions`. That single run carries `.nvmrc`, both `engines.node`, both `devDependencies['@types/node']`, `docker/Dockerfile` + `Dockerfile.local`, both compose `NODE_VERSION` defaults, `telemetry-backend/Dockerfile`, the `.gitlab/ci/01_init.yml` alpine literal, and re-resolves both lockfiles. Verified end-to-end 24 → 26 → 24 on 2026-07-29. See [[dep_atypes_node_pin]] for why `@types/node` needs the script rather than a version range.
+**Then:** edit root `package.json` `engines.node` to `>=26.0.0 <27.0.0` and run `pnpm sync:versions`. It derives the `telemetry-backend` engines + both `@types/node` and re-resolves both lockfiles; mise, CI, hooks, deploy jobs and `docker-build-test.sh` read the major via `scripts/node-major.sh`. A 24 → 26 → 24 roundtrip of this flow was verified 2026-10-05 (and LTS status re-checked that day: 26 still Current). See [[dep_atypes_node_pin]] for why `@types/node` needs the script rather than a version range.
 
 **Expect one wrinkle:** a major bump flattens a specific in-major floor — `@types/node` goes `^24.13.3` → `^26.0.0`. Correct behaviour (the script only preserves floors *within* the same major), just not floor-preserving across majors.
 

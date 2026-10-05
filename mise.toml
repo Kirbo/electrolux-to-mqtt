@@ -1,25 +1,22 @@
 # Pinned dev/CI tooling, managed by mise (https://mise.jdx.dev).
 #
-# SINGLE SOURCE OF TRUTH for Node.js major + Alpine version ([vars] below).
-# pnpm version lives in package.json "packageManager" (read by mise via the
-# exec template in [tools] below, and by corepack).
-#
-# After editing [vars], run `mise run sync-versions` (or `pnpm sync:versions`)
-# to propagate node_major to package.json engines (root + telemetry-backend).
-# Everything else reads this file directly: mise itself ([tools]/[env]),
-# GitLab CI (.gitlab/ci/01_init.yml parses node_major + alpine_version), the
-# git hooks (.githooks/common.sh), and docker compose (via the exported
-# NODE_VERSION — Dockerfiles/compose have no defaults and fail loudly without it).
-# The CI job "versions in sync" enforces the engines sync.
+# Version sources of truth live in the root package.json, not here:
+#   - Node.js major: "engines.node" (read via scripts/node-major.sh)
+#   - pnpm:          "packageManager" (bump with `corepack use pnpm@latest`)
+# Bumping Node = edit engines.node, then `pnpm sync:versions` to derive
+# telemetry-backend engines + both @types/node ranges (CI "versions in sync"
+# enforces it). Everything else reads package.json directly: mise itself
+# ([tools]/[env] below), GitLab CI, the git hooks, the deploy jobs, and docker
+# compose (via the exported NODE_VERSION — Dockerfiles/compose have no defaults
+# and fail loudly without it).
+# Alpine has no package.json home, so it stays in [vars] below.
 [vars]
-# Node.js LTS major.
-node_major = "24"
 # Alpine minor used in the prod Docker image tag (dhi.io/node:<node>-alpine<alpine>)
 # and the CI node:<node>-alpine<alpine> images.
 alpine_version = "3.24"
 
 [tools]
-node = "{{ vars.node_major }}"
+node = """{{ exec(command="sh " ~ config_root ~ "/scripts/node-major.sh") }}"""
 # pnpm, version read from package.json "packageManager" (single source of truth —
 # bump it with `corepack use pnpm@latest`). Pinned to the aqua backend (GitHub-release
 # binary) on purpose: pnpm 12+ ships a native binary fetched by an npm postinstall
@@ -39,9 +36,9 @@ age = "1.3.1"
 [env]
 # Exported so `docker compose` (and manual docker builds) pick the Node major up
 # automatically — compose/Dockerfiles require it and fail loudly when unset.
-NODE_VERSION = "{{ vars.node_major }}"
+NODE_VERSION = """{{ exec(command="sh " ~ config_root ~ "/scripts/node-major.sh") }}"""
 ALPINE_VERSION = "{{ vars.alpine_version }}"
 
 [tasks.sync-versions]
-description = "Propagate node_major from mise.toml [vars] to package.json engines"
+description = "Derive telemetry-backend engines + @types/node from package.json engines.node"
 run = "bash scripts/sync-versions.sh"

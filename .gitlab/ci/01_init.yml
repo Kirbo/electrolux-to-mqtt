@@ -28,10 +28,10 @@ initialise variables:
       dotenv: variables.env
   script:
     - touch variables.env
-    # Node major + Alpine come from mise.toml [vars] — the single source of truth.
-    - NODE_MAJOR=$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml)
+    # Node major comes from package.json engines.node (the single source of truth,
+    # parsed by scripts/node-major.sh); Alpine from mise.toml [vars].
+    - NODE_MAJOR=$(sh scripts/node-major.sh)
     - ALPINE=$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' mise.toml)
-    - test -n "${NODE_MAJOR}" || { echo "ERROR could not parse node_major from mise.toml"; exit 1; }
     - test -n "${ALPINE}" || { echo "ERROR could not parse alpine_version from mise.toml"; exit 1; }
     # NODE_VERSION stays the combined image tag — both stock node (node:24-alpine3.24)
     # and dhi.io/node use the <major>-alpine<ver> suffix convention. The pieces are
@@ -113,8 +113,8 @@ install dependencies:
     - corepack enable
     - corepack install
     - pnpm config set store-dir .pnpm-store
-    - echo "Node major from mise.toml [vars]:"
-    - sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml
+    - echo "Node major from package.json engines.node:"
+    - sh scripts/node-major.sh
     - node --version
     - npm --version
     - pnpm --version

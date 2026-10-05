@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:latest
 
 # Node version build-arg — REQUIRED, no default. Compose passes it; mise exports
-# it from mise.toml [vars] node_major. Build fails loudly if unset.
+# it from the root package.json engines.node. Build fails loudly if unset.
 ARG NODE_VERSION
 ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine
 

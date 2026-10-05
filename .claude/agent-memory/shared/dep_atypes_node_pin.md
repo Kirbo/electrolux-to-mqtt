@@ -8,17 +8,17 @@ metadata:
   modified: 2026-08-17T16:08:50.078Z
 ---
 
-`@types/node` must never lead the Node runtime major (`mise.toml [vars] node_major`, `engines.node`). Types ahead of the runtime describe APIs that don't exist at execution time — it typechecks, then fails in prod.
+`@types/node` must never lead the Node runtime major (root `package.json` `engines.node`). Types ahead of the runtime describe APIs that don't exist at execution time — it typechecks, then fails in prod.
 
 **A version range does NOT enforce this.** Verified 2026-07-29: with the spec set to an explicit `>=24.0.0 <25.0.0`, `pnpm update --latest` rewrote it to `^26.1.2`. `--latest` ignores the declared range by design; a range only constrains plain `pnpm update` / `pnpm install`, which `^24.x` already did.
 
 Two mechanisms actually hold it:
 
 1. **`updateConfig.ignoreDependencies: ['@types/node']`** in **both** `pnpm-workspace.yaml` files (root and `telemetry-backend/`, which needs its own copy — it has its own lockfile and is not a workspace member). Verified: a blanket `pnpm update --latest` left `@types/node` at `^24.13.3` while still bumping biome. Naming the package explicitly (`pnpm update --latest @types/node`) **overrides** the ignore list — don't.
-2. **`scripts/sync-versions.sh` is the only writer.** It derives the range from `mise.toml`, rewrites it in both `package.json` files only when the *major* is wrong (a more specific in-major floor like `^24.13.3` is deliberate and still resolves to the newest 24.x, so it is left alone), and re-resolves both lockfiles when the range actually moves.
+2. **`scripts/sync-versions.sh` is the only writer.** It derives the range from root `engines.node`, rewrites it in both `package.json` files only when the *major* is wrong (a more specific in-major floor like `^24.13.3` is deliberate and still resolves to the newest 24.x, so it is left alone), and re-resolves both lockfiles when the range actually moves.
 
 **Consequence:** `@types/node` shows as permanently "outdated" in `pnpm outdated` (24.x vs 26.x latest). That is the pin working — not a backlog item.
 
-**How to move it:** bump `mise.toml [vars] node_major`, run `pnpm sync:versions`. Since 2026-08-17 the script's scope shrank: it syncs both `engines.node` + both `@types/node` and re-resolves both lockfiles — nothing else is derived anymore (`.nvmrc` deleted; Dockerfiles/compose have no defaults and require `NODE_VERSION`; CI sed-parses `mise.toml [vars]` directly). An end-to-end 24 → 26 → 24 roundtrip was verified 2026-07-29 under the old design. CI job `versions in sync` re-runs the script and fails on a non-empty `git diff`, so drift cannot land. `updateConfig` does not enter the lockfile's `settings` block, so it carries no `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` risk — confirmed with a real prod image build; see [[dep_override_dockerfile_workspace]].
+**How to move it:** bump root `package.json` `engines.node`, run `pnpm sync:versions` (since 2026-10-05 `engines.node` is the Node source of truth; `mise.toml` reads it via `scripts/node-major.sh`). Since 2026-08-17 the script's scope shrank: it syncs both `engines.node` + both `@types/node` and re-resolves both lockfiles — nothing else is derived anymore (`.nvmrc` deleted; Dockerfiles/compose have no defaults and require `NODE_VERSION`; CI sed-parses `mise.toml [vars]` directly). An end-to-end 24 → 26 → 24 roundtrip was verified 2026-07-29 under the old design. CI job `versions in sync` re-runs the script and fails on a non-empty `git diff`, so drift cannot land. `updateConfig` does not enter the lockfile's `settings` block, so it carries no `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` risk — confirmed with a real prod image build; see [[dep_override_dockerfile_workspace]].
 
 Node 24 (Krypton) is the current LTS as of 2026-07-29; Alpine 3.24 is the newest 3.x.

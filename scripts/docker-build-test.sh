@@ -21,11 +21,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-# Node major + Alpine from mise.toml [vars] — the single source of truth.
-NODE_MAJOR="$(sed -n 's/^node_major *= *"\([0-9][0-9]*\)".*/\1/p' mise.toml | head -1)"
+# Node major from package.json engines.node (the single source of truth);
+# Alpine from mise.toml [vars].
+NODE_MAJOR="$(sh scripts/node-major.sh)"
 ALPINE="$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' mise.toml | head -1)"
 if [[ -z "${NODE_MAJOR}" || -z "${ALPINE}" ]]; then
-  echo "ERROR: could not parse node_major/alpine_version from mise.toml" >&2
+  echo "ERROR: could not parse the Node major (package.json) / alpine_version (mise.toml)" >&2
   exit 1
 fi
 TAG_PREFIX="e2m-buildtest"

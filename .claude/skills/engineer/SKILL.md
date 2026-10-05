@@ -80,7 +80,7 @@ Run E2E snapshot validation (see the `/audit` skill § E2E snapshots). Raw API u
 ### Docker
 
 `docker/Dockerfile` / `Dockerfile.local`, `.dockerignore`*, compose examples*
-(*if needed). Node major + Alpine are single-sourced in `mise.toml` `[vars]` (`node_major`, `alpine_version`) — edit them and run `pnpm sync:versions` (syncs `package.json` engines; CI and mise read `mise.toml` directly, and Dockerfiles/compose require `NODE_VERSION` explicitly — no defaults to hand-edit).
+(*if needed). Node major is single-sourced in root `package.json` `engines.node` (read via `scripts/node-major.sh`), Alpine in `mise.toml` `[vars] alpine_version` — edit them and run `pnpm sync:versions` (derives backend engines + `@types/node`; Dockerfiles/compose require `NODE_VERSION` explicitly — no defaults to hand-edit).
 
 ### Badge serving + legacy ingest (`telemetry-backend/`)
 
