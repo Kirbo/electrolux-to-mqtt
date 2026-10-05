@@ -95,7 +95,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
   beforeAll(async () => {
     client = new ElectroluxClient(mockMqtt)
-    await client.initialize()
+    client.initialize()
 
     const loginSuccess = await client.login()
     if (!loginSuccess) {

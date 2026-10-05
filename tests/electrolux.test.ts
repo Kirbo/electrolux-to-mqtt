@@ -910,7 +910,7 @@ describe('electrolux', () => {
         },
       } as unknown as ReturnType<typeof axios.create>)
 
-      await client.initialize()
+      client.initialize()
       expect(axiosCreateSpy).toHaveBeenCalled()
     })
 
@@ -922,7 +922,7 @@ describe('electrolux', () => {
         },
       } as unknown as ReturnType<typeof axios.create>)
 
-      await client.initialize()
+      client.initialize()
 
       expect(axiosCreateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -965,7 +965,7 @@ describe('electrolux', () => {
         }),
       } as unknown as ReturnType<typeof axios.create>)
 
-      await client.initialize()
+      client.initialize()
 
       // Should not throw when refreshing tokens
       await expect(client.refreshTokens()).resolves.not.toThrow()
@@ -1026,7 +1026,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
         const result = await client.login()
 
         expect(result).toBe(true)
@@ -1041,7 +1041,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
         await client.login()
 
         const expectedTimeout = 25_000 // apiTimeoutSeconds default (25) × 1000
@@ -1068,7 +1068,7 @@ describe('electrolux', () => {
           .mockResolvedValueOnce(mockLoginResponse)
           .mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
         const result = await client.login()
 
         expect(result).toBe(true)
@@ -1202,7 +1202,7 @@ describe('electrolux', () => {
       it.skipIf(process.env.CI === 'true')('should refresh tokens successfully', async () => {
         mockAxiosInstance.post.mockResolvedValueOnce(mockTokenRefreshResponse)
 
-        await client.initialize()
+        client.initialize()
         // Set refreshToken so the refresh can work
         client.refreshToken = 'test-refresh-token'
         await client.refreshTokens()
@@ -1219,7 +1219,7 @@ describe('electrolux', () => {
         mockAxiosInstance.post.mockRejectedValueOnce(new Error('Token refresh failed'))
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const refreshPromise = client.refreshTokens()
 
         vi.runAllTimers()
@@ -1235,7 +1235,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockResolvedValue(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
         const results = await Promise.all([client.login(), client.login(), client.login()])
 
         expect(results).toEqual([true, true, true])
@@ -1247,7 +1247,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockRejectedValueOnce(new Error('network down'))
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const first = await client.login()
         expect(first).toBe(false)
         expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(1)
@@ -1269,7 +1269,7 @@ describe('electrolux', () => {
       it('should share a single in-flight refresh across concurrent refreshTokens() calls', async () => {
         mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
 
-        await client.initialize()
+        client.initialize()
         client.refreshToken = 'test-refresh-token'
         await Promise.all([client.refreshTokens(), client.refreshTokens()])
 
@@ -1340,7 +1340,7 @@ describe('electrolux', () => {
       it('should fetch appliances successfully', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
 
-        await client.initialize()
+        client.initialize()
         const appliances = await client.getAppliances()
 
         expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances')
@@ -1353,7 +1353,7 @@ describe('electrolux', () => {
           .mockResolvedValueOnce({ data: [mockAppliancesResponse[0]] })
           .mockResolvedValueOnce({ data: mockAppliancesResponse })
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
         const appliances = await client.getAppliances()
 
@@ -1365,7 +1365,7 @@ describe('electrolux', () => {
           .mockResolvedValueOnce({ data: mockAppliancesResponse })
           .mockResolvedValueOnce({ data: [mockAppliancesResponse[0]] })
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
         const appliances = await client.getAppliances()
 
@@ -1375,7 +1375,7 @@ describe('electrolux', () => {
       it('should handle API error when fetching appliances', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(new Error('API Error'))
 
-        await client.initialize()
+        client.initialize()
         const appliances = await client.getAppliances()
 
         expect(appliances).toBeUndefined()
@@ -1384,7 +1384,7 @@ describe('electrolux', () => {
       it('should return undefined when API response is not a valid ApplianceStub array', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: { unexpected: 'shape' } })
 
-        await client.initialize()
+        client.initialize()
         const appliances = await client.getAppliances()
 
         expect(appliances).toBeUndefined()
@@ -1395,7 +1395,7 @@ describe('electrolux', () => {
       it('should fetch appliance info successfully', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceInfoResponse })
 
-        await client.initialize()
+        client.initialize()
         const info = await client.getApplianceInfo('test-appliance-123')
 
         expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances/test-appliance-123/info')
@@ -1405,7 +1405,7 @@ describe('electrolux', () => {
       it('should handle API error when fetching appliance info', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(new Error('Not found'))
 
-        await client.initialize()
+        client.initialize()
         const info = await client.getApplianceInfo('invalid-id')
 
         expect(info).toBeUndefined()
@@ -1431,7 +1431,7 @@ describe('electrolux', () => {
       it('should fetch and publish appliance state on first fetch', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
 
-        await client.initialize()
+        client.initialize()
         const state = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
 
         expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/v1/appliances/test-appliance-123/state')
@@ -1443,7 +1443,7 @@ describe('electrolux', () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
         mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
 
-        await client.initialize()
+        client.initialize()
 
         // Send a command to set the last command time
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
@@ -1458,7 +1458,7 @@ describe('electrolux', () => {
       it('should handle API error without publishing disconnected state', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network error'))
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
 
         // Should return undefined on error without publishing disconnected state
@@ -1471,7 +1471,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(undefined)
         mockAxiosInstance.get.mockResolvedValueOnce({ data: { some: 'garbage' } })
 
-        await client.initialize()
+        client.initialize()
         vi.mocked(cache.set).mockClear()
         vi.mocked(mockMqtt.publish).mockClear()
         const result = await client.getApplianceState(mockAppliance as unknown as BaseAppliance)
@@ -1485,7 +1485,7 @@ describe('electrolux', () => {
         const { cache } = await import('#/cache.js')
         mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
 
-        await client.initialize()
+        client.initialize()
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
 
         // After a command the cache holds a *normalized* state (publishCommandFeedback shape).
@@ -1516,7 +1516,7 @@ describe('electrolux', () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
         const callback = vi.fn()
 
-        await client.initialize()
+        client.initialize()
         await client.getApplianceState(mockAppliance as unknown as BaseAppliance, callback)
 
         // Fetched state differs from the cached normalized state → the discovery
@@ -1556,7 +1556,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
 
-        await client.initialize()
+        client.initialize()
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
 
         expect(mockAxiosInstance.put).toHaveBeenCalledWith(
@@ -1572,7 +1572,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockRejectedValueOnce(new Error('Command failed'))
 
-        await client.initialize()
+        client.initialize()
         const result = await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
 
         expect(result).toBeUndefined()
@@ -1584,7 +1584,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockRejectedValueOnce(new Error('Command failed'))
 
-        await client.initialize()
+        client.initialize()
         vi.mocked(mockMqtt.publish).mockClear()
 
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
@@ -1605,7 +1605,7 @@ describe('electrolux', () => {
           validateCommand: vi.fn(() => ({ valid: false, reason: 'fan speed HIGH not allowed in dry mode' })),
         })
 
-        await client.initialize()
+        client.initialize()
         vi.mocked(mockMqtt.publish).mockClear()
 
         await client.sendApplianceCommand(validatingAppliance as unknown as BaseAppliance, { fanSpeedSetting: 'high' })
@@ -1631,7 +1631,7 @@ describe('electrolux', () => {
             validateCommand: vi.fn(() => ({ valid: false, reason: 'fan speed HIGH not allowed in dry mode' })),
           })
 
-          await client.initialize()
+          client.initialize()
           vi.mocked(mockMqtt.publish).mockClear()
 
           await client.sendApplianceCommand(validatingAppliance as unknown as BaseAppliance, {
@@ -1660,7 +1660,7 @@ describe('electrolux', () => {
         },
       } as unknown as ReturnType<typeof axios.create>)
 
-      await client.initialize()
+      client.initialize()
 
       expect(createSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1679,7 +1679,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(mockAppliancesResponse)
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
 
-        await client.initialize()
+        client.initialize()
         const appliances = await client.getAppliances()
 
         expect(appliances).toEqual(mockAppliancesResponse)
@@ -1692,7 +1692,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.get.mockRejectedValueOnce(error500)
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getAppliances()
 
         expect(result).toBeUndefined()
@@ -1727,7 +1727,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         // Send a command with mode: cool
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
@@ -1752,7 +1752,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         // Send off command
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { applianceState: 'off' })
@@ -1767,7 +1767,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
         await client.sendApplianceCommand(mockAppliance as unknown as BaseAppliance, { mode: 'cool' })
 
         expect(mockMqtt.publish).toHaveBeenCalledWith(expect.stringContaining('test-appliance'), expect.any(String))
@@ -1780,7 +1780,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         // Clear previous calls
         vi.mocked(mockMqtt.publish).mockClear()
@@ -1813,7 +1813,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.get.mockResolvedValue({ data: updatedState })
 
-        await client.initialize()
+        client.initialize()
 
         // This should trigger fetchAndProcessApplianceState
         const mockAppl = createMockAppliance()
@@ -1850,7 +1850,7 @@ describe('electrolux', () => {
         }
         mockAxiosInstance.get.mockResolvedValue({ data: newState })
 
-        await client.initialize()
+        client.initialize()
 
         let callbackExecuted = false
         const mockAppl = createMockAppliance()
@@ -1880,7 +1880,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(cachedState)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         const mockAppl = createMockAppliance()
         await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
@@ -1904,7 +1904,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(offState)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         const mockAppl = createMockAppliance()
         // First set a mode to track
@@ -1932,7 +1932,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(onState)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         const mockAppl = createMockAppliance()
         // Send off command
@@ -1968,7 +1968,7 @@ describe('electrolux', () => {
           .mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
 
         // Queue a waiter before triggering login
         let rejected = false
@@ -2015,7 +2015,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(null)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         const mockAppl = createMockAppliance()
         await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
@@ -2029,7 +2029,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         const mockAppl = createMockAppliance({
           deriveImmediateStateFromCommand: vi.fn(() => ({ targetTemperatureC: 22 })),
@@ -2043,7 +2043,7 @@ describe('electrolux', () => {
         mockAxiosInstance.post.mockRejectedValueOnce(new Error('Refresh failed'))
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const refreshPromise = client.refreshTokens()
 
         vi.runAllTimers()
@@ -2071,7 +2071,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
         // Mark as logged in so startLogin() in refreshTokens() doesn't skip the waiter path
         client.isLoggedIn = true
 
@@ -2146,7 +2146,7 @@ describe('electrolux', () => {
         })
 
         try {
-          await client.initialize()
+          client.initialize()
           await client.refreshTokens()
 
           const baseDelay = Math.min(TOKEN_REFRESH_BASE_DELAY_MS * 2 ** 0, TOKEN_REFRESH_MAX_DELAY_MS)
@@ -2217,7 +2217,7 @@ describe('electrolux', () => {
       it.skipIf(process.env.CI === 'true')('should refresh token when near expiration', async () => {
         mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
 
-        await client.initialize()
+        client.initialize()
 
         // Mock a token that expires soon (less than 1 hour)
         const nearExpiryTime = new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
@@ -2235,7 +2235,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
 
         // Clear tokens
         client.accessToken = undefined
@@ -2248,7 +2248,7 @@ describe('electrolux', () => {
       })
 
       it('should handle errors in ensureValidToken gracefully', async () => {
-        await client.initialize()
+        client.initialize()
 
         client.eat = undefined
         vi.mocked(axios.get).mockRejectedValueOnce(new Error('Network error'))
@@ -2271,7 +2271,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
 
-        await client.initialize()
+        client.initialize()
         client.isLoggedIn = true
         client.accessToken = 'test-token'
         client.refreshToken = 'test-refresh-token'
@@ -2291,7 +2291,7 @@ describe('electrolux', () => {
         mockAxiosInstance.get.mockRejectedValue(error403)
         mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
 
-        await client.initialize()
+        client.initialize()
         client.isLoggedIn = true
 
         const result = await client.getAppliances()
@@ -2329,7 +2329,7 @@ describe('electrolux', () => {
       it('should return undefined when the API responds with 429', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getAppliances()
 
         expect(result).toBeUndefined()
@@ -2338,7 +2338,7 @@ describe('electrolux', () => {
       it('should not retry the request after 429', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         // Unlike 403, a 429 must not trigger a second attempt
@@ -2348,7 +2348,7 @@ describe('electrolux', () => {
       it('should not trigger a token refresh after 429', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         expect(mockAxiosInstance.post).not.toHaveBeenCalled()
@@ -2357,7 +2357,7 @@ describe('electrolux', () => {
       it('should log a warning that names both configurable intervals', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('429'))
@@ -2368,7 +2368,7 @@ describe('electrolux', () => {
       it('should log the current refreshInterval, applianceDiscoveryInterval and appliance count', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
@@ -2383,7 +2383,7 @@ describe('electrolux', () => {
       it('should log all three Electrolux API rate limits', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
@@ -2397,7 +2397,7 @@ describe('electrolux', () => {
       it('should log estimated daily call breakdown (state polls + discovery polls)', async () => {
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
@@ -2415,7 +2415,7 @@ describe('electrolux', () => {
         // estimatedCallsPerDay = 3168
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
@@ -2430,7 +2430,7 @@ describe('electrolux', () => {
         // 1 appliance, 30s refresh → 3168 calls/day < 5000 → burst warning path
         mockAxiosInstance.get.mockRejectedValueOnce(make429Error())
 
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
 
         const warnCalls = loggerWarnSpy.mock.calls.map((args: unknown[]) => args[0] as string)
@@ -2445,7 +2445,7 @@ describe('electrolux', () => {
       it('should suggest a minimum refreshInterval when 2 appliances push calls over 5000/day', async () => {
         // First call succeeds and populates previousAppliances with 2 appliances
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
         loggerWarnSpy.mockClear()
 
@@ -2467,7 +2467,7 @@ describe('electrolux', () => {
 
       it('should use the correct appliance count in the suggestion when appliances are known', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
-        await client.initialize()
+        client.initialize()
         await client.getAppliances()
         loggerWarnSpy.mockClear()
 
@@ -2489,7 +2489,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         const mockAppl = createMockAppliance()
         // Send a command to populate internal tracking maps
@@ -2541,7 +2541,7 @@ describe('electrolux', () => {
         }
         mockAxiosInstance.get.mockResolvedValueOnce({ data: newState })
 
-        await client.initialize()
+        client.initialize()
         loggerInfoSpy.mockClear()
 
         const mockAppl = createMockAppliance()
@@ -2567,7 +2567,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
 
-        await client.initialize()
+        client.initialize()
         loggerErrorSpy.mockClear()
         await client.getAppliances()
 
@@ -2589,7 +2589,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
 
-        await client.initialize()
+        client.initialize()
         loggerErrorSpy.mockClear()
         await client.getAppliances()
 
@@ -2606,7 +2606,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.get.mockRejectedValueOnce(axiosError)
 
-        await client.initialize()
+        client.initialize()
         loggerErrorSpy.mockClear()
         await client.getAppliances()
 
@@ -2628,7 +2628,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockResolvedValueOnce(mockCsrfTokenResponse)
         vi.mocked(axios.post).mockResolvedValueOnce(mockLoginResponse).mockResolvedValueOnce(mockTokenExchangeResponse)
 
-        await client.initialize()
+        client.initialize()
         client.accessToken = 'old-token'
         client.refreshToken = 'old-refresh-token'
 
@@ -2651,7 +2651,7 @@ describe('electrolux', () => {
         vi.mocked(axios.get).mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND account.electrolux.one'))
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         client.accessToken = 'old-token'
         client.refreshToken = 'old-refresh-token'
 
@@ -2667,7 +2667,7 @@ describe('electrolux', () => {
         mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network timeout'))
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const refreshPromise = client.refreshTokens()
 
         vi.runAllTimers()
@@ -2684,7 +2684,7 @@ describe('electrolux', () => {
         })
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const refreshPromise = client.refreshTokens()
 
         vi.runAllTimers()
@@ -2709,7 +2709,7 @@ describe('electrolux', () => {
 
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const loginPromise = client.login()
 
         // Advance all pending timers to fire retry callbacks
@@ -2759,7 +2759,7 @@ describe('electrolux', () => {
 
         vi.useFakeTimers()
 
-        await client.initialize()
+        client.initialize()
         const refreshPromise = client.refreshTokens()
 
         await vi.runAllTimersAsync()
@@ -2786,7 +2786,7 @@ describe('electrolux', () => {
 
         mockAxiosInstance.post.mockResolvedValue(mockTokenRefreshResponse)
 
-        await client.initialize()
+        client.initialize()
         client.isLoggedIn = true
         client.accessToken = 'test-token'
         client.refreshToken = 'test-refresh-token'
@@ -2830,7 +2830,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(onState)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         // First send cool to set lastActiveMode
         await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'cool' })
@@ -2876,7 +2876,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(onState)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
-        await client.initialize()
+        client.initialize()
 
         // Send heat command to set lastActiveMode
         await client.sendApplianceCommand(mockAppl as unknown as BaseAppliance, { mode: 'heat' })
@@ -2923,7 +2923,7 @@ describe('electrolux', () => {
         vi.mocked(cache.get).mockReturnValue(undefined)
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockApplianceStateResponse })
 
-        await client.initialize()
+        client.initialize()
         vi.mocked(mockMqtt.publish).mockClear()
         const result = await client.getApplianceState(mockAppl as unknown as BaseAppliance)
 
@@ -2954,7 +2954,7 @@ describe('electrolux', () => {
           },
         } as unknown as ReturnType<typeof axios.create>)
 
-        await client.initialize()
+        client.initialize()
         expect(interceptorCallback).toBeDefined()
 
         // Interceptor calls waitForLogin() — mock it to verify the call
@@ -2984,7 +2984,7 @@ describe('electrolux', () => {
           },
         } as unknown as ReturnType<typeof axios.create>)
 
-        await client.initialize()
+        client.initialize()
         client.isLoggingIn = true
 
         const requestConfig = { url: '/api/v1/token/refresh' }
@@ -3001,7 +3001,7 @@ describe('electrolux', () => {
         vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
         mockAxiosInstance.get.mockRejectedValueOnce(timeoutError)
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getAppliances()
 
         // A timeout is a transient error — it should return undefined without crashing
@@ -3016,7 +3016,7 @@ describe('electrolux', () => {
         vi.spyOn(axios, 'isAxiosError').mockReturnValue(true)
         mockAxiosInstance.get.mockRejectedValueOnce(timeoutError)
 
-        await client.initialize()
+        client.initialize()
         loggerErrorSpy.mockClear()
         await client.getAppliances()
 
@@ -3029,7 +3029,7 @@ describe('electrolux', () => {
         // Simulate a response body that is valid JSON but fails the isApplianceStubArray type guard
         mockAxiosInstance.get.mockResolvedValueOnce({ data: 'unexpected string payload' })
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getAppliances()
 
         expect(result).toBeUndefined()
@@ -3038,7 +3038,7 @@ describe('electrolux', () => {
       it('should return undefined when API returns an object instead of array for appliances', async () => {
         mockAxiosInstance.get.mockResolvedValueOnce({ data: { items: [], total: 0 } })
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getAppliances()
 
         expect(result).toBeUndefined()
@@ -3048,7 +3048,7 @@ describe('electrolux', () => {
         // isApplianceInfo checks for applianceInfo and capabilities properties
         mockAxiosInstance.get.mockResolvedValueOnce({ data: [1, 2, 3] })
 
-        await client.initialize()
+        client.initialize()
         const result = await client.getApplianceInfo('test-appliance-123')
 
         expect(result).toBeUndefined()

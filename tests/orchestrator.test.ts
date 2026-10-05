@@ -501,6 +501,19 @@ describe('Orchestrator', () => {
       expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
     })
 
+    it('initializes multiple new appliances concurrently rather than one at a time', async () => {
+      const secondStub: ApplianceStub = { ...mockStub, applianceId: 'appliance-2' }
+      vi.mocked(client.getAppliances).mockResolvedValue([mockStub, secondStub])
+      // Info lookups never settle — a sequential loop would stall on the first one
+      vi.mocked(client.getApplianceInfo).mockReturnValue(new Promise(() => {}))
+
+      void orchestrator.discoverAppliances()
+      await vi.waitFor(() => expect(client.getApplianceInfo).toHaveBeenCalledTimes(2))
+
+      expect(client.getApplianceInfo).toHaveBeenCalledWith('appliance-1')
+      expect(client.getApplianceInfo).toHaveBeenCalledWith('appliance-2')
+    })
+
     it('should detect and clean up removed appliances', async () => {
       // First discover an appliance
       vi.mocked(client.getAppliances).mockResolvedValue([mockStub])

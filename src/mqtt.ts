@@ -227,8 +227,9 @@ class Mqtt implements IMqtt {
     })
   }
 
-  public async [Symbol.asyncDispose](): Promise<void> {
+  public [Symbol.asyncDispose](): Promise<void> {
     this.disconnect()
+    return Promise.resolve()
   }
 
   public onReconnect(callback: () => void): void {

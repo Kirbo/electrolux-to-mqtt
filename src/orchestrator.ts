@@ -433,10 +433,7 @@ export class Orchestrator implements AsyncDisposable {
         logger.info(`Found ${newAppliances.length} new appliance(s)`)
         const intervalDelay = this.config.refreshInterval / (appliances.length + 1) // Distribute load
 
-        for (const [i, appliance] of newAppliances.entries()) {
-          const delay = i * intervalDelay
-          await this.initializeAppliance(appliance, delay)
-        }
+        await Promise.all(newAppliances.map((appliance, i) => this.initializeAppliance(appliance, i * intervalDelay)))
       }
 
       if (newAppliances.length === 0 && this.applianceMissingSince.size === 0) {
@@ -447,8 +444,9 @@ export class Orchestrator implements AsyncDisposable {
     }
   }
 
-  public async [Symbol.asyncDispose](): Promise<void> {
+  public [Symbol.asyncDispose](): Promise<void> {
     this.shutdown()
+    return Promise.resolve()
   }
 
   /**

@@ -282,8 +282,9 @@ export class ElectroluxClient implements AsyncDisposable {
     activeTimeouts.clear()
   }
 
-  public async [Symbol.asyncDispose](): Promise<void> {
+  public [Symbol.asyncDispose](): Promise<void> {
     this.cleanup()
+    return Promise.resolve()
   }
 
   /**
@@ -296,11 +297,11 @@ export class ElectroluxClient implements AsyncDisposable {
     this.previousAppliances.delete(applianceId)
   }
 
-  public async initialize() {
-    await this.createApiClient()
+  public initialize() {
+    this.createApiClient()
   }
 
-  private async createApiClient() {
+  private createApiClient() {
     const headers = {
       'Content-Type': 'application/json',
       'x-api-key': config.electrolux.apiKey,
@@ -478,7 +479,7 @@ export class ElectroluxClient implements AsyncDisposable {
 
       logger.info('Logged in successfully')
 
-      await this.createApiClient()
+      this.createApiClient()
 
       this.finishLogin(true)
       this.loginRetryCount = 0
@@ -597,7 +598,7 @@ export class ElectroluxClient implements AsyncDisposable {
       logger.info('Tokens refreshed successfully')
 
       // Recreate API client with new access token
-      await this.createApiClient()
+      this.createApiClient()
 
       this.finishLogin(true)
       this.refreshRetryCount = 0

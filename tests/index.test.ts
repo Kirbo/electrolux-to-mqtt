@@ -99,7 +99,7 @@ const MockElectroluxClientCtor = vi.fn(function (this: typeof mockClientInstance
   this.isLoggingIn = false
   this.isLoggedIn = false
   this.login = vi.fn().mockResolvedValue(true)
-  this.initialize = vi.fn().mockResolvedValue(undefined)
+  this.initialize = vi.fn()
   this.waitForLogin = vi.fn().mockResolvedValue(undefined)
   this.getAppliances = vi.fn().mockResolvedValue([])
   this.cleanup = vi.fn()
@@ -291,6 +291,20 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(fakeAppliance, 0)
 
       vi.useRealTimers()
+    })
+
+    it('should start initializing every appliance without waiting for the previous one', async () => {
+      const first = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
+      const second = { applianceId: 'appliance-2', applianceName: 'Test AC 2', applianceType: 'AC' }
+      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([first, second])
+      // Initialization never settles — a sequential loop would stall on the first appliance
+      mockOrchestratorInstance.initializeAppliance = vi.fn().mockReturnValue(new Promise(() => {}))
+
+      void indexModule.main()
+      await vi.waitFor(() => expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledTimes(2))
+
+      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(first, 0)
+      expect(mockOrchestratorInstance.initializeAppliance).toHaveBeenCalledWith(second, 15_000)
     })
 
     it('should start version checker when appliances are found', async () => {

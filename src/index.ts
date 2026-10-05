@@ -38,7 +38,7 @@ let stopVersionChecker: (() => void) | null = null
 let restartTimeoutDisposable: Disposable | null = null
 
 // Graceful shutdown handler
-const shutdown = async () => {
+const shutdown = () => {
   restartTimeoutDisposable?.[Symbol.dispose]()
   restartTimeoutDisposable = null
   discoveryIntervalDisposable?.[Symbol.dispose]()
@@ -81,7 +81,7 @@ export const main = async () => {
   logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
 
   // Initialize the client
-  await client.initialize()
+  client.initialize()
   await waitForLogin()
 
   // Initial appliance discovery
@@ -106,11 +106,8 @@ export const main = async () => {
   const totalAppliances = appliances.length
   const intervalDelay = refreshInterval / totalAppliances
 
-  // Initialize all appliances with staggered delays
-  for (const [i, appliance] of appliances.entries()) {
-    const delay = i * intervalDelay
-    await orchestrator.initializeAppliance(appliance, delay)
-  }
+  // Initialize all appliances concurrently; their polling start is staggered by delay
+  await Promise.all(appliances.map((appliance, i) => orchestrator.initializeAppliance(appliance, i * intervalDelay)))
 
   // Start periodic appliance discovery
   discoveryIntervalDisposable = disposableInterval(() => {
