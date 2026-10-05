@@ -12,6 +12,12 @@
 # ([tools]/[env] below), GitLab CI, the git hooks, the deploy jobs, and docker
 # compose (via the exported NODE_VERSION/ALPINE_VERSION — Dockerfiles/compose have
 # no defaults and fail loudly without them).
+#
+# Requires a trusted config (`mise trust`) — the exec() templates below run scripts.
+
+# Oldest mise verified with this file (aqua backend + exec()/config_root templates).
+# Older versions fail loudly here instead of mis-resolving tools.
+min_version = "2026.9.9"
 
 [tools]
 node = """{{ exec(command="sh " ~ config_root ~ "/scripts/node-major.sh") }}"""

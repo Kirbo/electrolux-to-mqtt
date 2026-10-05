@@ -34,23 +34,62 @@ Please be respectful and considerate in all interactions. We're here to build gr
 
 ## Development Setup
 
-### Prerequisites
+### Version sources
 
-- **Node.js**: Major pinned in the root `package.json` `engines.node` — the canonical source, read everywhere through `scripts/node-major.sh` (`mise install` provisions it; without mise, install the same major with your version manager of choice). After editing it, run `pnpm sync:versions` to derive the `telemetry-backend` engines and both `@types/node` ranges.
-- **pnpm**: Correct version is specified in `package.json` `packageManager` field
-- **Git**: For version control
-- **Tool versions (mise)**: Alpine (`[vars] alpine_version` — the base of every Node image, read via `scripts/alpine-version.sh`), sops, and age are pinned in `mise.toml` at the repo root; Node.js and pnpm come from the root `package.json` (`engines.node`, `packageManager`), which mise reads. After editing `engines.node` run `pnpm sync:versions` — it derives the `telemetry-backend` engines and the `@types/node` range in both packages (which must always track the Node major rather than the newest release line), re-resolving both lockfiles when the range moves. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+Every toolchain version has exactly one source, and everything (mise, CI, git hooks, Dockerfiles/compose via build-args, deploy jobs) reads it from there:
+
+| What | Source of truth | Read via |
+|---|---|---|
+| Node.js major | root `package.json` `engines.node` | `scripts/node-major.sh` |
+| Alpine (base of every Node image) | root `package.json` `alpineVersion` | `scripts/alpine-version.sh` |
+| pnpm | root `package.json` `packageManager` | mise (aqua backend) + Corepack in images/CI |
+| sops, age | `mise.toml` `[tools]` | mise |
+| mise itself (minimum) | `mise.toml` `min_version` | mise (fails loudly when older) |
+
+After editing `engines.node` run `pnpm sync:versions`. It derives the `telemetry-backend` engines and the `@types/node` range in both packages, which must track the Node major rather than the newest release line, and re-resolves both lockfiles when the range moves. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime. CI job `versions in sync` fails on any drift. `package.json` is a release-gated path, so bumping Node, Alpine or pnpm cuts a release.
+
+### Toolchain setup (one-time, every machine)
+
+These steps make every environment resolve the same Node, pnpm, and image versions. Skipping any of them is the usual cause of "works on my machine".
+
+1. **Install mise, at least the `min_version` in `mise.toml`.** Follow https://mise.jdx.dev/getting-started.html, then check with `mise --version`. An older mise refuses to load the project config with `mise version X is required`. Upgrade it the way you installed it (`brew upgrade mise`, `mise self-update`, …).
+2. **Activate mise in your shell.** This is required, not optional: `mise.toml` `[env]` exports `NODE_VERSION` and `ALPINE_VERSION`, which `pnpm dev:docker`, `pnpm backend:docker` and every `docker compose` build need. Shims alone do **not** export them (only an activated shell does), so compose fails with `NODE_VERSION is not set`.
+   ```bash
+   echo 'eval "$(mise activate zsh)"' >> ~/.zshrc     # zsh
+   echo 'eval "$(mise activate bash)"' >> ~/.bashrc   # bash
+   echo 'mise activate fish | source' >> ~/.config/fish/config.fish  # fish
+   ```
+   Then open a new shell. For non-interactive contexts (IDE tasks, scripts) prefix commands with `mise exec --`, e.g. `mise exec -- pnpm dev:docker`.
+3. **Trust the project config.** `mise.toml` runs `exec()` templates that read `package.json`, so mise ignores it until trusted:
+   ```bash
+   cd electrolux-to-mqtt
+   mise trust
+   ```
+4. **Install the toolchain**, and re-run it after pulling a commit that bumps Node, pnpm, sops or age:
+   ```bash
+   mise install
+   ```
+5. **Do not run `corepack enable` locally.** mise already installs the exact pnpm from `packageManager`. A Corepack shim adds a second `pnpm` on `PATH` whose precedence depends on your shell setup, and Node 25+ no longer bundles Corepack anyway. If you enabled it before, run `corepack disable` (add `--install-directory <dir>` if you enabled it into a custom directory such as `~/.local/bin`). (The Docker images and CI do use Corepack. That is expected, because mise is not installed there.)
+6. **Optional: set `GITHUB_TOKEN`.** mise downloads pnpm (aqua backend) from GitHub releases, and unauthenticated downloads are rate-limited to 60 per hour per IP, which shared networks can hit. Exporting any read-only `GITHUB_TOKEN` avoids it.
+7. **Verify:**
+   ```bash
+   mise doctor                              # "No problems found", activated: yes
+   node --version                           # major == package.json engines.node
+   pnpm --version                           # == package.json packageManager
+   echo "$NODE_VERSION $ALPINE_VERSION"     # both set, e.g. "24 3.24"
+   ```
+
+**Without mise** (not recommended): install the Node major from `engines.node`, run `corepack enable && corepack install` for pnpm, and export the build-args yourself before any compose command:
+```bash
+export NODE_VERSION=$(sh scripts/node-major.sh) ALPINE_VERSION=$(sh scripts/alpine-version.sh)
+```
+
+Other prerequisites: **Git**, plus **Docker** for `pnpm dev:docker` / `pnpm docker:test`. Optionally install `osv-scanner` (`brew install osv-scanner`) for `pnpm osv-scan`, which otherwise falls back to Docker.
 
 ### Installation
 
 ```bash
-# Provision the toolchain (Node + pnpm from package.json; sops, age from mise.toml)
-mise install
-
-# Enable corepack (ships with Node.js 24 — reads packageManager field from package.json)
-corepack enable
-
-# Install dependencies
+# Toolchain setup (above) done first, then:
 pnpm install
 
 # Create your config file

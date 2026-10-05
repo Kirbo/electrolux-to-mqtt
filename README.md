@@ -315,14 +315,11 @@ cp config.example.yml config.yml
 # Modify as needed
 code config.yml
 
-# Make sure you have the correct toolchain (Node.js major from package.json engines.node,
-# other tools pinned in mise.toml)
-# If you don't have mise installed, follow https://mise.jdx.dev/getting-started.html
+# One-time toolchain setup — full steps + why in docs/CONTRIBUTING.md
+# ("Toolchain setup"): install mise (>= min_version in mise.toml), activate it in
+# your shell, then trust + install. mise provides the pinned Node + pnpm — no corepack.
+mise trust
 mise install
-
-# Install correct pnpm version if not installed already
-corepack enable
-corepack install
 
 # Install the dependencies
 pnpm install
@@ -339,8 +336,9 @@ cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 # Modify as needed
 code docker/docker-compose.local.yml
 
-# Run the stack — NODE_VERSION + ALPINE_VERSION come from mise (package.json engines.node,
-# mise.toml alpine_version); without mise, export both yourself — the build fails loudly when unset
+# Run the stack — NODE_VERSION + ALPINE_VERSION are exported by an ACTIVATED mise shell
+# (from package.json engines.node + alpineVersion); without it, see docs/CONTRIBUTING.md
+# ("Without mise") — the build fails loudly when unset
 docker compose -f docker/docker-compose.local.yml down ; docker compose -f docker/docker-compose.local.yml up --build
 
 # Or if you have pnpm installed:
