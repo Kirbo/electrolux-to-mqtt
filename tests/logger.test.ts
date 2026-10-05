@@ -14,11 +14,11 @@ describe('logger', () => {
     it('should return an object with info, warn, error, and debug methods', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: true, showVersionNumber: false } },
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
 
       expect(typeof logger.info).toBe('function')
@@ -30,7 +30,7 @@ describe('logger', () => {
     it('should create distinct loggers for different context names', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: false } },
       }))
 
@@ -39,7 +39,7 @@ describe('logger', () => {
         default: vi.fn().mockReturnValue({ child: pinoChildSpy }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       createLogger('mqtt')
       createLogger('health')
 
@@ -52,7 +52,7 @@ describe('logger', () => {
     it('should uppercase the context name in the child logger', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: false } },
       }))
 
@@ -61,7 +61,7 @@ describe('logger', () => {
         default: vi.fn().mockReturnValue({ child: pinoChildSpy }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       createLogger('orchestrator')
 
       expect(pinoChildSpy).toHaveBeenCalledWith({ name: 'ORCHESTRATOR' })
@@ -71,7 +71,7 @@ describe('logger', () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
       vi.stubEnv('LOG_LEVEL', 'trace')
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: false, logLevel: 'warn' } },
       }))
 
@@ -80,7 +80,7 @@ describe('logger', () => {
       })
       vi.doMock('pino', () => ({ default: pinoMock }))
 
-      await import('@/logger.js')
+      await import('#/logger.js')
 
       expect(pinoMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'warn' }))
       vi.unstubAllEnvs()
@@ -89,7 +89,7 @@ describe('logger', () => {
     it('should emit a locale-independent timestamp string', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: true, showVersionNumber: false, logLevel: 'info' } },
       }))
 
@@ -98,7 +98,7 @@ describe('logger', () => {
       })
       vi.doMock('pino', () => ({ default: pinoMock }))
 
-      await import('@/logger.js')
+      await import('#/logger.js')
 
       const options = pinoMock.mock.calls[0]?.[0] as { timestamp: () => string }
       // Fixed `YYYY-MM-DD HH:mm:ss` shape regardless of server locale — the old
@@ -109,7 +109,7 @@ describe('logger', () => {
     it('should prepend version prefix when showVersionNumber is true and version is not development', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: true } },
       }))
 
@@ -120,7 +120,7 @@ describe('logger', () => {
         }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
       logger.info('hello')
 
@@ -135,7 +135,7 @@ describe('logger', () => {
     it('should not prepend version prefix when showVersionNumber is false', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: false } },
       }))
 
@@ -146,7 +146,7 @@ describe('logger', () => {
         }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
       logger.info('hello')
 
@@ -158,7 +158,7 @@ describe('logger', () => {
     it('should forward multiple arguments as a single joined string', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: false } },
       }))
 
@@ -169,7 +169,7 @@ describe('logger', () => {
         }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
       logger.warn('part1', 'part2', 'part3')
 
@@ -183,7 +183,7 @@ describe('logger', () => {
     it('should use util.inspect for object arguments', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: false } },
       }))
 
@@ -194,7 +194,7 @@ describe('logger', () => {
         }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
       logger.error({ code: 42, nested: { ok: true } })
 
@@ -221,11 +221,11 @@ describe('logger', () => {
       process.env.TZ = 'Europe/Helsinki'
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: true, showVersionNumber: true } },
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('TZ env var'))
@@ -243,11 +243,11 @@ describe('logger', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: true, showVersionNumber: true } },
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to UTC'))
@@ -257,7 +257,7 @@ describe('logger', () => {
     it('should construct a working logger with showTimestamp:false config', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: false, showVersionNumber: true } },
       }))
 
@@ -272,7 +272,7 @@ describe('logger', () => {
         }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
 
       expect(logger).toBeDefined()
@@ -282,7 +282,7 @@ describe('logger', () => {
     it('should create a logger that can log objects via util.inspect', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: { logging: { showTimestamp: true, showVersionNumber: false } },
       }))
 
@@ -297,7 +297,7 @@ describe('logger', () => {
         }),
       }))
 
-      const { default: createLogger } = await import('@/logger.js')
+      const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
 
       // Should not throw when logging objects (exercises stringifyArgs with util.inspect)

@@ -8,7 +8,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 
 | Command | What |
 |---|---|
-| `pnpm dev` | `tsx watch src/index.ts` |
+| `pnpm dev` | `tsx watch --conditions=development src/index.ts` (condition maps `#/*` imports to `src/`) |
 | `pnpm dev:docker` / `pnpm backend:docker` | Rebuild + run local / telemetry-backend compose stack |
 | `pnpm check` | Biome lint + format (auto-fix) |
 | `pnpm typecheck` | `tsc --noEmit` |

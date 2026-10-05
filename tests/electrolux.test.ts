@@ -1,11 +1,11 @@
 import axios, { type AxiosError, type AxiosResponse } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BaseAppliance } from '@/appliances/base.js'
-import config from '@/config.js'
-import { computeBackoffDelay, ElectroluxClient, formatStateDifferences, getStateDifferences } from '@/electrolux.js'
-import type { IMqtt } from '@/mqtt.js'
-import type { NormalizedState } from '@/types/normalized.js'
-import type { Appliance } from '@/types.js'
+import type { BaseAppliance } from '#/appliances/base.js'
+import config from '#/config.js'
+import { computeBackoffDelay, ElectroluxClient, formatStateDifferences, getStateDifferences } from '#/electrolux.js'
+import type { IMqtt } from '#/mqtt.js'
+import type { NormalizedState } from '#/types/normalized.js'
+import type { Appliance } from '#/types.js'
 import {
   mockApplianceInfoResponse,
   mockApplianceStateResponse,
@@ -58,7 +58,7 @@ const loggerErrorSpy = vi.hoisted(() => vi.fn())
 const loggerInfoSpy = vi.hoisted(() => vi.fn())
 
 vi.mock('axios')
-vi.mock('@/logger.js', () => ({
+vi.mock('#/logger.js', () => ({
   default: () => ({
     debug: vi.fn(),
     info: loggerInfoSpy,
@@ -66,7 +66,7 @@ vi.mock('@/logger.js', () => ({
     error: loggerErrorSpy,
   }),
 }))
-vi.mock('@/cache.js', () => ({
+vi.mock('#/cache.js', () => ({
   cache: {
     get: vi.fn(),
     set: vi.fn(),
@@ -1467,7 +1467,7 @@ describe('electrolux', () => {
       })
 
       it('should return undefined and not cache a malformed /state response', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(undefined)
         mockAxiosInstance.get.mockResolvedValueOnce({ data: { some: 'garbage' } })
 
@@ -1482,7 +1482,7 @@ describe('electrolux', () => {
       })
 
       it('should return the cached normalized state during the command delay window (healthy skip)', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
 
         await client.initialize()
@@ -1505,7 +1505,7 @@ describe('electrolux', () => {
       })
 
       it('should diff against a cached normalized state after a command (not treat poll as first fetch)', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const cachedNormalized = {
           applianceId: 'test-appliance-123',
           deviceId: 'device-1',
@@ -1551,7 +1551,7 @@ describe('electrolux', () => {
       })
 
       it('should send command successfully', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
         mockAxiosInstance.put.mockResolvedValueOnce(mockCommandResponse)
@@ -1567,7 +1567,7 @@ describe('electrolux', () => {
       })
 
       it('should handle command error', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
         mockAxiosInstance.put.mockRejectedValueOnce(new Error('Command failed'))
@@ -1579,7 +1579,7 @@ describe('electrolux', () => {
       })
 
       it('should re-publish cached state when command fails', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
         mockAxiosInstance.put.mockRejectedValueOnce(new Error('Command failed'))
@@ -1597,7 +1597,7 @@ describe('electrolux', () => {
       })
 
       it('should reject invalid command without reverting state (revertStateOnRejection=false)', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
         const validatingAppliance = createMockAppliance({
@@ -1618,12 +1618,12 @@ describe('electrolux', () => {
       })
 
       it('should reject invalid command and revert state (revertStateOnRejection=true)', async () => {
-        const config = (await import('@/config.js')).default
+        const config = (await import('#/config.js')).default
         const original = config.homeAssistant.revertStateOnRejection
         config.homeAssistant.revertStateOnRejection = true
 
         try {
-          const { cache } = await import('@/cache.js')
+          const { cache } = await import('#/cache.js')
           vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
           const validatingAppliance = createMockAppliance({
@@ -1675,7 +1675,7 @@ describe('electrolux', () => {
 
     describe('403 Retry Logic', () => {
       it('should succeed on first try without 403', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockAppliancesResponse)
         mockAxiosInstance.get.mockResolvedValueOnce({ data: mockAppliancesResponse })
 
@@ -1722,7 +1722,7 @@ describe('electrolux', () => {
       })
 
       it('should track last non-off mode with buildCombinedCommandState', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
@@ -1737,7 +1737,7 @@ describe('electrolux', () => {
       })
 
       it('should preserve previous mode when turning off', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const stateWithCoolMode = {
           ...mockApplianceStateResponse,
           properties: {
@@ -1762,7 +1762,7 @@ describe('electrolux', () => {
       })
 
       it('should publish immediate state feedback after command', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
@@ -1775,7 +1775,7 @@ describe('electrolux', () => {
       })
 
       it('should not publish if cached state is missing', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(undefined)
 
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
@@ -1796,7 +1796,7 @@ describe('electrolux', () => {
       })
 
       it('should fetch state and publish if changed', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const initialState = { ...mockApplianceStateResponse }
         const updatedState = {
           ...mockApplianceStateResponse,
@@ -1823,7 +1823,7 @@ describe('electrolux', () => {
       })
 
       it('should handle state processing callback', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         // Provide a cached state with different values
         const cachedState = {
           ...mockApplianceStateResponse,
@@ -1865,7 +1865,7 @@ describe('electrolux', () => {
 
     describe('buildCombinedCommandState', () => {
       it('should track last active mode when mode command is sent', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const cachedState = {
           ...mockApplianceStateResponse,
           properties: {
@@ -1890,7 +1890,7 @@ describe('electrolux', () => {
       })
 
       it('should restore last active mode when turning on from off state', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const offState = {
           ...mockApplianceStateResponse,
           properties: {
@@ -1917,7 +1917,7 @@ describe('electrolux', () => {
       })
 
       it('should keep previous mode when turning off', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const onState = {
           ...mockApplianceStateResponse,
           properties: {
@@ -2011,7 +2011,7 @@ describe('electrolux', () => {
       })
 
       it('should handle missing cached state in publishCommandFeedback', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(null)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
@@ -2025,7 +2025,7 @@ describe('electrolux', () => {
       })
 
       it('should apply immediate state updates from appliance', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
@@ -2260,7 +2260,7 @@ describe('electrolux', () => {
 
     describe('403 Retry with token refresh', () => {
       it.skipIf(process.env.CI === 'true')('should retry request after 403 and refresh token', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockAppliancesResponse)
 
         const error403 = new Error('Forbidden') as AxiosError
@@ -2485,7 +2485,7 @@ describe('electrolux', () => {
 
     describe('removeAppliance', () => {
       it('should clear tracking data for a removed appliance', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         vi.mocked(cache.get).mockReturnValue(mockApplianceStateResponse)
         mockAxiosInstance.put.mockResolvedValue({ data: {} })
 
@@ -2516,7 +2516,7 @@ describe('electrolux', () => {
       it('should log state changed without details when showChanges is false', async () => {
         logging.showChanges = false
 
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
         const cachedState = {
           ...mockApplianceStateResponse,
           properties: {
@@ -2803,7 +2803,7 @@ describe('electrolux', () => {
 
     describe('buildCombinedCommandState mode preservation', () => {
       it('should keep lastActiveMode when explicitly turning off', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
 
         const normalizeForModeTest = (state: Appliance): NormalizedState =>
           ({
@@ -2847,7 +2847,7 @@ describe('electrolux', () => {
       })
 
       it('should restore lastActiveMode and turn on when non-mode command sent to off appliance', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
 
         const normalizeForModeTest = (state: Appliance): NormalizedState =>
           ({
@@ -2911,7 +2911,7 @@ describe('electrolux', () => {
 
     describe('State publishing edge cases', () => {
       it('should return undefined without publishing when normalizeState throws on the API response', async () => {
-        const { cache } = await import('@/cache.js')
+        const { cache } = await import('#/cache.js')
 
         // Real normalizers throw on malformed state (extractReportedState) — they never return null.
         const mockAppl = createMockAppliance({

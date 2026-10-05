@@ -108,7 +108,8 @@ build_local() {
   fi
   BUILT_TAGS+=("${tag}")
   # CMD is `pnpm dev` (tsx watch), which never exits — run the entrypoint once instead.
-  smoke "${tag}" "Environment variable validation failed" sh -c 'pnpm exec tsx src/index.ts'
+  # Mirror its flags: --conditions=development maps the `#/*` imports to src/ (not dist/).
+  smoke "${tag}" "Environment variable validation failed" sh -c 'pnpm exec tsx --conditions=development src/index.ts'
 }
 
 build_backend() {

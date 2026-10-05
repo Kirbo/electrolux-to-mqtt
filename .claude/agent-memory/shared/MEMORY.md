@@ -33,3 +33,4 @@
 - [pnpm override needs pnpm-workspace.yaml in every Dockerfile prod stage](dep_override_dockerfile_workspace.md) — else ERR_PNPM_LOCKFILE_CONFIG_MISMATCH; verify with docker build not just pnpm test
 - [vite vulns GHSA-fx2h-pf6j-xcff + GHSA-v6wh-96g9-6wx3](vuln_vite_GHSA-fx2h-pf6j-xcff.md) — override doesn't fix peer dep vulns; add vite as direct devDep in telemetry-backend instead
 - [coreutils CVEs in the dhi hardened base](vuln_coreutils_dhi_base.md) — 3 Scout findings, no fix in any Alpine branch, unreachable (no shell, node-only runtime); base bump does not help
+- [tsc-alias → #/* subpath imports](dep_subpath_imports_braces.md) — removed for unfixable braces vuln; src runners need `--conditions=development` (after `watch`)

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '@/types/homeassistant.js'
-import type { NormalizedClimateMode, NormalizedState } from '@/types/normalized.js'
-import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
+import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '#/types/homeassistant.js'
+import type { NormalizedClimateMode, NormalizedState } from '#/types/normalized.js'
+import type { Appliance, ApplianceInfo, ApplianceStub } from '#/types.js'
 import { canonicalStringify } from '../canonical-stringify.js'
 
 export type CommandValidationResult = { valid: true } | { valid: false; reason: string }

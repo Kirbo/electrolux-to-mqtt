@@ -11,8 +11,8 @@ import type {
   OnOffState,
   TemperatureUnit,
   UpgradeState,
-} from '@/types/normalized.js'
-import type { Appliance } from '@/types.js'
+} from '#/types/normalized.js'
+import type { Appliance } from '#/types.js'
 import type { BaseAppliance } from './base.js'
 
 /**

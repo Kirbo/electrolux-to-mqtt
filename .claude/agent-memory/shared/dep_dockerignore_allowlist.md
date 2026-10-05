@@ -27,4 +27,4 @@ printf 'FROM alpine\nWORKDIR /p\nCOPY . .\nRUN ls -A1 && du -sh .\n' > /tmp/ctx.
 docker build --no-cache -f /tmp/ctx.Dockerfile -t ctx-probe .
 ```
 
-Context went 85.6 MB → 476 KB. Verified 2026-07-29: backend image, `Dockerfile.local`, and a prod-builder simulation all build; `dist/index.js` is emitted and `tsc-alias` rewrites the `@/` aliases. See [[dep_override_dockerfile_workspace]] for the related rule that `pnpm-workspace.yaml` must reach every frozen-install stage.
+Context went 85.6 MB → 476 KB. Verified 2026-07-29: backend image, `Dockerfile.local`, and a prod-builder simulation all build; `dist/index.js` is emitted. (`tsc-alias` was later dropped for `#/*` subpath imports — see [[dep_subpath_imports_braces]].) See [[dep_override_dockerfile_workspace]] for the related rule that `pnpm-workspace.yaml` must reach every frozen-install stage.

@@ -6,9 +6,7 @@
     "moduleResolution": "NodeNext",
     "outDir": "dist",
     "rootDir": "src",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
+    "customConditions": ["development"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

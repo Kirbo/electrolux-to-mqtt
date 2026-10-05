@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { IMqtt } from '@/mqtt.js'
-import { formatDuration } from '@/version-checker.js'
+import type { IMqtt } from '#/mqtt.js'
+import { formatDuration } from '#/version-checker.js'
 
 // Stable logger spies shared across all logger consumers in this file.
 // Must be hoisted so vi.mock() factories can close over them.
@@ -14,19 +14,19 @@ const loggerSpies = vi.hoisted(() => ({
 
 // Mock dependencies before importing the module
 vi.mock('axios')
-vi.mock('@/logger.js', () => ({
+vi.mock('#/logger.js', () => ({
   default: () => loggerSpies,
 }))
 
 // Mock telemetry helpers for deterministic OS info in tests
-vi.mock('@/telemetry.js', () => ({
+vi.mock('#/telemetry.js', () => ({
   getOsInfo: () => ({ osName: 'Linux', osVersion: '5.15.0', arch: 'arm64' }),
   mapOsName: (p: string) => p,
   summarizeAppliances: () => ({ models: '', count: 0 }),
 }))
 
 // Mock config with default values
-vi.mock('@/config.js', () => ({
+vi.mock('#/config.js', () => ({
   default: {
     versionCheck: {
       checkInterval: 3600,
@@ -89,7 +89,7 @@ describe('formatDuration', () => {
 })
 
 describe('version-checker', () => {
-  let startVersionChecker: typeof import('@/version-checker.js')['startVersionChecker']
+  let startVersionChecker: typeof import('#/version-checker.js')['startVersionChecker']
   let mockAxiosGet: ReturnType<typeof vi.fn>
   let mockAxiosPost: ReturnType<typeof vi.fn>
 
@@ -107,7 +107,7 @@ describe('version-checker', () => {
     vi.mocked(axios.isAxiosError).mockReturnValue(false)
 
     // Dynamically import the module to ensure mocks are applied
-    const module = await import('@/version-checker.js')
+    const module = await import('#/version-checker.js')
     startVersionChecker = module.startVersionChecker
   })
 
@@ -222,13 +222,13 @@ describe('version-checker', () => {
     // Uses beta channel so channel filtering never masks the comparison result.
     // The stable channel would filter out pre-release tags, making publishInfo
     // return no payload and masking whether compareVersions is correct.
-    let moduleForCmp: typeof import('@/version-checker.js')
+    let moduleForCmp: typeof import('#/version-checker.js')
     let mockPublishInfoCmp: ReturnType<typeof vi.fn>
     let mockMqttCmp: IMqtt
 
     beforeEach(async () => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: {
             checkInterval: 3600,
@@ -239,7 +239,7 @@ describe('version-checker', () => {
           telemetryEnabled: false,
         },
       }))
-      moduleForCmp = await import('@/version-checker.js')
+      moduleForCmp = await import('#/version-checker.js')
       mockPublishInfoCmp = vi.fn()
       mockMqttCmp = { publishInfo: mockPublishInfoCmp } as unknown as IMqtt
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
@@ -288,13 +288,13 @@ describe('version-checker', () => {
   })
 
   describe('checkForUpdates beta channel — RC to stable promotion', () => {
-    let moduleWithBetaRcToStable: typeof import('@/version-checker.js')
+    let moduleWithBetaRcToStable: typeof import('#/version-checker.js')
     let mockPublishInfoBeta: ReturnType<typeof vi.fn>
     let mockMqttBeta: IMqtt
 
     beforeEach(async () => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: {
             checkInterval: 3600,
@@ -305,7 +305,7 @@ describe('version-checker', () => {
           telemetryEnabled: false,
         },
       }))
-      moduleWithBetaRcToStable = await import('@/version-checker.js')
+      moduleWithBetaRcToStable = await import('#/version-checker.js')
       mockPublishInfoBeta = vi.fn()
       mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
       mockAxiosPost.mockResolvedValue({ data: { success: true } })
@@ -540,19 +540,19 @@ describe('version-checker', () => {
   })
 
   describe('telemetry opt-out', () => {
-    let moduleWithOptOut: typeof import('@/version-checker.js')
+    let moduleWithOptOut: typeof import('#/version-checker.js')
 
     beforeEach(async () => {
       vi.resetModules()
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 3600 },
           telemetryEnabled: false,
         },
       }))
 
-      moduleWithOptOut = await import('@/version-checker.js')
+      moduleWithOptOut = await import('#/version-checker.js')
     })
 
     it('should skip telemetry POST when telemetryEnabled is false', async () => {
@@ -573,13 +573,13 @@ describe('version-checker', () => {
 
     it('should send telemetry when telemetryEnabled is explicitly true', async () => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 3600 },
           telemetryEnabled: true,
         },
       }))
-      const mod = await import('@/version-checker.js')
+      const mod = await import('#/version-checker.js')
 
       mockAxiosGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
@@ -803,13 +803,13 @@ describe('version-checker', () => {
   })
 
   describe('ntfy notifications', () => {
-    let moduleWithNtfy: typeof import('@/version-checker.js')
+    let moduleWithNtfy: typeof import('#/version-checker.js')
 
     beforeEach(async () => {
       // Clear module cache and re-mock config with ntfy webhook
       vi.resetModules()
 
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: {
             checkInterval: 3600,
@@ -821,7 +821,7 @@ describe('version-checker', () => {
       }))
 
       // Re-import the module with the new config
-      moduleWithNtfy = await import('@/version-checker.js')
+      moduleWithNtfy = await import('#/version-checker.js')
     })
 
     it('should send ntfy notification when newer version is found', async () => {
@@ -1090,13 +1090,13 @@ describe('version-checker', () => {
     describe('configurable notifyGracePeriod', () => {
       it('with notifyGracePeriod=0 a release younger than 1 hour is still notified', async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 0 },
             telemetryEnabled: false,
           },
         }))
-        const mod = await import('@/version-checker.js')
+        const mod = await import('#/version-checker.js')
 
         const now = new Date('2026-04-21T12:00:00Z')
         vi.setSystemTime(now)
@@ -1117,13 +1117,13 @@ describe('version-checker', () => {
 
       it('with notifyGracePeriod=7200 a release 90 minutes old is still skipped', async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 7200 },
             telemetryEnabled: false,
           },
         }))
-        const mod = await import('@/version-checker.js')
+        const mod = await import('#/version-checker.js')
 
         const now = new Date('2026-04-21T12:00:00Z')
         vi.setSystemTime(now)
@@ -1144,13 +1144,13 @@ describe('version-checker', () => {
 
       it('with notifyGracePeriod=7200 a release older than 2 hours is notified', async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 7200 },
             telemetryEnabled: false,
           },
         }))
-        const mod = await import('@/version-checker.js')
+        const mod = await import('#/version-checker.js')
 
         const now = new Date('2026-04-21T12:00:00Z')
         vi.setSystemTime(now)
@@ -1416,11 +1416,11 @@ describe('version-checker', () => {
 
   describe('updateChannel filtering', () => {
     describe("stable channel (default) — skips releases whose tag_name contains '-'", () => {
-      let moduleWithStable: typeof import('@/version-checker.js')
+      let moduleWithStable: typeof import('#/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -1431,7 +1431,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        moduleWithStable = await import('@/version-checker.js')
+        moduleWithStable = await import('#/version-checker.js')
       })
 
       it('should skip an rc release and return null when that is the only release', async () => {
@@ -1509,11 +1509,11 @@ describe('version-checker', () => {
     })
 
     describe('beta channel — includes rc releases', () => {
-      let moduleWithBeta: typeof import('@/version-checker.js')
+      let moduleWithBeta: typeof import('#/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -1524,7 +1524,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        moduleWithBeta = await import('@/version-checker.js')
+        moduleWithBeta = await import('#/version-checker.js')
       })
 
       it('should return rc release when it is the most recently created', async () => {
@@ -1587,11 +1587,11 @@ describe('version-checker', () => {
     // We use the channel filter as an observable proxy for isPreRelease
     // because the function itself is not exported.
     describe('isPreRelease detection — stable channel', () => {
-      let moduleStableIsPre: typeof import('@/version-checker.js')
+      let moduleStableIsPre: typeof import('#/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -1602,7 +1602,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        moduleStableIsPre = await import('@/version-checker.js')
+        moduleStableIsPre = await import('#/version-checker.js')
       })
 
       it.each([
@@ -1660,13 +1660,13 @@ describe('version-checker', () => {
 
     describe('version ordering', () => {
       // Uses beta channel so channel filtering does not mask comparison results.
-      let moduleCalVer: typeof import('@/version-checker.js')
+      let moduleCalVer: typeof import('#/version-checker.js')
       let pubFn: ReturnType<typeof vi.fn>
       let mqttCalVer: IMqtt
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -1677,7 +1677,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        moduleCalVer = await import('@/version-checker.js')
+        moduleCalVer = await import('#/version-checker.js')
         pubFn = vi.fn()
         mqttCalVer = { publishInfo: pubFn } as unknown as IMqtt
         mockAxiosPost.mockResolvedValue({ data: { success: true } })
@@ -1726,11 +1726,11 @@ describe('version-checker', () => {
     })
 
     describe('channel filtering with mixed old+new releases — stable', () => {
-      let moduleStableMixed: typeof import('@/version-checker.js')
+      let moduleStableMixed: typeof import('#/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -1741,7 +1741,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        moduleStableMixed = await import('@/version-checker.js')
+        moduleStableMixed = await import('#/version-checker.js')
       })
 
       it('stable channel: picks 2026.6.0 (most recent stable) from mixed list, skips bN and rc', async () => {
@@ -1768,11 +1768,11 @@ describe('version-checker', () => {
     })
 
     describe('channel filtering with mixed old+new releases — beta', () => {
-      let moduleBetaMixed: typeof import('@/version-checker.js')
+      let moduleBetaMixed: typeof import('#/version-checker.js')
 
       beforeEach(async () => {
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -1783,7 +1783,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        moduleBetaMixed = await import('@/version-checker.js')
+        moduleBetaMixed = await import('#/version-checker.js')
       })
 
       it('beta channel: picks the highest version (stable 2026.6.0 over its own beta) from mixed list', async () => {
@@ -1818,13 +1818,13 @@ describe('version-checker', () => {
     // Helper: start version-checker with a given config mock, wait, stop, return MQTT publish calls.
     const makeModule = async (updateChannel: 'stable' | 'beta' | undefined) => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, updateChannel, notifyGracePeriod: 3600 },
           telemetryEnabled: false,
         },
       }))
-      return await import('@/version-checker.js')
+      return await import('#/version-checker.js')
     }
 
     describe('derive from version (unset channel)', () => {
@@ -1934,17 +1934,17 @@ describe('version-checker', () => {
 
   // ── resolveUpdateChannel unit tests ─────────────────────────────────────
   describe('resolveUpdateChannel', () => {
-    let resolveUpdateChannel: typeof import('@/version-checker.js')['resolveUpdateChannel']
+    let resolveUpdateChannel: typeof import('#/version-checker.js')['resolveUpdateChannel']
 
     beforeEach(async () => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: { checkInterval: 3600, ntfyWebhookUrl: undefined, notifyGracePeriod: 3600 },
           telemetryEnabled: false,
         },
       }))
-      const mod = await import('@/version-checker.js')
+      const mod = await import('#/version-checker.js')
       resolveUpdateChannel = mod.resolveUpdateChannel
     })
 
@@ -2025,9 +2025,9 @@ describe('version-checker', () => {
         mockAxiosGet.mockResolvedValue({ data: [] })
         // Use the 4th arg to pass imageChannel
         // We re-import startVersionChecker via the same module
-        let startFn: typeof import('@/version-checker.js')['startVersionChecker']
+        let startFn: typeof import('#/version-checker.js')['startVersionChecker']
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -2039,7 +2039,7 @@ describe('version-checker', () => {
           },
         }))
         // We test this through the startVersionChecker log output
-        return import('@/version-checker.js').then((mod) => {
+        return import('#/version-checker.js').then((mod) => {
           startFn = mod.startVersionChecker
           const stop = startFn('2026.6.4', makeTelemetryCtx(), undefined, 'beta')
           stop()
@@ -2050,9 +2050,9 @@ describe('version-checker', () => {
 
       it('logs "explicit override" when channel is from config', () => {
         mockAxiosGet.mockResolvedValue({ data: [] })
-        let startFn: typeof import('@/version-checker.js')['startVersionChecker']
+        let startFn: typeof import('#/version-checker.js')['startVersionChecker']
         vi.resetModules()
-        vi.doMock('@/config.js', () => ({
+        vi.doMock('#/config.js', () => ({
           default: {
             versionCheck: {
               checkInterval: 3600,
@@ -2063,7 +2063,7 @@ describe('version-checker', () => {
             telemetryEnabled: false,
           },
         }))
-        return import('@/version-checker.js').then((mod) => {
+        return import('#/version-checker.js').then((mod) => {
           startFn = mod.startVersionChecker
           const stop = startFn('2026.6.4', makeTelemetryCtx(), undefined, 'beta')
           stop()
@@ -2079,13 +2079,13 @@ describe('version-checker', () => {
   // previously derive 'stable' and miss beta updates. With image channel baked
   // in as 'beta', it must fire update-available for a numerically-higher beta.
   describe('E2E regression: stable version on beta image channel', () => {
-    let moduleReg: typeof import('@/version-checker.js')
+    let moduleReg: typeof import('#/version-checker.js')
     let pubReg: ReturnType<typeof vi.fn>
     let mqttReg: IMqtt
 
     beforeEach(async () => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: {
             checkInterval: 3600,
@@ -2096,7 +2096,7 @@ describe('version-checker', () => {
           telemetryEnabled: false,
         },
       }))
-      moduleReg = await import('@/version-checker.js')
+      moduleReg = await import('#/version-checker.js')
       pubReg = vi.fn()
       mqttReg = { publishInfo: pubReg } as unknown as IMqtt
     })
@@ -2144,7 +2144,7 @@ describe('version-checker', () => {
 
     it('YAML-mode: explicit config channel wins over image channel (config=stable beats imageChannel=beta)', async () => {
       vi.resetModules()
-      vi.doMock('@/config.js', () => ({
+      vi.doMock('#/config.js', () => ({
         default: {
           versionCheck: {
             checkInterval: 3600,
@@ -2155,7 +2155,7 @@ describe('version-checker', () => {
           telemetryEnabled: false,
         },
       }))
-      const mod = await import('@/version-checker.js')
+      const mod = await import('#/version-checker.js')
       const pub = vi.fn()
       const mqtt = { publishInfo: pub } as unknown as IMqtt
 

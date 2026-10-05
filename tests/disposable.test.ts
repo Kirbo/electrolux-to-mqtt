@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { disposableInterval, disposableTimeout } from '@/disposable.js'
+import { disposableInterval, disposableTimeout } from '#/disposable.js'
 
 describe('disposable helpers', () => {
   beforeEach(() => {

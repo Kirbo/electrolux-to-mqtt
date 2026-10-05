@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BaseAppliance } from '@/appliances/base.js'
+import type { BaseAppliance } from '#/appliances/base.js'
 import {
   denormalizeClimateMode,
   denormalizeFanSpeed,
@@ -21,9 +21,9 @@ import {
   normalizeUpgradeState,
   parseMqttCommand,
   resolveCachedNormalizedState,
-} from '@/appliances/normalizers.js'
-import type { NormalizedState } from '@/types/normalized.js'
-import type { Appliance } from '@/types.js'
+} from '#/appliances/normalizers.js'
+import type { NormalizedState } from '#/types/normalized.js'
+import type { Appliance } from '#/types.js'
 
 describe('normalizers', () => {
   describe('denormalizeClimateMode', () => {

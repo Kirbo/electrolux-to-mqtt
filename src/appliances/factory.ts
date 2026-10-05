@@ -1,5 +1,5 @@
-import createLogger from '@/logger.js'
-import type { ApplianceInfo, ApplianceStub } from '@/types.js'
+import createLogger from '#/logger.js'
+import type { ApplianceInfo, ApplianceStub } from '#/types.js'
 import type { BaseAppliance } from './base.js'
 import { Comfort600Appliance } from './comfort600.js'
 

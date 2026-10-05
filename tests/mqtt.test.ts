@@ -40,7 +40,7 @@ vi.mock('mqtt', () => {
 })
 
 // Mock config
-vi.mock('@/config.js', () => ({
+vi.mock('#/config.js', () => ({
   default: {
     mqtt: {
       url: 'mqtt://test-broker:1883',
@@ -55,7 +55,7 @@ vi.mock('@/config.js', () => ({
 }))
 
 // Mock logger — captures logger spies so tests can assert on them
-vi.mock('@/logger.js', () => ({
+vi.mock('#/logger.js', () => ({
   default: vi.fn(() => {
     loggerWarnSpy = vi.fn()
     loggerInfoSpy = vi.fn()
@@ -71,8 +71,8 @@ vi.mock('@/logger.js', () => ({
 }))
 
 describe('Mqtt', () => {
-  let Mqtt: typeof import('@/mqtt.js').default
-  let mqttInstance: InstanceType<typeof import('@/mqtt.js').default>
+  let Mqtt: typeof import('#/mqtt.js').default
+  let mqttInstance: InstanceType<typeof import('#/mqtt.js').default>
 
   beforeEach(async () => {
     // Reset modules so topicHandlers Map and module-level client state is fresh.
@@ -85,7 +85,7 @@ describe('Mqtt', () => {
     mockClient = createMockClient()
 
     // Dynamically import the actual module after mocks are set up
-    const module = await import('@/mqtt.js')
+    const module = await import('#/mqtt.js')
     Mqtt = module.default
     mqttInstance = new Mqtt()
   })

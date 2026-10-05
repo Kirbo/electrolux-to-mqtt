@@ -19,11 +19,11 @@ const mockConfig = vi.hoisted(() => ({
 }))
 mockConfig.default.healthCheck.filePath = HEALTH_FILE
 
-vi.mock('@/config.js', () => mockConfig)
+vi.mock('#/config.js', () => mockConfig)
 
 const mockWarn = vi.fn()
 
-vi.mock('@/logger.js', () => ({
+vi.mock('#/logger.js', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: vi.fn(),
@@ -52,7 +52,7 @@ describe('health', () => {
 
   describe('writeHealthFile', () => {
     it('should write current timestamp to health file', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
 
@@ -65,7 +65,7 @@ describe('health', () => {
     })
 
     it('should overwrite previous health file', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
       const first = fs.readFileSync(HEALTH_FILE, 'utf8')
@@ -84,7 +84,7 @@ describe('health', () => {
 
   describe('healthCheckEnabled export', () => {
     it('should mirror config.healthCheck.enabled (consumed by the Docker HEALTHCHECK)', async () => {
-      const { healthCheckEnabled } = await import('@/health.js')
+      const { healthCheckEnabled } = await import('#/health.js')
       expect(healthCheckEnabled).toBe(true)
     })
 
@@ -92,7 +92,7 @@ describe('health', () => {
       mockConfig.default.healthCheck.enabled = false
       vi.resetModules()
 
-      const { healthCheckEnabled } = await import('@/health.js')
+      const { healthCheckEnabled } = await import('#/health.js')
       expect(healthCheckEnabled).toBe(false)
 
       mockConfig.default.healthCheck.enabled = true
@@ -110,7 +110,7 @@ describe('health', () => {
       mockConfig.default.healthCheck.enabled = false
       vi.resetModules()
 
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
       writeHealthFile()
 
       expect(fs.existsSync(HEALTH_FILE)).toBe(false)
@@ -119,7 +119,7 @@ describe('health', () => {
 
   describe('writeHealthFile with MQTT status', () => {
     it('should not write file when MQTT is disconnected', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile({ mqttConnected: false, apiConnected: true })
 
@@ -127,7 +127,7 @@ describe('health', () => {
     })
 
     it('should write file when MQTT is connected', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile({ mqttConnected: true, apiConnected: true })
 
@@ -137,7 +137,7 @@ describe('health', () => {
     })
 
     it('should write file when no status is provided (backwards compatible)', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
 
@@ -149,7 +149,7 @@ describe('health', () => {
 
   describe('writeHealthFile with API status', () => {
     it('should not write file when API is disconnected', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile({ mqttConnected: true, apiConnected: false })
 
@@ -157,7 +157,7 @@ describe('health', () => {
     })
 
     it('should not write file when both MQTT and API are disconnected', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile({ mqttConnected: false, apiConnected: false })
 
@@ -165,7 +165,7 @@ describe('health', () => {
     })
 
     it('should write file when both MQTT and API are connected', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile({ mqttConnected: true, apiConnected: true })
 
@@ -177,7 +177,7 @@ describe('health', () => {
 
   describe('isHealthy', () => {
     it('should return true when health file is recent', async () => {
-      const { writeHealthFile, isHealthy } = await import('@/health.js')
+      const { writeHealthFile, isHealthy } = await import('#/health.js')
 
       writeHealthFile()
 
@@ -185,7 +185,7 @@ describe('health', () => {
     })
 
     it('should return false when health file is stale', async () => {
-      const { isHealthy } = await import('@/health.js')
+      const { isHealthy } = await import('#/health.js')
 
       // Write a timestamp from 5 minutes ago
       const staleTimestamp = Math.floor(Date.now() / 1000) - 300
@@ -195,7 +195,7 @@ describe('health', () => {
     })
 
     it('should return false when health file does not exist', async () => {
-      const { isHealthy } = await import('@/health.js')
+      const { isHealthy } = await import('#/health.js')
 
       expect(isHealthy(60)).toBe(false)
     })
@@ -218,7 +218,7 @@ describe('health', () => {
     })
 
     it('should log a warning on the first write failure', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
 
@@ -226,7 +226,7 @@ describe('health', () => {
     })
 
     it('should not log a warning on subsequent write failures after the first', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
       writeHealthFile()
@@ -236,7 +236,7 @@ describe('health', () => {
     })
 
     it('should still attempt fs.writeFileSync on every call even after the first failure', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
       writeHealthFile()
@@ -265,7 +265,7 @@ describe('health', () => {
     })
 
     it('should log a warning on the first EACCES failure', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
 
@@ -273,7 +273,7 @@ describe('health', () => {
     })
 
     it('should not log a warning on subsequent EACCES failures after the first', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
       writeHealthFile()
@@ -284,7 +284,7 @@ describe('health', () => {
     })
 
     it('should keep attempting fs.writeFileSync on every call even after the first EACCES', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       writeHealthFile()
       writeHealthFile()
@@ -294,7 +294,7 @@ describe('health', () => {
     })
 
     it('should not crash the process on EACCES', async () => {
-      const { writeHealthFile } = await import('@/health.js')
+      const { writeHealthFile } = await import('#/health.js')
 
       expect(() => writeHealthFile()).not.toThrow()
     })

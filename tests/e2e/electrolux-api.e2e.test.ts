@@ -33,11 +33,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { createAppliance } from '@/appliances/factory.js'
-import { ElectroluxClient } from '@/electrolux.js'
-import createLogger from '@/logger.js'
-import type { IMqtt } from '@/mqtt.js'
-import type { ApplianceInfo, ApplianceStub } from '@/types.js'
+import { createAppliance } from '#/appliances/factory.js'
+import { ElectroluxClient } from '#/electrolux.js'
+import createLogger from '#/logger.js'
+import type { IMqtt } from '#/mqtt.js'
+import type { ApplianceInfo, ApplianceStub } from '#/types.js'
 
 const log = createLogger('e2e')
 

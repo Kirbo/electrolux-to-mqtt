@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { Comfort600Appliance, isFanSpeedAction, isSleepAction, isTempAction } from '@/appliances/comfort600.js'
-import type { NormalizedClimateMode, NormalizedState } from '@/types/normalized.js'
-import type { Appliance, ApplianceInfo, ApplianceStub } from '@/types.js'
+import { Comfort600Appliance, isFanSpeedAction, isSleepAction, isTempAction } from '#/appliances/comfort600.js'
+import type { NormalizedClimateMode, NormalizedState } from '#/types/normalized.js'
+import type { Appliance, ApplianceInfo, ApplianceStub } from '#/types.js'
 
 // Mock data
 const mockStub: ApplianceStub = {
