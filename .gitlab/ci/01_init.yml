@@ -38,6 +38,8 @@ initialise variables:
     - echo "NODE_MAJOR=${NODE_MAJOR}" >> variables.env
     - echo "ALPINE_VERSION=${ALPINE}" >> variables.env
     - echo "NODE_VERSION=${NODE_MAJOR}-alpine${ALPINE}" >> variables.env
+    # git-cliff image tag, pinned in mise.toml [tools] (same version as local).
+    - echo "GIT_CLIFF_VERSION=$(sh scripts/tool-version.sh git-cliff)" >> variables.env
 
 bump version:
   stage: init
@@ -67,7 +69,7 @@ bump version:
 generate release notes:
   stage: init
   image:
-    name: orhunp/git-cliff:latest
+    name: orhunp/git-cliff:${GIT_CLIFF_VERSION}
     entrypoint: [""]
   interruptible: true
   extends: .rules_code_changes
@@ -79,6 +81,9 @@ generate release notes:
     GIT_CONFIG_KEY_0: safe.directory
     GIT_CONFIG_VALUE_0: "*"
   needs:
+    # GIT_CLIFF_VERSION (image tag) comes from its dotenv
+    - job: initialise variables
+      artifacts: true
     - job: bump version
       artifacts: true
   artifacts:

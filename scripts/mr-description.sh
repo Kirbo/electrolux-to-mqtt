@@ -18,8 +18,8 @@
 # skill does). The resolved refs and SHAs are printed to stderr so the output is
 # auditable after the fact.
 #
-# Uses git-cliff from PATH when available, else Docker (orhunp/git-cliff:latest,
-# the same image CI uses).
+# Uses git-cliff from PATH when available (mise installs the mise.toml pin), else
+# Docker (orhunp/git-cliff at that same pinned version — the image CI uses).
 
 set -euo pipefail
 
@@ -65,7 +65,7 @@ elif command -v docker >/dev/null 2>&1; then
     -e GIT_CONFIG_COUNT=1 \
     -e GIT_CONFIG_KEY_0=safe.directory \
     -e GIT_CONFIG_VALUE_0='*' \
-    orhunp/git-cliff:latest \
+    "orhunp/git-cliff:$(sh "${ROOT}/scripts/tool-version.sh" git-cliff)" \
     "${CLIFF_ARGS[@]}"
 else
   echo "error: neither git-cliff nor docker is available." >&2

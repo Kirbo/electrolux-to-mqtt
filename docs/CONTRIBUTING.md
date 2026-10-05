@@ -43,7 +43,7 @@ Every toolchain version has exactly one source, and everything (mise, CI, git ho
 | Node.js major | root `package.json` `engines.node` | `scripts/node-major.sh` |
 | Alpine (base of every Node image) | root `package.json` `alpineVersion` | `scripts/alpine-version.sh` |
 | pnpm | root `package.json` `packageManager` | mise (aqua backend) + Corepack in images/CI |
-| sops, age | `mise.toml` `[tools]` | mise |
+| sops, age, git-cliff | `mise.toml` `[tools]` | mise locally; CI via `mise install` (sops) or `scripts/tool-version.sh` (git-cliff image tag) |
 | mise itself (minimum) | `mise.toml` `min_version` | mise (fails loudly when older) |
 
 After editing `engines.node` run `pnpm sync:versions`. It derives the `telemetry-backend` engines and the `@types/node` range in both packages, which must track the Node major rather than the newest release line, and re-resolves both lockfiles when the range moves. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime. CI job `versions in sync` fails on any drift. `package.json` is a release-gated path, so bumping Node, Alpine or pnpm cuts a release.
