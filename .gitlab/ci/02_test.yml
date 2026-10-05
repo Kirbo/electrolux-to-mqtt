@@ -280,6 +280,8 @@ docker build test:
         - docker/Dockerfile.local
         - telemetry-backend/Dockerfile
         - scripts/docker-build-test.sh
+        - scripts/node-major.sh
+        - scripts/alpine-version.sh
         - mise.toml
         - package.json
         - pnpm-lock.yaml

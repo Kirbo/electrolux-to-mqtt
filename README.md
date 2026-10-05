@@ -339,8 +339,8 @@ cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 # Modify as needed
 code docker/docker-compose.local.yml
 
-# Run the stack — NODE_VERSION comes from mise (derived from package.json engines.node);
-# without mise, export NODE_VERSION=<major> yourself — the build fails loudly when unset
+# Run the stack — NODE_VERSION + ALPINE_VERSION come from mise (package.json engines.node,
+# mise.toml alpine_version); without mise, export both yourself — the build fails loudly when unset
 docker compose -f docker/docker-compose.local.yml down ; docker compose -f docker/docker-compose.local.yml up --build
 
 # Or if you have pnpm installed:

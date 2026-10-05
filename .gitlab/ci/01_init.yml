@@ -28,11 +28,10 @@ initialise variables:
       dotenv: variables.env
   script:
     - touch variables.env
-    # Node major comes from package.json engines.node (the single source of truth,
-    # parsed by scripts/node-major.sh); Alpine from mise.toml [vars].
+    # Node major from package.json engines.node, Alpine from mise.toml [vars] — each
+    # the single source of truth, parsed by its script (which fails loudly on a miss).
     - NODE_MAJOR=$(sh scripts/node-major.sh)
-    - ALPINE=$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' mise.toml)
-    - test -n "${ALPINE}" || { echo "ERROR could not parse alpine_version from mise.toml"; exit 1; }
+    - ALPINE=$(sh scripts/alpine-version.sh)
     # NODE_VERSION stays the combined image tag — both stock node (node:24-alpine3.24)
     # and dhi.io/node use the <major>-alpine<ver> suffix convention. The pieces are
     # exported separately for jobs that need just one of them.

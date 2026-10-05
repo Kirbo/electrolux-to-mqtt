@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:latest
 
-# Node version build-arg — REQUIRED, no default. Compose passes it; mise exports
-# it from the root package.json engines.node. Build fails loudly if unset.
+# Node + Alpine build-args — REQUIRED, no defaults. Compose passes them; mise exports
+# NODE_VERSION from the root package.json engines.node and ALPINE_VERSION from
+# mise.toml [vars] alpine_version. Build fails loudly if either is unset.
 ARG NODE_VERSION
-ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine
+ARG ALPINE_VERSION
+ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
 
 # ── Stage 1: build ──────────────────────────────────────────────────
 # Standard Alpine image — not the hardened bridge container.

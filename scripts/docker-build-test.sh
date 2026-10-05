@@ -21,10 +21,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-# Node major from package.json engines.node (the single source of truth);
-# Alpine from mise.toml [vars].
+# Node major from package.json engines.node, Alpine from mise.toml [vars] — each the
+# single source of truth, read through its script.
 NODE_MAJOR="$(sh scripts/node-major.sh)"
-ALPINE="$(sed -n 's/^alpine_version *= *"\([0-9.]*\)".*/\1/p' mise.toml | head -1)"
+ALPINE="$(sh scripts/alpine-version.sh)"
 if [[ -z "${NODE_MAJOR}" || -z "${ALPINE}" ]]; then
   echo "ERROR: could not parse the Node major (package.json) / alpine_version (mise.toml)" >&2
   exit 1
@@ -83,9 +83,9 @@ build_prod() {
   # FROM lines are rewritten to stock node images so the COPY/install/build logic
   # is still exercised. The substitution is announced — it is not a full check.
   if ! docker manifest inspect "dhi.io/node:${NODE_MAJOR}-alpine${ALPINE}" >/dev/null 2>&1; then
-    echo "  NOTE: dhi.io unreachable (no entitlement) — substituting stock node:${NODE_MAJOR}-alpine."
+    echo "  NOTE: dhi.io unreachable (no entitlement) — substituting stock node:${NODE_MAJOR}-alpine${ALPINE}."
     echo "        Context/COPY/build logic is still verified; the hardened base is not."
-    sed -E "s|^FROM \\\$\{NODE_IMAGE\}-dev|FROM node:${NODE_MAJOR}-alpine|; s|^FROM \\\$\{NODE_IMAGE\}|FROM node:${NODE_MAJOR}-alpine|" \
+    sed -E "s|^FROM \\\$\{NODE_IMAGE\}-dev|FROM node:${NODE_MAJOR}-alpine${ALPINE}|; s|^FROM \\\$\{NODE_IMAGE\}|FROM node:${NODE_MAJOR}-alpine${ALPINE}|" \
       "${dockerfile}" > .docker-build-test.Dockerfile
     dockerfile=".docker-build-test.Dockerfile"
   fi
@@ -104,7 +104,7 @@ build_local() {
   echo "== local dev image (docker/Dockerfile.local) =="
   local tag="${TAG_PREFIX}-local"
   if ! docker build --network host -f docker/Dockerfile.local \
-    --build-arg "NODE_VERSION=${NODE_MAJOR}" -t "${tag}" . >/tmp/e2m-bt-local.log 2>&1; then
+    --build-arg "NODE_VERSION=${NODE_MAJOR}" --build-arg "ALPINE_VERSION=${ALPINE}" -t "${tag}" . >/tmp/e2m-bt-local.log 2>&1; then
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-local.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")
@@ -117,7 +117,7 @@ build_backend() {
   echo "== telemetry-backend image (telemetry-backend/Dockerfile) =="
   local tag="${TAG_PREFIX}-backend"
   if ! docker build --network host -f telemetry-backend/Dockerfile \
-    --build-arg "NODE_VERSION=${NODE_MAJOR}" -t "${tag}" . >/tmp/e2m-bt-backend.log 2>&1; then
+    --build-arg "NODE_VERSION=${NODE_MAJOR}" --build-arg "ALPINE_VERSION=${ALPINE}" -t "${tag}" . >/tmp/e2m-bt-backend.log 2>&1; then
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-backend.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")

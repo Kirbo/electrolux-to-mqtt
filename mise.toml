@@ -9,7 +9,8 @@
 # ([tools]/[env] below), GitLab CI, the git hooks, the deploy jobs, and docker
 # compose (via the exported NODE_VERSION — Dockerfiles/compose have no defaults
 # and fail loudly without it).
-# Alpine has no package.json home, so it stays in [vars] below.
+# Alpine has no package.json home, so it stays in [vars] below — the single source
+# for every Node image (read via scripts/alpine-version.sh, exported as ALPINE_VERSION).
 [vars]
 # Alpine minor used in the prod Docker image tag (dhi.io/node:<node>-alpine<alpine>)
 # and the CI node:<node>-alpine<alpine> images.
