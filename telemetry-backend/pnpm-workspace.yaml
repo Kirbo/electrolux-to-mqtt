@@ -6,6 +6,12 @@ allowBuilds:
 overrides:
   esbuild: ">=0.28.1"
 
+# Agent skills bundled in dependencies are third-party agent instructions;
+# this repo curates its own under .claude/skills/, so deny them (pnpm 12.11+).
+permissions:
+  '@clickhouse/client':
+    skills: false
+
 # @types/node must never lead the Node runtime major. A version range cannot
 # enforce that — `pnpm update --latest` rewrites the spec whatever it declares —
 # so the dependency is ignored by the updater instead. This package has its own
