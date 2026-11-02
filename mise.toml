@@ -4,7 +4,10 @@
 #   - Node.js major: "engines.node"   (read via scripts/node-major.sh)
 #   - Alpine:        "alpineVersion"  (read via scripts/alpine-version.sh) — the base
 #                    of every Node image (dhi.io/node and stock node:<major>-alpine<ver>)
-#   - pnpm:          "packageManager" (bump with `corepack use pnpm@latest`)
+#   - pnpm:          "packageManager" (bump with `pnpm dlx corepack@<corepackVersion> use pnpm@latest`
+#                    — Node 25+ bundles no Corepack, and mise provides none)
+#   - Corepack:      "corepackVersion" (Node 25+ dropped it — images/CI install it via
+#                    npm in scripts/bootstrap-pnpm.sh and the Dockerfiles; locally `pnpm dlx`)
 # package.json is a release-gated CI path, so bumping any of them cuts a release.
 # Bumping Node = edit engines.node, then `pnpm sync:versions` to derive
 # telemetry-backend engines + both @types/node ranges (CI "versions in sync"
@@ -22,7 +25,7 @@ min_version = "2026.9.9"
 [tools]
 node = """{{ exec(command="sh " ~ config_root ~ "/scripts/node-major.sh") }}"""
 # pnpm, version read from package.json "packageManager" (single source of truth —
-# bump it with `corepack use pnpm@latest`). Pinned to the aqua backend (GitHub-release
+# bump it with `pnpm dlx corepack@<corepackVersion> use pnpm@latest`). Pinned to the aqua backend (GitHub-release
 # binary) on purpose: pnpm 12+ ships a native binary fetched by an npm postinstall
 # hook, and mise's idiomatic package.json support hardcodes the npm: backend, which
 # installs with --ignore-scripts and leaves a shebang-less placeholder Node cannot

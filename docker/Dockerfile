@@ -43,8 +43,11 @@ WORKDIR /app
 # not exist in a fresh clone — the glob makes it optional so local builds work.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml CHANGELOG.m[d] ./
 
-# Install dependencies (including dev dependencies for building)
+# Install dependencies (including dev dependencies for building).
+# Node 25+ no longer bundles Corepack: install the version pinned in package.json
+# "corepackVersion" first (npm is still bundled; scripts/bootstrap-pnpm.sh does the same in CI).
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
+  npm install --global --no-audit --no-fund "corepack@$(node -p "require('./package.json').corepackVersion")" && \
   corepack enable && \
   corepack install && \
   echo "====================================================================================" && \
@@ -80,7 +83,8 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
 # Install only production dependencies
-RUN corepack enable && \
+RUN npm install --global --no-audit --no-fund "corepack@$(node -p "require('./package.json').corepackVersion")" && \
+  corepack enable && \
   corepack install && \
   DOCKER_BUILD=1 pnpm install --frozen-lockfile --prod --config.scripts-prepend-node-path=true
 

@@ -114,8 +114,7 @@ install dependencies:
     - job: initialise variables
       artifacts: true
   before_script:
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
     - echo "Node major from package.json engines.node:"
     - sh scripts/node-major.sh

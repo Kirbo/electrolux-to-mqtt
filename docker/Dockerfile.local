@@ -22,16 +22,18 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Change ownership of the working directory and enable corepack as root
-# (corepack enable needs write access to /usr/local/bin)
+# Copy package files first for better caching
+COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Change ownership of the working directory, then install + enable corepack as root
+# (both need write access to /usr/local). Node 25+ no longer bundles Corepack, so
+# install the version pinned in package.json "corepackVersion" (npm is still bundled).
 RUN chown nodejs:nodejs /app && \
+  npm install --global --no-audit --no-fund "corepack@$(node -p "require('./package.json').corepackVersion")" && \
   corepack enable
 
 # Switch to non-root user
 USER nodejs
-
-# Copy package files first for better caching
-COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install package manager and dependencies
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \

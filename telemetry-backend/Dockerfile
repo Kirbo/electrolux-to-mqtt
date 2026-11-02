@@ -20,12 +20,15 @@ COPY ./package.json ./application.json
 COPY ./telemetry-backend/ .
 
 # Install package manager, all dependencies, and compile TypeScript.
+# Node 25+ no longer bundles Corepack, so the version pinned in the root package.json
+# "corepackVersion" is installed first (npm is still bundled).
 # The pnpm version is activated in corepack directly from the root package.json pin
 # instead of being written into this package's own "packageManager" field: pnpm 12
 # records that field as packageManagerDependencies in the lockfile, so injecting it at
 # build time would make `--frozen-lockfile` fail (ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE).
 ENV CI=true
 RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
+    npm install --global --no-audit --no-fund "corepack@$(node -p "require('./application.json').corepackVersion")" && \
     corepack enable && \
     corepack install -g "${PACKAGE_MANAGER}" && \
     echo "====================================================================================" && \
@@ -53,6 +56,7 @@ COPY --from=builder /app/pnpm-workspace.yaml ./
 # Install only production dependencies
 ENV CI=true
 RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
+    npm install --global --no-audit --no-fund "corepack@$(node -p "require('./application.json').corepackVersion")" && \
     corepack enable && \
     corepack install -g "${PACKAGE_MANAGER}" && \
     pnpm install --prod --frozen-lockfile && \

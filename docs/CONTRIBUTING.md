@@ -43,6 +43,7 @@ Every toolchain version has exactly one source, and everything (mise, CI, git ho
 | Node.js major | root `package.json` `engines.node` | `scripts/node-major.sh` |
 | Alpine (base of every Node image) | root `package.json` `alpineVersion` | `scripts/alpine-version.sh` |
 | pnpm | root `package.json` `packageManager` | mise (aqua backend) + Corepack in images/CI |
+| Corepack (images/CI only) | root `package.json` `corepackVersion` | `scripts/bootstrap-pnpm.sh` (CI); `node -p` in the Dockerfiles |
 | sops, age, git-cliff | `mise.toml` `[tools]` | mise locally; CI via `mise install` (sops) or `scripts/tool-version.sh` (git-cliff image tag) |
 | mise itself (minimum) | `mise.toml` `min_version` | mise (fails loudly when older) |
 
@@ -69,7 +70,7 @@ These steps make every environment resolve the same Node, pnpm, and image versio
    ```bash
    mise install
    ```
-5. **Do not run `corepack enable` locally.** mise already installs the exact pnpm from `packageManager`. A Corepack shim adds a second `pnpm` on `PATH` whose precedence depends on your shell setup, and Node 25+ no longer bundles Corepack anyway. If you enabled it before, run `corepack disable` (add `--install-directory <dir>` if you enabled it into a custom directory such as `~/.local/bin`). (The Docker images and CI do use Corepack. That is expected, because mise is not installed there.)
+5. **Do not run `corepack enable` locally.** mise already installs the exact pnpm from `packageManager`. A Corepack shim adds a second `pnpm` on `PATH` whose precedence depends on your shell setup, and Node 25+ no longer bundles Corepack anyway. If you enabled it before, run `corepack disable` (add `--install-directory <dir>` if you enabled it into a custom directory such as `~/.local/bin`). (The Docker images and CI do use Corepack. That is expected, because mise is not installed there; they install the version pinned in `corepackVersion` with npm first.)
 6. **Optional: set `GITHUB_TOKEN`.** mise downloads pnpm (aqua backend) from GitHub releases, and unauthenticated downloads are rate-limited to 60 per hour per IP, which shared networks can hit. Exporting any read-only `GITHUB_TOKEN` avoids it.
 7. **Verify:**
    ```bash
@@ -79,7 +80,7 @@ These steps make every environment resolve the same Node, pnpm, and image versio
    echo "$NODE_VERSION $ALPINE_VERSION"     # both set, e.g. "24 3.24"
    ```
 
-**Without mise** (not recommended): install the Node major from `engines.node`, run `corepack enable && corepack install` for pnpm, and export the build-args yourself before any compose command:
+**Without mise** (not recommended): install the Node major from `engines.node`, run `npm i -g corepack && corepack enable && corepack install` for pnpm (Node 25+ no longer bundles Corepack), and export the build-args yourself before any compose command:
 ```bash
 export NODE_VERSION=$(sh scripts/node-major.sh) ALPINE_VERSION=$(sh scripts/alpine-version.sh)
 ```

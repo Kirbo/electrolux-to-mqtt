@@ -41,8 +41,7 @@ test:
     expire_in: 1 week
   before_script:
     - echo "Running tests with coverage..."
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
   script:
     - FORCE_COLOR=1 pnpm test
@@ -69,8 +68,7 @@ lint:
       artifacts: false
   before_script:
     - echo "Running linter checks..."
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
   script:
     - pnpm biome check .
@@ -97,8 +95,7 @@ typecheck:
       artifacts: false
   before_script:
     - echo "Running type checking..."
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
   script:
     - pnpm typecheck
@@ -123,8 +120,7 @@ audit:
       when: on_success
     - when: never
   script:
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
     - |
       EXIT=0
       pnpm audit || EXIT=$?
@@ -150,8 +146,7 @@ audit:telemetry-backend:
       when: on_success
     - when: never
   script:
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
     - |
       EXIT=0
       pnpm -C telemetry-backend audit || EXIT=$?
@@ -224,8 +219,7 @@ telemetry-backend test:
       artifacts: true
   before_script:
     - echo "Running telemetry-backend tests..."
-    - corepack enable
-    - corepack install
+    - sh scripts/bootstrap-pnpm.sh
   script:
     - cd telemetry-backend && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test
   allow_failure: false
