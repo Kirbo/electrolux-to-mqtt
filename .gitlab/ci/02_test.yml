@@ -281,6 +281,10 @@ docker build test:
         - telemetry-backend/Dockerfile
         - scripts/docker-build-test.sh
         - versions.env
+        # its before_script (.docker_build_base) runs ci/secrets.sh + ci/install-fnox.sh:
+        # the only branch job that exercises them before a release/deploy does
+        - ci/**/*
+        - .gitlab-ci.yml
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml

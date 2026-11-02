@@ -97,6 +97,8 @@ default:
         - vitest.config.ts
         - vitest.setup.ts
         - docker/Dockerfile
+        # every node job bootstraps pnpm through it
+        - scripts/bootstrap-pnpm.sh
       when: on_success
     - when: never
 
@@ -118,6 +120,8 @@ default:
         - vitest.config.ts
         - vitest.setup.ts
         - docker/Dockerfile
+        # keep in step with .rules_node_changes: the node jobs need `install dependencies`
+        - scripts/bootstrap-pnpm.sh
       when: on_success
     - when: never
 

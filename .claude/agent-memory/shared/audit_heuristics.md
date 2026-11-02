@@ -37,6 +37,8 @@ metadata:
   - Docker HEALTHCHECK imports `healthCheckEnabled` from dist/health.js (honors YAML config); `CHANGELOG.m[d]` COPY glob makes the CI-artifact file optional for local builds.
   - Compose `3001:3001` binding kept on all interfaces DELIBERATELY (NPM-in-container can't reach host 127.0.0.1 — see compose comment); flagging it needs a topology decision from the user first.
 
+- `logger.ts` passes object args to pino as **fields** (2026-11-02, user choice: colored keys on their own lines); objects with pino-owned keys (`name`, `level`, `time`, `msg`, `err`, …), clashing keys, arrays/Maps go under `data`, `data2`, …, and extra Errors are flattened by `serializeError` — intentional, not a finding. A raw `AxiosError` would still print `config.headers` via pino's err serializer (as `util.inspect` did); safe only because `handleApiRequest`/`formatAxiosError` stringify axios errors first — re-check if a new call site logs a raw axios error.
+
 ## Tooling-config migrations (verify activation, not just acceptance)
 
 When a tooling config key changes during a dep bump (e.g. Biome `linter.rules.recommended: true` → `linter.rules.preset: "recommended"` in Biome 2.5.0), a passing `pnpm check` only proves the config *parsed* — not that rules are still *active*. An unknown/renamed key can be silently ignored. To confirm activation, lint a throwaway snippet that should trip a known recommended rule: `printf 'if (x == 1) {}' > /tmp/t.ts && pnpm biome lint /tmp/t.ts` should flag `lint/suspicious/noDoubleEquals`. If it doesn't, the preset isn't applied. (Verified correct in the 2026-06-14 audit — `preset: "recommended"` does activate the recommended set.)
@@ -125,6 +127,10 @@ As of 2026-04-13, `.claude/rules/` gone. The per-change-type checklists now live
 ## CI jobs must trigger on the scripts they run
 
 When a job's logic is extracted to `scripts/*.sh`, add that script to the job's `changes:` list — otherwise editing the script skips the job that exercises it (found 2026-08-17: `versions in sync` missing `scripts/sync-versions.sh`, `try to build docker images` missing `scripts/docker-buildx-release.sh`). Detection: for each job, compare `sh scripts/...` invocations in `script:` against its `changes:` list. Exception (intentional): the RELEASE-stage jobs gate on release paths only — `compute-version.sh`, `create-gitlab-release.sh`, `generate-release-notes.sh`, and `docker-buildx-release.sh` in release jobs are deliberately absent so script edits don't cut a release; the try-build job is where buildx-script bugs get caught pre-release.
+
+Recurred 2026-11-02 in two new shapes — check both:
+- **Scripts run from shared templates/anchors** (`before_script` of `.docker_build_base`, `*ssh_deploy`, `ci/secrets.sh` → `ci/install-fnox.sh`, `scripts/bootstrap-pnpm.sh` in every node job) are invisible when you only scan each job's own `script:`. Detection: `grep -rn 'sh \(ci\|scripts\)/\|\. ci/' .gitlab-ci.yml .gitlab/ci/` and confirm each path is in some NON-release job's `changes:` (`docker build test` now covers `ci/**/*` + `.gitlab-ci.yml`).
+- **Paired rule sets must stay identical**: `.rules_node_changes` and `.rules_node_changes_or_schedule` (the latter gates `install dependencies`, which the node jobs `need`). A path in only one of them makes GitLab refuse the pipeline ("needs job does not exist"). Diff the two `changes:` lists with a YAML load, not by eye.
 
 ## `config.yml` is gitignored — do not infer absence from git tooling
 
