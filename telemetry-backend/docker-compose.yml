@@ -1,16 +1,10 @@
 services:
   telemetry-backend:
-    build:
-      context: ../
-      dockerfile: ./telemetry-backend/Dockerfile
-      # BuildKit runs in its own network namespace and cannot reach registry.npmjs.org
-      # without host networking. The host can reach it fine; regular docker run containers
-      # can too — it is specific to the BuildKit build network. Do not remove.
-      network: host
-      args:
-        - NODE_MAJOR=${NODE_MAJOR:?NODE_MAJOR is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
-        - ALPINE_VERSION=${ALPINE_VERSION:?ALPINE_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
-        - COREPACK_VERSION=${COREPACK_VERSION:?COREPACK_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
+    # Built by scripts/backend-up.sh (`pnpm backend:docker`, the CI deploy job) with
+    # `docker build --network host` — Compose ≥ 5 builds through Bake, which cannot be
+    # granted host networking, so this file only runs the image and never builds it.
+    image: telemetry-backend:local
+    pull_policy: never
     container_name: telemetry-backend
     restart: unless-stopped
     # Published on the host so the reverse proxy reaches it. Port 3001 matches the OLD
