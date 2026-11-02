@@ -1,6 +1,28 @@
 import fs from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+type LevelSpy = ReturnType<typeof vi.fn>
+
+// Loads #/logger.js with pino mocked; returns the child logger's level spies.
+const loadWithPinoSpies = async (opts: { showVersionNumber?: boolean; version?: string } = {}) => {
+  vi.spyOn(console, 'log').mockImplementation(() => {})
+  vi.doMock('#/config.js', () => ({
+    default: { logging: { showTimestamp: false, showVersionNumber: opts.showVersionNumber ?? false } },
+  }))
+  if (opts.version) {
+    vi.doMock('../package.json', () => ({ default: { version: opts.version } }))
+  }
+  const spies: Record<'info' | 'warn' | 'error' | 'debug', LevelSpy> = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }
+  vi.doMock('pino', () => ({ default: vi.fn().mockReturnValue({ child: vi.fn().mockReturnValue(spies) }) }))
+  const { default: createLogger } = await import('#/logger.js')
+  return { ...spies, createLogger }
+}
+
 describe('logger', () => {
   describe('createLogger — interface shape', () => {
     beforeEach(() => {
@@ -180,29 +202,93 @@ describe('logger', () => {
       expect(arg).toContain('part3')
     })
 
-    it('should use util.inspect for object arguments', async () => {
-      vi.spyOn(console, 'log').mockImplementation(() => {})
+    it('should keep a strings-only call a single message argument', async () => {
+      const spies = await loadWithPinoSpies()
+      spies.createLogger('test').info('just', 'text', 42, null, undefined, true)
 
-      vi.doMock('#/config.js', () => ({
-        default: { logging: { showTimestamp: false, showVersionNumber: false } },
-      }))
+      expect(spies.info).toHaveBeenCalledWith('just text 42 null undefined true')
+    })
+  })
 
-      const errorSpy = vi.fn()
-      vi.doMock('pino', () => ({
-        default: vi.fn().mockReturnValue({
-          child: vi.fn().mockReturnValue({ info: vi.fn(), error: errorSpy, warn: vi.fn(), debug: vi.fn() }),
-        }),
-      }))
+  // Objects are handed to pino as structured fields (pino-pretty colors and prints
+  // them on their own lines) instead of being stringified into the message, where
+  // pino-pretty strips ANSI escapes and log viewers showed raw `[33m…[39m`.
+  describe('createLogger — structured fields', () => {
+    beforeEach(() => {
+      vi.resetModules()
+    })
 
-      const { default: createLogger } = await import('#/logger.js')
-      const logger = createLogger('test')
-      logger.error({ code: 42, nested: { ok: true } })
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
 
-      expect(errorSpy).toHaveBeenCalledTimes(1)
-      const arg = errorSpy.mock.calls[0]?.[0] as string | undefined
-      // util.inspect produces 'key: value' style output for objects
-      expect(arg).toContain('code')
-      expect(arg).toContain('42')
+    it('should pass a plain object as fields and keep the text as the message', async () => {
+      const spies = await loadWithPinoSpies()
+      spies.createLogger('test').info('Message published', { retain: false, qos: 2 })
+
+      expect(spies.info).toHaveBeenCalledWith({ retain: false, qos: 2 }, 'Message published')
+    })
+
+    it('should keep text after an object in the message, in order', async () => {
+      const spies = await loadWithPinoSpies()
+      spies.createLogger('test').info('Received command on topic:', 'a/b', 'Message:', { mode: 'cool' })
+
+      expect(spies.info).toHaveBeenCalledWith({ mode: 'cool' }, 'Received command on topic: a/b Message:')
+    })
+
+    it('should pass an Error as the err field so pino-pretty renders its stack', async () => {
+      const spies = await loadWithPinoSpies()
+      const error = new Error('boom')
+      spies.createLogger('test').error('MQTT connection error:', error)
+
+      expect(spies.error).toHaveBeenCalledWith({ err: error }, 'MQTT connection error:')
+    })
+
+    it.each([
+      ['name', { name: 'Makuuhuone', id: 1 }],
+      ['level', { level: 3 }],
+      ['time', { time: 'x' }],
+      ['msg', { msg: 'x' }],
+      ['err', { err: 'x' }],
+    ])(
+      'should nest an object with the reserved key "%s" under data (it would overwrite pino fields)',
+      async (_key, obj) => {
+        const spies = await loadWithPinoSpies()
+        spies.createLogger('test').info('Appliance info:', obj)
+
+        expect(spies.info).toHaveBeenCalledWith({ data: obj }, 'Appliance info:')
+      },
+    )
+
+    it('should nest arrays and class instances under data', async () => {
+      const spies = await loadWithPinoSpies()
+      const logger = spies.createLogger('test')
+      logger.debug('Set value:', [1, 2])
+      logger.debug('Set value:', new Map([['a', 1]]))
+
+      expect(spies.debug).toHaveBeenNthCalledWith(1, { data: [1, 2] }, 'Set value:')
+      expect(spies.debug).toHaveBeenNthCalledWith(2, { data: new Map([['a', 1]]) }, 'Set value:')
+    })
+
+    it('should nest an object whose keys clash with earlier fields under the first free data key', async () => {
+      const spies = await loadWithPinoSpies()
+      spies.createLogger('test').debug('Command response', 200, { ok: true }, { ok: false }, [3])
+
+      expect(spies.debug).toHaveBeenCalledWith({ ok: true, data: { ok: false }, data2: [3] }, 'Command response 200')
+    })
+
+    it('should merge two plain objects whose keys do not clash', async () => {
+      const spies = await loadWithPinoSpies()
+      spies.createLogger('test').info('Both', { a: 1 }, { b: 2 })
+
+      expect(spies.info).toHaveBeenCalledWith({ a: 1, b: 2 }, 'Both')
+    })
+
+    it('should still prepend the version prefix to the message', async () => {
+      const spies = await loadWithPinoSpies({ showVersionNumber: true, version: '2026.11.0' })
+      spies.createLogger('test').warn('Failed to write health file:', new Error('EROFS'))
+
+      expect(spies.warn).toHaveBeenCalledWith({ err: expect.any(Error) }, 'v2026.11.0 :: Failed to write health file:')
     })
   })
 
@@ -279,7 +365,7 @@ describe('logger', () => {
       expect(logger.info).toBeDefined()
     })
 
-    it('should create a logger that can log objects via util.inspect', async () => {
+    it('should create a logger that can log objects as fields', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
 
       vi.doMock('#/config.js', () => ({
@@ -300,7 +386,7 @@ describe('logger', () => {
       const { default: createLogger } = await import('#/logger.js')
       const logger = createLogger('test')
 
-      // Should not throw when logging objects (exercises stringifyArgs with util.inspect)
+      // Should not throw when logging objects (exercises the field mapping)
       expect(() => logger.info({ key: 'value' })).not.toThrow()
       expect(() => logger.error({ errorDetail: 'test' })).not.toThrow()
     })

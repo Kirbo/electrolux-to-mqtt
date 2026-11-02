@@ -1,5 +1,4 @@
 import fs from 'node:fs'
-import util from 'node:util'
 import pino from 'pino'
 import packageJson from '../package.json' with { type: 'json' }
 import config from './config.js'
@@ -64,15 +63,49 @@ const prefix = () => {
   return showVersionNumber ? `${versionPrefix}` : ''
 }
 
-const stringifyArgs = (args: unknown[]): string => {
-  return args
-    .map((arg) => {
-      if (typeof arg === 'object' && arg !== null) {
-        return util.inspect(arg, { colors: true, depth: null })
-      }
-      return String(arg)
-    })
-    .join(' ')
+// Objects are handed to pino as structured fields: pino-pretty then prints each key on its
+// own colored line. (Stringifying them into the message with util.inspect colors broke:
+// pino-pretty strips the ESC byte inside msg, so log viewers showed raw `[33m…[39m`.)
+type Fields = Record<string, unknown>
+type Level = 'info' | 'warn' | 'error' | 'debug'
+
+// Keys pino/pino-pretty own: spreading an object carrying one of them (an appliance's
+// `name`, say) would overwrite the logger name, level or message.
+const RESERVED_KEYS = new Set(['level', 'time', 'msg', 'pid', 'hostname', 'name', 'v', 'err'])
+
+const isPlainObject = (value: object): value is Fields => {
+  const proto: unknown = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+// `data`, then `data2`, `data3`, … — the first key not already used.
+const freeDataKey = (fields: Fields): string => {
+  let key = 'data'
+  for (let n = 2; key in fields; n++) key = `data${n}`
+  return key
+}
+
+const addObject = (fields: Fields, value: object): void => {
+  if (value instanceof Error && !('err' in fields)) {
+    fields.err = value // pino's err serializer + pino-pretty render message and stack
+    return
+  }
+  if (isPlainObject(value) && Object.keys(value).every((k) => !RESERVED_KEYS.has(k) && !(k in fields))) {
+    Object.assign(fields, value)
+    return
+  }
+  fields[freeDataKey(fields)] = value
+}
+
+// Text and primitives form the message (in call order); objects become fields.
+const splitArgs = (args: unknown[]): { fields: Fields; message: string } => {
+  const fields: Fields = {}
+  const parts: string[] = []
+  for (const arg of args) {
+    if (typeof arg === 'object' && arg !== null) addObject(fields, arg)
+    else parts.push(String(arg))
+  }
+  return { fields, message: parts.join(' ') }
 }
 
 const createLogger = (name: string) => {
@@ -81,11 +114,20 @@ const createLogger = (name: string) => {
     name: name.toUpperCase(),
   })
 
+  const emit =
+    (level: Level) =>
+    (...args: unknown[]): void => {
+      const { fields, message } = splitArgs(args)
+      const msg = `${logPrefix}${message}`
+      if (Object.keys(fields).length === 0) logger[level](msg)
+      else logger[level](fields, msg)
+    }
+
   return {
-    info: (...args: unknown[]) => logger.info(`${logPrefix}${stringifyArgs(args)}`),
-    error: (...args: unknown[]) => logger.error(`${logPrefix}${stringifyArgs(args)}`),
-    warn: (...args: unknown[]) => logger.warn(`${logPrefix}${stringifyArgs(args)}`),
-    debug: (...args: unknown[]) => logger.debug(`${logPrefix}${stringifyArgs(args)}`),
+    info: emit('info'),
+    error: emit('error'),
+    warn: emit('warn'),
+    debug: emit('debug'),
   }
 }
 
