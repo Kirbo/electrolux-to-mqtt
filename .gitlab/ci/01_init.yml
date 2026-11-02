@@ -113,7 +113,7 @@ install dependencies:
   before_script:
     - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
-    - echo "Node major from versions.env: ${NODE_MAJOR}"
+    - echo "Node major from versions.env = ${NODE_MAJOR}"
     - node --version
     - npm --version
     - pnpm --version
