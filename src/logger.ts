@@ -80,9 +80,10 @@ const isPlainObject = (value: object): value is Fields => {
 
 // `data`, then `data2`, `data3`, … — the first key not already used.
 const freeDataKey = (fields: Fields): string => {
-  let key = 'data'
-  for (let n = 2; key in fields; n++) key = `data${n}`
-  return key
+  if (!('data' in fields)) return 'data'
+  let n = 2
+  while (`data${n}` in fields) n++
+  return `data${n}`
 }
 
 // pino serializes only the `err` key as an error; any other Error would print as `{}`
