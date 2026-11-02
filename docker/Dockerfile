@@ -15,7 +15,7 @@
 # Check the base images from: https://hub.docker.com/hardened-images/catalog/dhi/node/images
 
 # Define build arguments
-# REQUIRED, no default — CI passes <major>-alpine<alpine> (e.g. 24-alpine3.24)
+# REQUIRED, no default — CI passes <major>-alpine<alpine> (e.g. 26-alpine3.24)
 # (package.json engines.node major + alpineVersion); fails loudly if unset.
 ARG NODE_VERSION
 ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}

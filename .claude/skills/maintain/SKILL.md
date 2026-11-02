@@ -13,7 +13,7 @@ You run this yourself, in-loop, at the current session model. No subagent spawni
 1. **Dependency updates** — find outdated, check safety, apply. Batch minors/patches; majors individually with changelog review.
 2. **Vulnerability remediation** — `pnpm audit` + `pnpm osv-scan`, triage by severity + reachability, fix via upgrades/overrides/mitigations.
 3. **Breakage resolution** — an upgrade breaks typecheck/tests/lint/Sonar → diagnose, adapt to the new API, verify the pipeline.
-4. **Cross-tree coordination** — Node.js major is single-sourced in root `package.json` `engines.node`, pnpm in root `package.json` `packageManager`, Alpine in root `package.json` `alpineVersion`. Edit the source, run `pnpm sync:versions` (or `mise run sync-versions`), commit. CI job `versions in sync` enforces this. Node/Alpine tags: check the hardened-image catalog — https://hub.docker.com/hardened-images/catalog/dhi/node/images (Node = major only).
+4. **Cross-tree coordination** — Node.js major is single-sourced in root `package.json` `engines.node`, pnpm in root `package.json` `packageManager`, Corepack (images/CI) in root `package.json` `corepackVersion`, Alpine in root `package.json` `alpineVersion`. Edit the source, run `pnpm sync:versions` (or `mise run sync-versions`), commit. CI job `versions in sync` enforces this. Node/Alpine tags: check the hardened-image catalog — https://hub.docker.com/hardened-images/catalog/dhi/node/images (Node = major only).
 
 ## Workflow (in order)
 
@@ -31,7 +31,8 @@ You run this yourself, in-loop, at the current session model. No subagent spawni
      2. `sync-versions.sh` is its only writer, deriving the range from root `package.json` `engines.node`, and re-resolves both lockfiles when the range moves.
 
      It will therefore show as permanently "outdated" in `pnpm outdated` (e.g. 24.x vs 26.x latest). That is the pin working, not a backlog item. Verify with `git diff` that it still reads `^<Node-LTS-major>`.
-   - **pnpm self-update** — always run `corepack use pnpm@latest`; confirm the `packageManager` field in `package.json` was bumped. Non-optional — do it every run, even when no deps changed.
+   - **pnpm self-update** — always run `pnpm dlx "corepack@$(node -p "require('./package.json').corepackVersion")" use pnpm@latest`; confirm the `packageManager` field in `package.json` was bumped. Non-optional — do it every run, even when no deps changed. (Node 25+ bundles no Corepack, so bare `corepack use` fails — mise leaves a dead shim.)
+   - **Corepack pin** — `pnpm outdated` never lists it. Compare root `package.json` `corepackVersion` with `npm view corepack version` every run; bump the key when newer (images and CI install exactly this version — `scripts/bootstrap-pnpm.sh`, the Dockerfiles), then `pnpm docker:test all`. See memory `dep_corepack_node26`.
      pnpm 12+ writes the pin into `pnpm-lock.yaml` as a leading `packageManagerDependencies` YAML document — after a pnpm bump always run `pnpm osv-scan all` (read the package counts, the script splits the documents) and `pnpm docker:test all` (frozen installs). mise installs pnpm through `aqua:pnpm/pnpm` in `mise.toml`, not the npm backend (see memory `dep_pnpm12_migration`).
    - **pnpm install warnings** — read every line. "pnpm field in package.json is no longer read" means overrides/settings drifted back into `package.json`; migrate them to `pnpm-workspace.yaml` immediately (see Decision framework).
    - Dev tooling (Biome, Vitest, TypeScript): verify config still parses. For tooling config-key renames during a bump, confirm the rule set is still *active*, not merely *parsed* (a passing `pnpm check` only proves the config parsed). E.g. lint a throwaway snippet that should trip a known recommended rule.

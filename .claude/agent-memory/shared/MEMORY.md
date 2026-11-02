@@ -18,7 +18,7 @@
 - [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = sha256(username); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
-- [Node 26 LTS window — October 2026](project_node26_lts_window.md) — bump `package.json` engines.node to 26 on/after 2026-10-28 (Node 24 → maintenance 2026-10-20); verify LTS status first, fix corepack blocker, then `pnpm sync:versions`
+- [Corepack pin for Node 26](dep_corepack_node26.md) — Node 25+ bundles no Corepack; `corepackVersion` in package.json, installed via npm in images/CI (scripts/bootstrap-pnpm.sh); bump by hand; local pnpm bump = `pnpm dlx corepack@<pin> use pnpm@latest`
 - [@types/node is held by ignoreDependencies, not a range](dep_atypes_node_pin.md) — a range can't stop `pnpm update --latest`; updateConfig.ignoreDependencies in both pnpm-workspace.yaml + sync-versions.sh as sole writer
 - [pnpm 12 migration quirks](dep_pnpm12_migration.md) — mise needs aqua:pnpm/pnpm; lockfile gains a leading packageManagerDependencies doc → osv-scan.sh splits it, backend Dockerfile must not inject packageManager
 - [pnpm 12.11 agent-skills approval](dep_pnpm_agent_skills_approval.md) — deps bundling SKILL.md (e.g. @clickhouse/client 1.24) await `pnpm approve`; non-blocking; clickhouse denied 2026-10-13 via `permissions:` in pnpm-workspace.yaml
@@ -27,7 +27,7 @@
 - [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
 - [Biome 2.6 MD/YAML formatters disabled](dep_biome_v26_md_yaml_formatter.md) — 2.6.4 MD formatter dropped spaces before inline code; both formatters off in biome.jsonc, linters on; retry on next bump
 - [esbuild vulns GHSA-gv7w-rqvm-qjhr + GHSA-g7r4-m6w7-qqqr](vuln_esbuild_GHSA-gv7w-rqvm-qjhr.md) — override esbuild>=0.28.1 in both pnpm-workspace.yaml; remove when vite/tsx/vitest bump floor
-- [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — Node 24 Alpine on catalog page 2 of 54 (down from 102), newest-first; rechecked July 2026, revisit ~Nov 2026
+- [dhi.io/node hardened image tags](dep_alpine_hardened_images.md) — prod 26-alpine3.24 since 2026-11-02; no Alpine 3.25 yet; catalog paginated ?page=N, revisit on Alpine bump
 - [TypeScript 7 native compiler adopted](dep_typescript7_native.md) — 7.0.2 applied 2026-07-24; static Go binaries, Alpine-safe; re-verify checklist on future TS majors
 - [.dockerignore is an allowlist](dep_dockerignore_allowlist.md) — `*` then `!path`; anything that must reach an image needs an explicit `!entry` or it's silently absent; verify with a real build
 - [Dockerfile required-arg guard placement](dep_dockerfile_required_arg_guard.md) — `${VAR:?"msg"}` must be quoted AND live in an ARG line, never FROM (space tokenization); NODE_VERSION has no defaults anywhere

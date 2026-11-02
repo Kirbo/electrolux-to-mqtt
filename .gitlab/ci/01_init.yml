@@ -32,7 +32,7 @@ initialise variables:
     # each the single source of truth, parsed by its script (which fails loudly on a miss).
     - NODE_MAJOR=$(sh scripts/node-major.sh)
     - ALPINE=$(sh scripts/alpine-version.sh)
-    # NODE_VERSION stays the combined image tag — both stock node (node:24-alpine3.24)
+    # NODE_VERSION stays the combined image tag — both stock node (node:26-alpine3.24)
     # and dhi.io/node use the <major>-alpine<ver> suffix convention. The pieces are
     # exported separately for jobs that need just one of them.
     - echo "NODE_MAJOR=${NODE_MAJOR}" >> variables.env

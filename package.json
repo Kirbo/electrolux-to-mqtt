@@ -51,7 +51,7 @@
   "alpineVersion": "3.24",
   "corepackVersion": "0.36.0",
   "engines": {
-    "node": ">=24.0.0 <25.0.0"
+    "node": ">=26.0.0 <27.0.0"
   },
   "packageManager": "pnpm@12.16.1+sha512.091d1dee7927575661b25dab3c2ae31cafc1c54d6b71ed6a6600cf0c1cb10434a447eae14015f1b23e2e6bedeed79df94a932e2164d2832280dce3fb32f656d1",
   "dependencies": {
@@ -65,7 +65,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^5.0.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
