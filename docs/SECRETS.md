@@ -63,4 +63,6 @@ A job's `environment:` (`action: prepare`) selects its tier, and so the one `FNO
 
 ## Rotation and leaks
 
+Any `fnox.toml` change on `main`/`next` re-runs `deploy telemetry-backend`, so a rotated `telemetry` value reaches the server's `.env` on push (the job runs alone in such a pipeline).
+
 Re-encrypting does not revoke ciphertext already in git history. If an identity leaks, rotate it **and** change the values it could read (`pnpm secrets:set`), then commit. The maintainer identity is the backup of record for everything: losing it and 1Password together loses every value.
