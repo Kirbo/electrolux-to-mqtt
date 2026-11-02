@@ -85,9 +85,19 @@ const freeDataKey = (fields: Fields): string => {
   return key
 }
 
+// pino serializes only the `err` key as an error; any other Error would print as `{}`
+// (message and stack are non-enumerable), so extra Errors are flattened like pino's err.
+const serializeError = (error: Error): Fields => ({
+  ...error,
+  type: error.name,
+  message: error.message,
+  stack: error.stack,
+})
+
 const addObject = (fields: Fields, value: object): void => {
-  if (value instanceof Error && !('err' in fields)) {
-    fields.err = value // pino's err serializer + pino-pretty render message and stack
+  if (value instanceof Error) {
+    if ('err' in fields) fields[freeDataKey(fields)] = serializeError(value)
+    else fields.err = value // pino's err serializer + pino-pretty render message and stack
     return
   }
   if (isPlainObject(value) && Object.keys(value).every((k) => !RESERVED_KEYS.has(k) && !(k in fields))) {

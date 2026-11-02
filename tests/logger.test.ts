@@ -277,6 +277,20 @@ describe('logger', () => {
       expect(spies.debug).toHaveBeenCalledWith({ ok: true, data: { ok: false }, data2: [3] }, 'Command response 200')
     })
 
+    it('should serialize an Error that cannot take err (pino would print a bare Error as {})', async () => {
+      const spies = await loadWithPinoSpies()
+      const first = new Error('first')
+      const second = new TypeError('second')
+      spies.createLogger('test').error('Two failures:', first, second)
+
+      const [fields, msg] = spies.error.mock.calls[0] ?? []
+      expect(msg).toBe('Two failures:')
+      expect(fields).toMatchObject({
+        err: first,
+        data: { type: 'TypeError', message: 'second', stack: expect.stringContaining('TypeError: second') },
+      })
+    })
+
     it('should merge two plain objects whose keys do not clash', async () => {
       const spies = await loadWithPinoSpies()
       spies.createLogger('test').info('Both', { a: 1 }, { b: 2 })
