@@ -2,14 +2,14 @@
  * Combined configuration for the telemetry-backend service.
  *
  * Two logical halves:
- *  - Badge side (ClickHouse creds via SOPS .env): reads Aptabase ClickHouse and serves SVG badges.
+ *  - Badge side (ClickHouse creds via the fnox-written .env): reads Aptabase ClickHouse and serves SVG badges.
  *  - Legacy ingest side (non-secret env): receives old-bridge /telemetry POSTs and forwards to Aptabase.
  *
  * All required fields throw a clear FATAL message on startup; optional fields have documented defaults.
  */
 
 export interface BackendConfig {
-  // Badge: ClickHouse / Aptabase (SOPS-managed secrets)
+  // Badge: ClickHouse / Aptabase (secrets from fnox profile `telemetry`)
   clickhouseUrl: string
   clickhouseUser: string
   clickhousePassword: string

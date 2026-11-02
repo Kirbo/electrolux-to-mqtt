@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# post-rewrite hook — regenerate the gitignored fnox.local.toml from fnox.toml after the
+# working tree changed, so a pulled recipient change (pnpm secrets:rotate-ci) is
+# picked up. No-op on machines without fnox.local.toml. docs/SECRETS.md.
+sh "$(git rev-parse --show-toplevel)/scripts/secrets-local-config.sh" || true

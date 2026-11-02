@@ -11,6 +11,10 @@
 
 CHECKOUT_TYPE="$3"
 
+# fnox: keep the generated fnox.local.toml in step with fnox.toml's recipients
+# (no-op on machines without one). docs/SECRETS.md.
+sh "$(git rev-parse --show-toplevel)/scripts/secrets-local-config.sh" || true
+
 # Only act on branch checkouts, not file checkouts
 if [ "$CHECKOUT_TYPE" != "1" ]; then
   exit 0

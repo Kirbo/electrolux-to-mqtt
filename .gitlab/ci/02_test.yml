@@ -198,8 +198,14 @@ sonarcloud-check:
   before_script:
     - test -f coverage/lcov.info && echo "LCOV report found" || echo "LCOV report NOT found"
     - test -f coverage/cobertura-coverage.xml && echo "Cobertura report found" || echo "Cobertura report NOT found"
+  # Sonar tier: SONAR_TOKEN + SONAR_HOST_URL from fnox profile `sonar`, in sonar-scanner's
+  # environment only.
+  environment:
+    name: ci/sonar
+    action: prepare
   script:
-    - sonar-scanner
+    - . ci/secrets.sh
+    - fnox exec --no-defaults --if-missing error -P sonar -- sonar-scanner
 
 telemetry-backend test:
   stage: test

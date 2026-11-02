@@ -18,7 +18,7 @@ Telemetry architecture (migrated 2026-06-26; badge serving refactored to static 
 - `regenerate-badges.ts` — one-shot regeneration run by CI after a release (`refresh telemetry badges` job) so badges update immediately; fails loudly if either half fails.
 - **App-Key vs app_id**: bridge ingests with the App-Key; the badge reader filters ClickHouse on the app **GUID** (`APTABASE_APP_ID`) — different values.
 - `config.ts` default PORT **3001**; compose publishes it for **Nginx Proxy Manager** (a container — can't reach host loopback) to proxy `e2m.devaus.eu`.
-- ClickHouse at `http://aptabase_events_db:8123` on the shared `aptabase_default` network. CH creds are secret → SOPS `telemetry-backend/.env.enc` (`env_file`); CI decrypts via the `SOPS_AGE_KEY` CI var (mise-pinned PQ sops). `APTABASE_HOST`/`APTABASE_APP_KEY` are non-secret (compose inline). See [[project_sops_secrets]].
+- ClickHouse at `http://aptabase_events_db:8123` on the shared `aptabase_default` network. CH creds are secret → fnox profile `telemetry` (root `fnox.toml`); the deploy job pipes them over ssh into the server's `telemetry-backend/.env` (`env_file`). `APTABASE_HOST`/`APTABASE_APP_KEY` are non-secret (compose inline). See [[project_fnox_secrets]].
 - `telemetry-backend/docker-compose.yml` `build.network: host` is REQUIRED (BuildKit netns can't reach registry.npmjs.org).
 
 **Deployed and live** (e2m.devaus.eu/telemetry.json serving real data as of 2026-08-04).

@@ -42,7 +42,7 @@
 **/vitest.config.ts
 **/vitest.setup.ts
 # Secrets must never enter the context, at any depth. telemetry-backend/.env
-# holds decrypted SOPS values on a developer machine.
+# holds the fnox-exported backend secrets on a developer machine.
 **/.env
 **/.env.*
 **/config.yml

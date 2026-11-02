@@ -8,11 +8,11 @@ metadata:
   modified: 2026-11-02T10:28:16.333Z
 ---
 
-Since 2026-11-02 (user request: "single source like ~/Projects/postgresql-postgis-timescaledb or switchboard"), **`versions.env`** at the repo root holds every toolchain/base-image version: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION`, `AGE_VERSION`, `SOPS_VERSION`, `GIT_CLIFF_VERSION`. It replaced package.json `engines.node`/`alpineVersion`/`corepackVersion`/`packageManager` + `mise.toml` pins + `scripts/{node-major,alpine-version,tool-version}.sh`.
+Since 2026-11-02 (user request: "single source like ~/Projects/postgresql-postgis-timescaledb or switchboard"), **`versions.env`** at the repo root holds every toolchain/base-image version: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION`, `FNOX_VERSION`, `AGE_VERSION` (+ CI sha256 pins), `GIT_CLIFF_VERSION` (SOPS_VERSION was dropped with the fnox migration). It replaced package.json `engines.node`/`alpineVersion`/`corepackVersion`/`packageManager` + `mise.toml` pins + `scripts/{node-major,alpine-version,tool-version}.sh`.
 
 **Why it is shaped this way (user decisions, 2026-11-02):**
 - versions.env over mise.toml: plain KEY=value is sourceable by sh, a GitLab dotenv, compose interpolation and mise `_.file` — no TOML parsing in CI.
-- **Release gate via package.json**, not versions.env: `sync-versions.sh` writes derived copies (`engines.node`, `@types/node`, `packageManager` with Corepack's hash, `alpineVersion`, `corepackVersion`) into package.json, which `.rules_code_changes` gates. So Node/Alpine/Corepack/pnpm bumps cut a release; age/sops/git-cliff bumps do not (a release sends users an ntfy update notice). Don't add versions.env to the release gate.
+- **Release gate via package.json**, not versions.env: `sync-versions.sh` writes derived copies (`engines.node`, `@types/node`, `packageManager` with Corepack's hash, `alpineVersion`, `corepackVersion`) into package.json, which `.rules_code_changes` gates. So Node/Alpine/Corepack/pnpm bumps cut a release; fnox/age/git-cliff bumps do not (a release sends users an ntfy update notice). Don't add versions.env to the release gate.
 - Same names everywhere: Dockerfiles/compose take build-args `NODE_MAJOR`/`ALPINE_VERSION`/`COREPACK_VERSION` (no defaults); CI's combined job-image tag is `NODE_IMAGE_TAG` (`node:${NODE_IMAGE_TAG}`).
 
 **Gotchas hit:**

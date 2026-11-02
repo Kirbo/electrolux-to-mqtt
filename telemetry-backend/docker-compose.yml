@@ -19,8 +19,8 @@ services:
     # attach this service to NPM's network and proxy to "telemetry-backend:3001".)
     ports:
       - "3001:3001"
-    # SOPS-decrypted secrets (CH creds + APTABASE_APP_ID) — see telemetry-backend/.env.example.
-    # Run `pnpm sops:decrypt` to generate .env from the committed .env.enc.
+    # Secrets (CH creds + APTABASE_APP_ID) from fnox profile `telemetry`: `pnpm secrets:env`
+    # writes .env locally; the deploy job writes the server's copy. docs/SECRETS.md.
     env_file:
       - .env
     environment:

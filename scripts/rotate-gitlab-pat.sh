@@ -5,10 +5,10 @@ set -euo pipefail
 # the new token back to 1Password. The token rotates ITSELF (the `self/rotate` endpoint), so the old
 # value is revoked the instant the new one is issued — run this on a schedule (or before expiry).
 #
-# This PAT is used only LOCALLY by `pnpm sops:sync-ci` (scripts/sync-ci-age-key.sh) to authorize the
-# API call that sets the SOPS_AGE_KEY_FILE CI/CD variable. It is NOT itself stored as a CI variable
-# (this repo's pipeline authenticates with CI_JOB_TOKEN for releases), so there is nothing to mirror
-# into CI after rotation — the next `pnpm sops:sync-ci` simply reads the new value from 1Password.
+# This PAT is used only LOCALLY by `pnpm secrets:rotate-ci` (scripts/secrets-rotate-ci.sh) to authorize
+# the API call that sets a tier's FNOX_AGE_KEY_FILE CI/CD variable. It is NOT itself stored as a CI
+# variable (this repo's pipeline authenticates with CI_JOB_TOKEN for releases), so there is nothing to
+# mirror into CI after rotation — the next `pnpm secrets:rotate-ci` reads the new value from 1Password.
 #
 # Works for both a PROJECT access token (scoped to this repo; needs Maintainer role + `api` scope —
 # Maintainer because gitlab-set-ci-var.sh updates CI/CD variables) and a personal one;
@@ -21,7 +21,7 @@ set -euo pipefail
 VAULT="Personal"
 ITEM="electrolux-to-mqtt - GitLab API Token"
 OP_ACCOUNT="my.1password.com" # the personal-account sign-in address `op --account` resolves —
-                              # matches the sops-*.sh scripts.
+                              # matches the secrets-*.sh scripts.
 GITLAB_HOST="https://gitlab.com"
 EXPIRY="1 year" # "<N> <unit>", unit ∈ year|month|week|day. NOTE: gitlab.com caps access-token
                 # lifetime at 365 days — if the API rejects the expiry, shorten this (e.g. "11 months").
@@ -111,4 +111,4 @@ if ! op item edit "${ITEM}" --vault "${VAULT}" --account "${OP_ACCOUNT}" \
 fi
 
 echo "Token rotated and saved to 1Password (expires ${EXPIRES_AT})."
-echo "The new token is used by 'pnpm sops:sync-ci' on its next run — nothing to update in CI."
+echo "The new token is used by 'pnpm secrets:rotate-ci' on its next run — nothing to update in CI."

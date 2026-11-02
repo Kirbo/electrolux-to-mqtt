@@ -5,15 +5,7 @@ set -eu
 #   - Open the SonarCloud new-code summary for hotspots requiring human review
 #   - Exit non-zero if any findings exist so the verification pipeline catches them
 #
-# Use `set -a; . ./.env; set +a` instead of `export $(xargs ...)` — the xargs
-# form breaks on values with spaces/quotes and is eval-like (would execute
-# arbitrary code if .env contains a crafted value).
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
-fi
+# SONAR_TOKEN comes from fnox: `pnpm sonar` runs this under `fnox exec -P sonar`.
 
 # SonarCloud free tier only analyses the `main` branch. On any other branch the
 # dashboard URL fails with "branch not found", so skip the whole pipeline rather

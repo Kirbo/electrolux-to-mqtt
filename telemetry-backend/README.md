@@ -50,7 +50,7 @@ When `source='legacy'` events in Aptabase drop to ~0 (no more old bridges in the
 | `RATE_LIMIT_WINDOW_MS` | No | `60000` | Rate limit window in ms |
 | `PORT` | No | `3001` | HTTP listen port (matches the old backend, so the proxy target is unchanged) |
 
-**SOPS-managed secrets** (put in `telemetry-backend/.env`, encrypted as `.env.enc`):
+**Secrets** (fnox profile `telemetry` in the root `fnox.toml`; `pnpm secrets:env` writes them to `telemetry-backend/.env` — see [docs/SECRETS.md](../docs/SECRETS.md)):
 `CLICKHOUSE_URL`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `APTABASE_APP_ID`
 
 **Non-secret** (live in `docker-compose.yml` environment block):

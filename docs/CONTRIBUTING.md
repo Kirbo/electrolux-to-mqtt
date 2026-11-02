@@ -45,9 +45,13 @@ Every toolchain and base-image version lives in **one file, `versions.env`** at 
 | GitLab CI | job `initialise variables` turns its lines into dotenv variables for every later job |
 | Scripts, git hooks, deploy jobs | `set -a; . ./versions.env; set +a` (or a `sed` lookup) |
 
-Keys: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (these change the shipped images), `AGE_VERSION`, `SOPS_VERSION`, `GIT_CLIFF_VERSION` (dev/CI tooling only). The minimum mise is `min_version` in `mise.toml`.
+Keys: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (these change the shipped images), `FNOX_VERSION`, `AGE_VERSION` (+ their sha256 pins for CI), `GIT_CLIFF_VERSION` (dev/CI tooling only). The minimum mise is `min_version` in `mise.toml`.
 
-After editing `versions.env`, run `pnpm sync:versions`. It writes the derived copies into `package.json` — `engines.node` and `@types/node` in both packages, `packageManager` (with Corepack's integrity hash), `alpineVersion`, `corepackVersion` — and re-resolves the lockfiles when the `@types/node` range moves. Never edit those fields by hand; CI job `versions in sync` fails on any drift. They exist because `package.json` is the release-gated path: bumping Node, Alpine, Corepack or pnpm changes `package.json` and so cuts a release, while a dev-tool bump (age, sops, git-cliff) does not. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+After editing `versions.env`, run `pnpm sync:versions`. It writes the derived copies into `package.json` — `engines.node` and `@types/node` in both packages, `packageManager` (with Corepack's integrity hash), `alpineVersion`, `corepackVersion` — and re-resolves the lockfiles when the `@types/node` range moves. Never edit those fields by hand; CI job `versions in sync` fails on any drift. They exist because `package.json` is the release-gated path: bumping Node, Alpine, Corepack or pnpm changes `package.json` and so cuts a release, while a dev-tool bump (fnox, age, git-cliff) does not. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+
+### Secrets (maintainers only)
+
+Release, deploy and SonarCloud secrets live in `fnox.toml` as age ciphertext, readable only by the maintainer key and the CI tier that needs each one. Contributors need no key: tests, lint and image builds run without one. Setup, commands and the CI design are in [`docs/SECRETS.md`](SECRETS.md).
 
 ### Toolchain setup (one-time, every machine)
 

@@ -22,8 +22,6 @@ try to build docker images:
         - scripts/docker-buildx-release.sh
       when: on_success
     - when: never
-  variables:
-    DOCKER_REGISTRY_PASSWORD: ${DOCKERHUB_PASSWORD_READ}
   needs:
     - job: initialise variables
       artifacts: true

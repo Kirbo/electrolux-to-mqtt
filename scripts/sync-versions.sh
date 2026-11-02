@@ -72,6 +72,7 @@ changed() {
 # `pnpm update --latest` never touches it (updateConfig.ignoreDependencies in both
 # pnpm-workspace.yaml files) — this script is its only writer.
 write_pkg() {
+  # shellcheck disable=SC2016 # single-quoted on purpose: a JS template literal, not shell
   PKG_PATH="$1" ROOT_PKG="$2" ENGINES="${ENGINES}" node -e '
     const fs = require("fs");
     const { PKG_PATH, ROOT_PKG, ENGINES, NODE_MAJOR, ALPINE_VERSION, COREPACK_VERSION } = process.env;

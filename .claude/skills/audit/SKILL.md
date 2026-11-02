@@ -81,7 +81,7 @@ Extra robustness checks beyond the checklist:
 - [ ] `biome.jsonc` scope matches scripts
 - [ ] `tsconfig.json` strict enabled
 - [ ] `vitest.config.ts` excludes/thresholds correct
-- [ ] Versions agree with `versions.env` (single source) — run `pnpm sync:versions` and confirm `git diff` is clean (CI job `versions in sync` guards drift); no version literal for Node/Alpine/Corepack/pnpm/age/sops/git-cliff anywhere else (Dockerfiles, compose, CI, mise.toml)
+- [ ] Versions agree with `versions.env` (single source) — run `pnpm sync:versions` and confirm `git diff` is clean (CI job `versions in sync` guards drift); no version literal for Node/Alpine/Corepack/pnpm/fnox/age/git-cliff anywhere else (Dockerfiles, compose, CI, mise.toml)
 - [ ] `cliff.toml` + `scripts/compute-calver-*.sh` correct; CI release flow (git-cliff + combine-changelogs) matches local workflow
 - [ ] Docker builds minimal (incl. `telemetry-backend/`)
 
@@ -92,7 +92,7 @@ Extra robustness checks beyond the checklist:
 - [ ] `.dockerignore` excludes secrets
 - [ ] Production uses `dhi.io/node` hardened images
 - [ ] Env var fallbacks don't expose sensitive defaults
-- [ ] Plaintext `.env` files gitignored; only `*.env.enc` (SOPS) committed
+- [ ] No plaintext secret committed: `.env`/`fnox.local.toml` gitignored; every `fnox.toml` secret uses an `age_*` provider (never `plain`); each provider's recipients are the maintainer + only the tiers in `docs/SECRETS.md`
 
 ### 9. Telemetry backend
 - [ ] Single Node `http` service (no Express/Redis); multi-stage Dockerfile, dev deps stripped

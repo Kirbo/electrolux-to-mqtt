@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Create-or-update a single GitLab CI/CD variable via the API. Shared by the secret-sync scripts
-# (sync-ci-age-key.sh). Inputs come via the ENVIRONMENT, and the PAT + value are fed to curl via
+# Create-or-update a single GitLab CI/CD variable via the API. Used by secrets-rotate-ci.sh to
+# store each CI tier's age identity (FNOX_AGE_KEY_FILE, one per environment scope). Inputs come via the ENVIRONMENT, and the PAT + value are fed to curl via
 # process substitution / stdin (a bash-builtin printf pipe), so neither this script's NOR curl's argv
 # ever carries a secret (`ps`-safe):
 #   GITLAB_PAT     (required) — PAT with `api` scope + Maintainer+ on the project (authenticates).
-#   CI_VAR_KEY     (required) — variable name, e.g. SOPS_AGE_KEY_FILE.
+#   CI_VAR_KEY     (required) — variable name, e.g. FNOX_AGE_KEY_FILE.
 #   CI_VAR_VALUE   (required) — the value to store.
+#   CI_VAR_ENV_SCOPE (optional) — environment scope, default '*'. Several variables may share a key
+#                              with different scopes; lookup + update target exactly this scope.
+#   CI_VAR_PROTECTED (optional) — on CREATE: 'true' (default) or 'false'. Unprotected = also branch
+#                              pipelines (only for a tier whose secrets every branch needs).
 #   CI_PROJECT_ID  (optional) — numeric ID or URL-encoded path; defaults to 69776314 (this project).
 #                              The numeric ID is rename-immune; a path 301-redirects after a move and
 #                              curl does not follow that here.
 #   GITLAB_API     (optional) — defaults to https://gitlab.com/api/v4.
 #
-# CREATE: sets the value masked + protected + raw + scope '*'. Protected = only pipelines on protected
+# CREATE: sets the value masked + CI_VAR_PROTECTED + raw + CI_VAR_ENV_SCOPE. Protected = only pipelines on protected
 # refs (main, v* tags) can read it — branch pipelines that need it must run from a protected ref. If
 # GitLab refuses to MASK the value (its masking charset can reject some symbols) it retries UNMASKED
 # with a warning — tolerable because variables aren't shown to non-members and callers never echo
@@ -25,6 +29,9 @@ set -euo pipefail
 : "${CI_VAR_KEY:?CI_VAR_KEY must be set}"
 : "${CI_VAR_VALUE:?CI_VAR_VALUE must be set}"
 PROJECT_ID="${CI_PROJECT_ID:-69776314}"
+ENV_SCOPE="${CI_VAR_ENV_SCOPE:-*}"
+PROTECTED="${CI_VAR_PROTECTED:-true}"
+[[ "${PROTECTED}" == "true" || "${PROTECTED}" == "false" ]] || { echo "Error: CI_VAR_PROTECTED must be true|false" >&2; exit 1; }
 API="${GITLAB_API:-https://gitlab.com/api/v4}"
 
 for cmd in curl jq; do
@@ -35,6 +42,8 @@ for cmd in curl jq; do
 done
 
 VAR_URL="${API}/projects/${PROJECT_ID}/variables"
+# filter[environment_scope] selects the one variable of this key + scope (lookup and update).
+SCOPE_Q="filter%5Benvironment_scope%5D=$(jq -rn --arg s "${ENV_SCOPE}" '$s|@uri')"
 
 # Auth header via process substitution: curl reads it from a /dev/fd path, so the PAT never appears
 # in curl's argv (visible to every local user via `ps`/`/proc/*/cmdline` for the request duration).
@@ -42,7 +51,7 @@ auth() { printf 'header = "PRIVATE-TOKEN: %s"' "${GITLAB_PAT}"; }
 
 # Look the variable up (also the existence check) so an UPDATE can preserve its flags.
 CUR_RESP=$(curl --silent --show-error --write-out "\n%{http_code}" \
-  --config <(auth) --url "${VAR_URL}/${CI_VAR_KEY}")
+  --config <(auth) --url "${VAR_URL}/${CI_VAR_KEY}?${SCOPE_Q}")
 CUR_CODE=$(echo "${CUR_RESP}" | tail -n1)
 CUR_BODY=$(echo "${CUR_RESP}" | sed '$d')
 
@@ -67,7 +76,7 @@ if [[ "${CUR_CODE}" == "200" ]]; then
     --data-urlencode "protected=${protected}" \
     --data-urlencode "raw=${raw}" \
     --data-urlencode "environment_scope=${scope}" \
-    --url "${VAR_URL}/${CI_VAR_KEY}")
+    --url "${VAR_URL}/${CI_VAR_KEY}?${SCOPE_Q}")
   CODE=$(echo "${RESP}" | tail -n1); BODY=$(echo "${RESP}" | sed '$d')
   if [[ "${CODE}" == "400" ]] && echo "${BODY}" | grep -qi "mask"; then
     echo "Error: the new value can't satisfy this variable's existing masking — set it manually or" >&2
@@ -88,13 +97,13 @@ elif [[ "${CUR_CODE}" == "404" ]]; then
       --data-urlencode "key=${CI_VAR_KEY}" \
       --data-urlencode "value@-" \
       --data-urlencode "masked=$1" \
-      --data-urlencode "protected=true" \
+      --data-urlencode "protected=${PROTECTED}" \
       --data-urlencode "raw=true" \
       --data-urlencode "variable_type=${VAR_TYPE}" \
-      --data-urlencode "environment_scope=*" \
+      --data-urlencode "environment_scope=${ENV_SCOPE}" \
       --url "${VAR_URL}"
   }
-  echo "Creating CI/CD variable ${CI_VAR_KEY} (masked + protected)…"
+  echo "Creating CI/CD variable ${CI_VAR_KEY} [${ENV_SCOPE}] (masked, protected=${PROTECTED})…"
   RESP=$(create true); CODE=$(echo "${RESP}" | tail -n1); BODY=$(echo "${RESP}" | sed '$d')
   if [[ "${CODE}" == "400" ]] && echo "${BODY}" | grep -qi "mask"; then
     echo "WARNING: GitLab won't mask ${CI_VAR_KEY} (value has chars outside its masking charset) —" >&2
@@ -108,4 +117,4 @@ else
   fail "${CUR_CODE}" "${CUR_BODY}"
 fi
 
-echo "✓ ${CI_VAR_KEY} set in GitLab CI/CD (project ${PROJECT_ID})."
+echo "✓ ${CI_VAR_KEY} [${ENV_SCOPE}] set in GitLab CI/CD (project ${PROJECT_ID})."

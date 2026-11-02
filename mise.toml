@@ -25,10 +25,10 @@ node = "{{ env.NODE_MAJOR }}"
 # shebang-less placeholder Node cannot run (verified broken on mise 2026.9.1 and
 # 2026.9.8).
 "aqua:pnpm/pnpm" = "{{ env.PNPM_VERSION }}"
-# age CLI — key generation / `pnpm sops:rotate`. Native post-quantum keys need ≥ 1.3.0.
+# Secrets: fnox decrypts fnox.toml; age provides age-keygen + age-plugin-pq (fnox
+# reaches the post-quantum keys through the plugin). See docs/SECRETS.md.
+fnox = "{{ env.FNOX_VERSION }}"
 age = "{{ env.AGE_VERSION }}"
-# sops decrypts through its embedded age library (must be built against age ≥ 1.3.0).
-sops = "{{ env.SOPS_VERSION }}"
 # Changelog/release notes; CI runs orhunp/git-cliff:${GIT_CLIFF_VERSION}, so local
 # `scripts/mr-description.sh` and the release-notes job agree.
 git-cliff = "{{ env.GIT_CLIFF_VERSION }}"

@@ -15,7 +15,9 @@ tests/e2e/snapshots
 .env
 .env.*
 !.env.example
-!**/.env.enc
+# fnox: generated per machine (points at the keychain identity); never commit
+fnox.local.toml
+.fnox.local.toml
 age-key.txt
 .scannerwork
 **.original.md
