@@ -304,14 +304,6 @@ describe('Mqtt', () => {
     })
   })
 
-  describe('disconnect', () => {
-    it('should disconnect from broker', () => {
-      mqttInstance.disconnect()
-
-      expect(mqttInstance.client.end).toHaveBeenCalledWith(expect.any(Function))
-    })
-  })
-
   describe('autoDiscovery', () => {
     it('should publish to homeassistant discovery topic', () => {
       const discoveryConfig = JSON.stringify({

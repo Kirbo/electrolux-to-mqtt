@@ -21,6 +21,19 @@
     "indentWidth": 2,
     "lineWidth": 120
   },
+  // Biome 2.6 added Markdown + YAML formatters. Off until they mature: 2.6.4 dropped
+  // spaces before inline code and turned a wrapped `+ …` code span into a list item
+  // (telemetry-backend/README.md). The linters for both stay on.
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "enabled": false
+    }
+  },
   "javascript": {
     "parser": {
       "unsafeParameterDecoratorsEnabled": true

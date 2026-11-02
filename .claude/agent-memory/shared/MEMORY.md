@@ -25,6 +25,7 @@
 - [pnpm v11 build approval via pnpm-workspace.yaml](pnpm_v11_build_approval.md) — allowBuilds boolean map replaces onlyBuiltDependencies; pnpm-workspace.yaml created May 2026
 - [ws vuln GHSA-58qx-3vcg-4xpx fixed via pnpm-workspace.yaml](vuln_ws_GHSA-58qx-3vcg-4xpx.md) — override ws>=8.20.1 in both pnpm-workspace.yaml files; remove once mqtt bumps dep floor
 - [Biome 2.5.0 migration — run biome migrate --write](dep_biome_v25_migration.md) — recommended→preset rename; 70+ new rules; no violations in this project
+- [Biome 2.6 MD/YAML formatters disabled](dep_biome_v26_md_yaml_formatter.md) — 2.6.4 MD formatter dropped spaces before inline code; both formatters off in biome.jsonc, linters on; retry on next bump
 - [esbuild vulns GHSA-gv7w-rqvm-qjhr + GHSA-g7r4-m6w7-qqqr](vuln_esbuild_GHSA-gv7w-rqvm-qjhr.md) — override esbuild>=0.28.1 in both pnpm-workspace.yaml; remove when vite/tsx/vitest bump floor
 - [dhi.io/node hardened image — Node 24 latest is 24-alpine3.24](dep_alpine_hardened_images.md) — Node 24 Alpine on catalog page 2 of 54 (down from 102), newest-first; rechecked July 2026, revisit ~Nov 2026
 - [TypeScript 7 native compiler adopted](dep_typescript7_native.md) — 7.0.2 applied 2026-07-24; static Go binaries, Alpine-safe; re-verify checklist on future TS majors
