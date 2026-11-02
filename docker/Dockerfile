@@ -3,7 +3,7 @@
 ### Build and publish the Docker image
 # docker buildx build \
 #   --platform linux/arm64,linux/amd64 \
-#   --build-arg NODE_VERSION=<major>-alpine<alpine> \  # package.json engines.node + alpineVersion, REQUIRED
+#   --build-arg NODE_MAJOR --build-arg ALPINE_VERSION --build-arg COREPACK_VERSION \  # from versions.env, REQUIRED
 #   --build-arg VERSION=$(git describe --tags --always) \
 #   --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
 #   --build-arg VCS_REF=$(git rev-parse --short HEAD) \
@@ -15,10 +15,13 @@
 # Check the base images from: https://hub.docker.com/hardened-images/catalog/dhi/node/images
 
 # Define build arguments
-# REQUIRED, no default — CI passes <major>-alpine<alpine> (e.g. 26-alpine3.24)
-# (package.json engines.node major + alpineVersion); fails loudly if unset.
-ARG NODE_VERSION
-ARG NODE_IMAGE=dhi.io/node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}
+# NODE_MAJOR / ALPINE_VERSION / COREPACK_VERSION: REQUIRED, no defaults — the values
+# come from versions.env (CI loads it as dotenv, mise exports it locally); a missing
+# one fails the build loudly.
+ARG NODE_MAJOR
+ARG ALPINE_VERSION
+ARG NODE_IMAGE=dhi.io/node:${NODE_MAJOR:?"NODE_MAJOR build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG COREPACK_VERSION
 ARG VERSION=development
 ARG BUILD_DATE
 ARG VCS_REF
@@ -29,6 +32,7 @@ FROM ${NODE_IMAGE}-dev AS builder
 # Define build arguments for this stage
 ARG VERSION
 ARG NODE_IMAGE
+ARG COREPACK_VERSION
 
 # Set environment variables from build args (baked in at build time)
 ENV VERSION=${VERSION}
@@ -44,10 +48,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml CHANGELOG.m[d] ./
 
 # Install dependencies (including dev dependencies for building).
-# Node 25+ no longer bundles Corepack: install the version pinned in package.json
-# "corepackVersion" first (npm is still bundled; scripts/bootstrap-pnpm.sh does the same in CI).
+# Node 25+ no longer bundles Corepack: install COREPACK_VERSION (versions.env) first
+# (npm is still bundled; scripts/bootstrap-pnpm.sh does the same in CI).
 RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
-  npm install --global --no-audit --no-fund "corepack@$(node -p "require('./package.json').corepackVersion")" && \
+  npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
   corepack enable && \
   corepack install && \
   echo "====================================================================================" && \
@@ -75,6 +79,7 @@ FROM ${NODE_IMAGE}-dev AS purge
 
 # Set environment for production
 ENV NODE_ENV=production
+ARG COREPACK_VERSION
 
 WORKDIR /app
 
@@ -83,7 +88,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
 # Install only production dependencies
-RUN npm install --global --no-audit --no-fund "corepack@$(node -p "require('./package.json').corepackVersion")" && \
+RUN npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
   corepack enable && \
   corepack install && \
   DOCKER_BUILD=1 pnpm install --frozen-lockfile --prod --config.scripts-prepend-node-path=true

@@ -1,17 +1,18 @@
 # syntax=docker/dockerfile:latest
 
-# Node + Alpine build-args — REQUIRED, no defaults. Compose passes them; mise exports
-# both from the root package.json (NODE_VERSION from engines.node, ALPINE_VERSION from
-# alpineVersion). Build fails loudly if either is unset.
-ARG NODE_VERSION
+# NODE_MAJOR / ALPINE_VERSION / COREPACK_VERSION build-args — REQUIRED, no defaults.
+# The values come from versions.env (mise exports it; compose passes them through).
+# The build fails loudly if one is unset.
+ARG NODE_MAJOR
 ARG ALPINE_VERSION
-ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG NODE_IMAGE=node:${NODE_MAJOR:?"NODE_MAJOR build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
 
 # Use official Node image
 FROM ${NODE_IMAGE}
 
 # Set development environment
 ENV NODE_ENV=development
+ARG COREPACK_VERSION
 
 # Install development tools (useful for debugging) and create non-root user for security (even in dev)
 RUN apk add --no-cache \
@@ -27,9 +28,9 @@ COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Change ownership of the working directory, then install + enable corepack as root
 # (both need write access to /usr/local). Node 25+ no longer bundles Corepack, so
-# install the version pinned in package.json "corepackVersion" (npm is still bundled).
+# install COREPACK_VERSION from versions.env (npm is still bundled).
 RUN chown nodejs:nodejs /app && \
-  npm install --global --no-audit --no-fund "corepack@$(node -p "require('./package.json').corepackVersion")" && \
+  npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
   corepack enable
 
 # Switch to non-root user

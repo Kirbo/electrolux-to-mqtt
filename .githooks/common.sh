@@ -65,11 +65,11 @@ find_node() {
     return 0
   fi
   
-  # Read node major from package.json engines.node (via scripts/node-major.sh)
+  # Node major from versions.env (the single source of truth)
   NODE_VERSION=""
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/node-major.sh" ]; then
-    NODE_VERSION=$(sh "$REPO_ROOT/scripts/node-major.sh" 2>/dev/null || true)
+  if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/versions.env" ]; then
+    NODE_VERSION=$(sed -n 's/^NODE_MAJOR=//p' "$REPO_ROOT/versions.env")
   fi
 
   # mise is the project toolchain: prefer its shims, then the versioned install

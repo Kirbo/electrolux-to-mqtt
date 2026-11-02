@@ -10,6 +10,7 @@ initialise variables:
     - if: "$CI_COMMIT_TAG == null"
       changes:
         - biome.jsonc
+        - versions.env
         - docker/Dockerfile
         - package.json
         - pnpm-lock.yaml
@@ -27,19 +28,15 @@ initialise variables:
     reports:
       dotenv: variables.env
   script:
-    - touch variables.env
-    # Node major from package.json engines.node, Alpine from package.json alpineVersion —
-    # each the single source of truth, parsed by its script (which fails loudly on a miss).
-    - NODE_MAJOR=$(sh scripts/node-major.sh)
-    - ALPINE=$(sh scripts/alpine-version.sh)
-    # NODE_VERSION stays the combined image tag — both stock node (node:26-alpine3.24)
-    # and dhi.io/node use the <major>-alpine<ver> suffix convention. The pieces are
-    # exported separately for jobs that need just one of them.
-    - echo "NODE_MAJOR=${NODE_MAJOR}" >> variables.env
-    - echo "ALPINE_VERSION=${ALPINE}" >> variables.env
-    - echo "NODE_VERSION=${NODE_MAJOR}-alpine${ALPINE}" >> variables.env
-    # git-cliff image tag, pinned in mise.toml [tools] (same version as local).
-    - echo "GIT_CLIFF_VERSION=$(sh scripts/tool-version.sh git-cliff)" >> variables.env
+    # versions.env is the single source of truth for every version: its KEY=value lines
+    # become dotenv variables for every later job (NODE_MAJOR, ALPINE_VERSION,
+    # COREPACK_VERSION, GIT_CLIFF_VERSION, …) — the same names the Dockerfiles take as
+    # build-args. sync-versions.sh (job `versions in sync`) guarantees the format.
+    - grep -E '^[A-Z][A-Z0-9_]*=' versions.env > variables.env
+    - . ./variables.env
+    # NODE_IMAGE_TAG: the <major>-alpine<ver> tag of the CI job images (stock node).
+    - echo "NODE_IMAGE_TAG=${NODE_MAJOR:?}-alpine${ALPINE_VERSION:?}" >> variables.env
+    - cat variables.env
 
 bump version:
   stage: init
@@ -98,7 +95,7 @@ generate release notes:
 
 install dependencies:
   stage: init
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   interruptible: true
   extends: .rules_node_changes_or_schedule
   cache:
@@ -116,8 +113,7 @@ install dependencies:
   before_script:
     - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
-    - echo "Node major from package.json engines.node:"
-    - sh scripts/node-major.sh
+    - echo "Node major from versions.env: ${NODE_MAJOR}"
     - node --version
     - npm --version
     - pnpm --version

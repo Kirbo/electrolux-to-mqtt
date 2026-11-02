@@ -1,15 +1,17 @@
 # syntax=docker/dockerfile:latest
 
-# Node + Alpine build-args — REQUIRED, no defaults. Compose passes them; mise exports
-# both from the root package.json (NODE_VERSION from engines.node, ALPINE_VERSION from
-# alpineVersion). Build fails loudly if either is unset.
-ARG NODE_VERSION
+# NODE_MAJOR / ALPINE_VERSION / COREPACK_VERSION build-args — REQUIRED, no defaults.
+# The values come from versions.env (mise exports it; compose passes them through).
+# The build fails loudly if one is unset.
+ARG NODE_MAJOR
 ARG ALPINE_VERSION
-ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG NODE_IMAGE=node:${NODE_MAJOR:?"NODE_MAJOR build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG COREPACK_VERSION
 
 # ── Stage 1: build ──────────────────────────────────────────────────
 # Standard Alpine image — not the hardened bridge container.
 FROM ${NODE_IMAGE} AS builder
+ARG COREPACK_VERSION
 
 WORKDIR /app
 
@@ -20,19 +22,19 @@ COPY ./package.json ./application.json
 COPY ./telemetry-backend/ .
 
 # Install package manager, all dependencies, and compile TypeScript.
-# Node 25+ no longer bundles Corepack, so the version pinned in the root package.json
-# "corepackVersion" is installed first (npm is still bundled).
+# Node 25+ no longer bundles Corepack, so COREPACK_VERSION (versions.env) is
+# installed first (npm is still bundled).
 # The pnpm version is activated in corepack directly from the root package.json pin
 # instead of being written into this package's own "packageManager" field: pnpm 12
 # records that field as packageManagerDependencies in the lockfile, so injecting it at
 # build time would make `--frozen-lockfile` fail (ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE).
 ENV CI=true
 RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
-    npm install --global --no-audit --no-fund "corepack@$(node -p "require('./application.json').corepackVersion")" && \
+    npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
     corepack enable && \
     corepack install -g "${PACKAGE_MANAGER}" && \
     echo "====================================================================================" && \
-    echo "                Node Version:                 ${NODE_VERSION}" && \
+    echo "                Node Version:                 $(node --version)" && \
     echo "                Package manager:              ${PACKAGE_MANAGER}" && \
     echo "====================================================================================" && \
     pnpm install --frozen-lockfile && \
@@ -40,6 +42,7 @@ RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") &&
 
 # ── Stage 2: production ────────────────────────────────────────────
 FROM ${NODE_IMAGE}
+ARG COREPACK_VERSION
 
 WORKDIR /app
 
@@ -56,7 +59,7 @@ COPY --from=builder /app/pnpm-workspace.yaml ./
 # Install only production dependencies
 ENV CI=true
 RUN PACKAGE_MANAGER=$(node -p "require('./application.json').packageManager") && \
-    npm install --global --no-audit --no-fund "corepack@$(node -p "require('./application.json').corepackVersion")" && \
+    npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
     corepack enable && \
     corepack install -g "${PACKAGE_MANAGER}" && \
     pnpm install --prod --frozen-lockfile && \

@@ -13,7 +13,7 @@
 
 test:
   stage: test
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   interruptible: true
   extends: .rules_node_changes
   cache:
@@ -49,7 +49,7 @@ test:
 
 lint:
   stage: test
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   interruptible: true
   extends: .rules_node_changes
   cache:
@@ -76,7 +76,7 @@ lint:
 
 typecheck:
   stage: test
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   interruptible: true
   extends: .rules_node_changes
   cache:
@@ -104,7 +104,7 @@ typecheck:
 audit:
   extends: .osv_scanner
   stage: test
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   needs:
     - job: initialise variables
       artifacts: true
@@ -131,7 +131,7 @@ audit:
 audit:telemetry-backend:
   extends: .osv_scanner
   stage: test
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   needs:
     - job: initialise variables
       artifacts: true
@@ -203,7 +203,7 @@ sonarcloud-check:
 
 telemetry-backend test:
   stage: test
-  image: node:${NODE_VERSION}
+  image: node:${NODE_IMAGE_TAG}
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -238,7 +238,7 @@ versions in sync:
         - telemetry-backend/package.json
         # the scripts this job runs — editing it must re-run the drift check
         - scripts/sync-versions.sh
-        - scripts/node-major.sh
+        - versions.env
       when: on_success
     - when: never
   needs: []
@@ -249,7 +249,7 @@ versions in sync:
     - |
       if ! git diff --exit-code; then
         echo ""
-        echo "ERROR: derived versions are out of sync with package.json engines.node."
+        echo "ERROR: package.json versions are out of sync with versions.env."
         echo "Run 'mise run sync-versions' (or 'pnpm sync:versions') locally and commit the result."
         exit 1
       fi
@@ -274,9 +274,7 @@ docker build test:
         - docker/Dockerfile.local
         - telemetry-backend/Dockerfile
         - scripts/docker-build-test.sh
-        - scripts/node-major.sh
-        - scripts/alpine-version.sh
-        - mise.toml
+        - versions.env
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml

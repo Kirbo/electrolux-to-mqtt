@@ -3,18 +3,17 @@
 # package.json "packageManager" (version + sha512 integrity).
 #
 # Node 25+ no longer bundles Corepack, so it is installed explicitly from npm
-# (still bundled). The version is pinned in the root package.json
-# "corepackVersion" — the single source of truth; the Dockerfiles read the same key
-# with `node -p` because this script is not in their build context before install.
+# (still bundled) at COREPACK_VERSION from versions.env — the single source of truth
+# for every version. The Dockerfiles receive the same value as a build-arg.
 #
 # Used by every GitLab CI job that needs pnpm. Run from any cwd; activates pnpm
 # for the repo root.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-version=$(sed -n 's/^[[:space:]]*"corepackVersion"[[:space:]]*:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' "$ROOT/package.json" | head -1)
+version=$(sed -n 's/^COREPACK_VERSION=//p' "$ROOT/versions.env")
 if [ -z "$version" ]; then
-  echo "ERROR: could not parse \"corepackVersion\" from $ROOT/package.json" >&2
+  echo "ERROR: versions.env has no COREPACK_VERSION" >&2
   exit 1
 fi
 

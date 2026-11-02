@@ -132,7 +132,7 @@ create gitlab prerelease:
 
 .ssh_deploy: &ssh_deploy
   - apk add --no-cache openssh-client curl bash
-  # Install the mise-pinned, PQ-capable sops (version from mise.toml) — NOT alpine's
+  # Install the mise-pinned, PQ-capable sops (version from versions.env via mise.toml) — NOT alpine's
   # apk sops, which may be too old to decrypt the native post-quantum (ML-KEM) age key.
   - curl https://mise.run | sh
   - export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
@@ -190,7 +190,7 @@ deploy telemetry-backend:
     - *ssh_deploy
   script:
     - *deploy_backend_env
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sh scripts/node-major.sh) ALPINE_VERSION=$(sh scripts/alpine-version.sh) docker compose -f telemetry-backend/docker-compose.yml up --build -d"
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && set -a && . ./versions.env && set +a && docker compose -f telemetry-backend/docker-compose.yml up --build -d"
 
 # After a bridge release (new tag + GitLab release), regenerate the badges in the *running*
 # backend so the version badges reflect the new release immediately instead of waiting up to
@@ -228,10 +228,9 @@ refresh telemetry badges:
   before_script:
     - *ssh_deploy
   script:
-    # NODE_VERSION/ALPINE_VERSION: compose interpolates ${...:?...} (build.args) even
-    # for `exec`, so the remote shell needs them set; the $(sh scripts/...) calls expand
-    # runner-side from the checked-out repo, same as the deploy job above.
-    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && NODE_VERSION=$(sh scripts/node-major.sh) ALPINE_VERSION=$(sh scripts/alpine-version.sh) docker compose -f telemetry-backend/docker-compose.yml exec -T telemetry-backend node dist/regenerate-badges.js"
+    # versions.env is sourced on the server (its checkout was pulled by the deploy job):
+    # compose interpolates the required ${...:?...} build-args even for `exec`.
+    - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && set -a && . ./versions.env && set +a && docker compose -f telemetry-backend/docker-compose.yml exec -T telemetry-backend node dist/regenerate-badges.js"
 
 prepare dockerhub readme:
   stage: release

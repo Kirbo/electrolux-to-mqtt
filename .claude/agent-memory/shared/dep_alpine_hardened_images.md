@@ -22,4 +22,4 @@ Tag format for prod: `24-alpine3.XX` (non-dev, non-fips, non-sfw).
 
 **Why:** catalog is paginated; Node 24 appears on page 2 as of June 2026.
 
-**How to apply:** When Alpine bumps, update root `package.json` `alpineVersion` (moved out of `mise.toml` 2026-10-05 so an Alpine-only bump hits the release gate) — CI (`.gitlab/ci/01_init.yml`) combines it with the `engines.node` major into NODE_VERSION, and `docker/Dockerfile` has no default (NODE_VERSION build-arg comes from CI/mise). Since 2026-10-05 `Dockerfile.local` and `telemetry-backend/Dockerfile` (stock `node` images) are pinned to the same `alpineVersion` via a required `ALPINE_VERSION` build-arg, so a bump needs the `<major>-alpine<ver>` tag to exist on BOTH dhi.io and Docker Hub `node`.
+**How to apply:** When Alpine bumps, edit `versions.env` `ALPINE_VERSION` and run `pnpm sync:versions` (writes the derived package.json `alpineVersion`, which trips the release gate — see [[project_versions_env]]). Every Node image (dhi prod + stock local/backend/CI) is `<NODE_MAJOR>-alpine<ALPINE_VERSION>`, so the tag must exist on BOTH dhi.io and Docker Hub `node`.

@@ -81,7 +81,7 @@ Extra robustness checks beyond the checklist:
 - [ ] `biome.jsonc` scope matches scripts
 - [ ] `tsconfig.json` strict enabled
 - [ ] `vitest.config.ts` excludes/thresholds correct
-- [ ] Node/Alpine versions agree across all derived files — Node single-sourced in root `package.json` `engines.node`, Alpine in `mise.toml`; run `pnpm sync:versions` and confirm `git diff` is clean (CI job `versions in sync` guards drift)
+- [ ] Versions agree with `versions.env` (single source) — run `pnpm sync:versions` and confirm `git diff` is clean (CI job `versions in sync` guards drift); no version literal for Node/Alpine/Corepack/pnpm/age/sops/git-cliff anywhere else (Dockerfiles, compose, CI, mise.toml)
 - [ ] `cliff.toml` + `scripts/compute-calver-*.sh` correct; CI release flow (git-cliff + combine-changelogs) matches local workflow
 - [ ] Docker builds minimal (incl. `telemetry-backend/`)
 

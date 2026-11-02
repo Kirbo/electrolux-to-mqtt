@@ -6,10 +6,11 @@
 - [CalVer migration](project_calver_migration.md) — SemVer→CalVer (HA-style `YYYY.M.MICRO`/`bN`) complete: git-cliff generates per-release notes, combine-changelogs aggregates; only the 1.19.0→2026.6.0 release-notes announcement is left (human, at release)
 - [SOPS env-file encryption](project_sops_secrets.md) — age PQ (ML-KEM-768) key in 1Password "electrolux-to-mqtt age key"; needs age ≥ 1.3.0; `pnpm sops:*`; pending: rotate exposed SONAR_TOKEN
 - [Auto-update decision](project_auto_update_decision.md) — in-app image self-update rejected (Docker socket breaks hardening); Watchtower-via-compose-profile is the sanctioned path if revisited
-- [git-cliff pinned in mise.toml](reference_git_cliff_mise_shim.md) — resolved shim issue; CI image tag read from the same pin via scripts/tool-version.sh
+- [git-cliff pinned](reference_git_cliff_mise_shim.md) — resolved shim issue; GIT_CLIFF_VERSION in versions.env feeds mise + the CI image tag
 - [glab ci lint (merged)](reference_glab_ci_lint.md) — plain lint resolves includes server-side (stale for unpushed); merge root+includes into one file to validate local .gitlab/ci/ edits
 - [Fetch and sync the branch before committing](feedback_fetch_before_commit.md) — check ahead/behind at the START of any task ending in a commit; a stale branch caused 30-commits-behind duplicated work
 - [Write memory before commit](feedback_memory_before_commit.md) — capture pending learnings as memory files before the commit step so they ride in the same commit/push
+- [versions.env single source](project_versions_env.md) — every toolchain/image version; package.json holds derived copies only so image bumps hit the release gate; same names as build-args everywhere
 - [Repo layout](project_repo_layout.md) — standalone docs live in `docs/`; README/LICENSE + all config files stay at root for tool/platform auto-resolution (don't move config to tidy root)
 - [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it
 - [State cache shape union](project_state_cache_shape.md) — cache holds raw Appliance OR normalized state; every cache→MQTT publish must go through `resolveCachedNormalizedState` (raw shape breaks HA → "Unavailable")
@@ -18,7 +19,7 @@
 - [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = sha256(username); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
-- [Corepack pin for Node 26](dep_corepack_node26.md) — Node 25+ bundles no Corepack; `corepackVersion` in package.json, installed via npm in images/CI (scripts/bootstrap-pnpm.sh); bump by hand; local pnpm bump = `pnpm dlx corepack@<pin> use pnpm@latest`
+- [Corepack pin for Node 26](dep_corepack_node26.md) — Node 25+ bundles no Corepack; COREPACK_VERSION (versions.env) installed via npm in images/CI; bump by hand, pnpm outdated never shows it
 - [@types/node is held by ignoreDependencies, not a range](dep_atypes_node_pin.md) — a range can't stop `pnpm update --latest`; updateConfig.ignoreDependencies in both pnpm-workspace.yaml + sync-versions.sh as sole writer
 - [pnpm 12 migration quirks](dep_pnpm12_migration.md) — mise needs aqua:pnpm/pnpm; lockfile gains a leading packageManagerDependencies doc → osv-scan.sh splits it, backend Dockerfile must not inject packageManager
 - [pnpm 12.11 agent-skills approval](dep_pnpm_agent_skills_approval.md) — deps bundling SKILL.md (e.g. @clickhouse/client 1.24) await `pnpm approve`; non-blocking; clickhouse denied 2026-10-13 via `permissions:` in pnpm-workspace.yaml

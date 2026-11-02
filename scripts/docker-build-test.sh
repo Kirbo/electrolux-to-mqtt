@@ -21,14 +21,16 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-# Node major (engines.node) + Alpine (alpineVersion) from package.json — each the
-# single source of truth, read through its script.
-NODE_MAJOR="$(sh scripts/node-major.sh)"
-ALPINE="$(sh scripts/alpine-version.sh)"
-if [[ -z "${NODE_MAJOR}" || -z "${ALPINE}" ]]; then
-  echo "ERROR: could not parse the Node major / alpineVersion from package.json" >&2
-  exit 1
-fi
+# Every version comes from versions.env (the single source of truth) and is passed
+# to the Dockerfiles as build-args of the same names.
+set -a
+# shellcheck source=/dev/null
+. ./versions.env
+set +a
+: "${NODE_MAJOR:?versions.env has no NODE_MAJOR}" "${ALPINE_VERSION:?versions.env has no ALPINE_VERSION}" \
+  "${COREPACK_VERSION:?versions.env has no COREPACK_VERSION}"
+ALPINE="${ALPINE_VERSION}"
+VERSION_ARGS=(--build-arg NODE_MAJOR --build-arg ALPINE_VERSION --build-arg COREPACK_VERSION)
 TAG_PREFIX="e2m-buildtest"
 FAILED=0
 BUILT_TAGS=()
@@ -90,10 +92,10 @@ build_prod() {
     dockerfile=".docker-build-test.Dockerfile"
   fi
 
-  # NODE_VERSION is required by the Dockerfile (no default); in the substituted
-  # stock-image path the arg is simply unused.
+  # The version build-args are required by the Dockerfile (no defaults); in the
+  # substituted stock-image path NODE_MAJOR/ALPINE_VERSION are simply unused.
   if ! docker build --network host -f "${dockerfile}" \
-    --build-arg "NODE_VERSION=${NODE_MAJOR}-alpine${ALPINE}" -t "${tag}" . >/tmp/e2m-bt-prod.log 2>&1; then
+    "${VERSION_ARGS[@]}" -t "${tag}" . >/tmp/e2m-bt-prod.log 2>&1; then
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-prod.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")
@@ -104,7 +106,7 @@ build_local() {
   echo "== local dev image (docker/Dockerfile.local) =="
   local tag="${TAG_PREFIX}-local"
   if ! docker build --network host -f docker/Dockerfile.local \
-    --build-arg "NODE_VERSION=${NODE_MAJOR}" --build-arg "ALPINE_VERSION=${ALPINE}" -t "${tag}" . >/tmp/e2m-bt-local.log 2>&1; then
+    "${VERSION_ARGS[@]}" -t "${tag}" . >/tmp/e2m-bt-local.log 2>&1; then
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-local.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")
@@ -117,7 +119,7 @@ build_backend() {
   echo "== telemetry-backend image (telemetry-backend/Dockerfile) =="
   local tag="${TAG_PREFIX}-backend"
   if ! docker build --network host -f telemetry-backend/Dockerfile \
-    --build-arg "NODE_VERSION=${NODE_MAJOR}" --build-arg "ALPINE_VERSION=${ALPINE}" -t "${tag}" . >/tmp/e2m-bt-backend.log 2>&1; then
+    "${VERSION_ARGS[@]}" -t "${tag}" . >/tmp/e2m-bt-backend.log 2>&1; then
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-backend.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")

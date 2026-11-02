@@ -5,8 +5,9 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.local
       args:
-        - NODE_VERSION=${NODE_VERSION:?NODE_VERSION is not set - activate mise (exports it from package.json engines.node) or export it manually}
-        - ALPINE_VERSION=${ALPINE_VERSION:?ALPINE_VERSION is not set - activate mise (exports it from package.json alpineVersion) or export it manually}
+        - NODE_MAJOR=${NODE_MAJOR:?NODE_MAJOR is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
+        - ALPINE_VERSION=${ALPINE_VERSION:?ALPINE_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
+        - COREPACK_VERSION=${COREPACK_VERSION:?COREPACK_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
     mem_limit: 128mb
     memswap_limit: 256mb
     restart: unless-stopped

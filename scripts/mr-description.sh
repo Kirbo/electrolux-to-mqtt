@@ -65,7 +65,7 @@ elif command -v docker >/dev/null 2>&1; then
     -e GIT_CONFIG_COUNT=1 \
     -e GIT_CONFIG_KEY_0=safe.directory \
     -e GIT_CONFIG_VALUE_0='*' \
-    "orhunp/git-cliff:$(sh "${ROOT}/scripts/tool-version.sh" git-cliff)" \
+    "orhunp/git-cliff:$(sed -n 's/^GIT_CLIFF_VERSION=//p' "${ROOT}/versions.env")" \
     "${CLIFF_ARGS[@]}"
 else
   echo "error: neither git-cliff nor docker is available." >&2

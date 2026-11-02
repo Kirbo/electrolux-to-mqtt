@@ -124,8 +124,8 @@ this service sends). The forwarder still sets a per-install `User-Agent`
 
 Toolchain first: do the one-time mise setup in [`docs/CONTRIBUTING.md`](../docs/CONTRIBUTING.md#toolchain-setup-one-time-every-machine)
 (install + activate + `mise trust` + `mise install` at the repo root). This package
-uses the same Node and pnpm, from the root `package.json`, and `pnpm backend:docker`
-needs the `NODE_VERSION`/`ALPINE_VERSION` that an activated mise shell exports.
+uses the same Node and pnpm, from the root `versions.env`, and `pnpm backend:docker`
+needs the `NODE_MAJOR`/`ALPINE_VERSION`/`COREPACK_VERSION` build-args from `versions.env`, which an activated mise shell exports.
 
 ```bash
 cd telemetry-backend
