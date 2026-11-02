@@ -4,7 +4,7 @@
 - [Deferred review items (2026-06-01)](project_review_deferred.md) — optional/scope items left after the F1–F6 review: exactOptionalPropertyTypes, mqtt import side-effect, factory single-model fallback (the telemetry-backend PORT NaN-guard item is now resolved)
 - [Apply fixes directly](feedback_apply_fixes_directly.md) — when asked to fix, edit the working tree + prove it; don't paste code and ask "apply this?"
 - [CalVer migration](project_calver_migration.md) — SemVer→CalVer (HA-style `YYYY.M.MICRO`/`bN`) complete: git-cliff generates per-release notes, combine-changelogs aggregates; only the 1.19.0→2026.6.0 release-notes announcement is left (human, at release)
-- [fnox secrets](project_fnox_secrets.md) — all secrets in fnox.toml (age PQ, plugin form via age 1.3.2); 4 CI tiers = env-scoped FNOX_AGE_KEY_FILE; agent cannot write keychain/1Password/GitLab — user runs those; old GitLab vars deleted only after a green pipeline
+- [fnox secrets](project_fnox_secrets.md) — all secrets in fnox.toml (age PQ, plugin form via age 1.3.2); 4 CI tiers = env-scoped FNOX_AGE_KEY_FILE; agent cannot write keychain/1Password/GitLab — user runs those; migration complete 2026-11-02 (only the 4 tier vars remain)
 - [Auto-update decision](project_auto_update_decision.md) — in-app image self-update rejected (Docker socket breaks hardening); Watchtower-via-compose-profile is the sanctioned path if revisited
 - [git-cliff pinned](reference_git_cliff_mise_shim.md) — resolved shim issue; GIT_CLIFF_VERSION in versions.env feeds mise + the CI image tag
 - [glab ci lint (merged)](reference_glab_ci_lint.md) — plain lint resolves includes server-side (stale for unpushed); merge root+includes into one file to validate local .gitlab/ci/ edits
