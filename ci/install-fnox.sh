@@ -30,13 +30,24 @@ _age_sha=$(_get "AGE_SHA256_LINUX_${_arch}")
 for _v in "${_fnox_v}" "${_age_v}" "${_fnox_sha}" "${_age_sha}"; do
   [ -n "${_v}" ] || { echo "install-fnox: versions.env lacks a fnox/age version or ${_arch} sha256 pin" >&2; exit 1; }
 done
+# A malformed pin must fail here: GNU `sha256sum -c` only WARNS about an improperly
+# formatted line, skips it and still exits 0 — the tarball would install unverified.
+for _sha in "${_fnox_sha}" "${_age_sha}"; do
+  printf '%s' "${_sha}" | grep -Eqx '[0-9a-f]{64}' ||
+    { echo "install-fnox: ${_arch} sha256 pin '${_sha}' in versions.env is not 64 hex digits" >&2; exit 1; }
+done
 
 BIN="${BIN:-${HOME}/.local/bin}"
 mkdir -p "${BIN}"
 _tmp=$(mktemp -d)
+trap 'rm -rf "${_tmp}"' EXIT
 
-_fetch() { # url dest
-  if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 3 -o "$2" "$1"; else wget -q -O "$2" "$1"; fi
+_fetch() { # url dest — 3 attempts either way (busybox wget has no --tries)
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --retry 3 -o "$2" "$1"
+  else
+    wget -q -O "$2" "$1" || { sleep 2; wget -q -O "$2" "$1"; } || { sleep 5; wget -q -O "$2" "$1"; }
+  fi
 }
 _fetch "https://github.com/jdx/fnox/releases/download/v${_fnox_v}/fnox-${_fnox_arch}-unknown-linux-musl.tar.gz" "${_tmp}/fnox.tgz"
 _fetch "https://github.com/FiloSottile/age/releases/download/v${_age_v}/age-v${_age_v}-linux-${_age_arch}.tar.gz" "${_tmp}/age.tgz"
@@ -47,6 +58,5 @@ printf '%s  %s\n%s  %s\n' "${_fnox_sha}" "${_tmp}/fnox.tgz" "${_age_sha}" "${_tm
 tar -xzf "${_tmp}/fnox.tgz" -C "${BIN}" fnox
 tar -xzf "${_tmp}/age.tgz" -C "${_tmp}" age/age-plugin-pq
 mv "${_tmp}/age/age-plugin-pq" "${BIN}/"
-rm -rf "${_tmp}"
 
 echo "install-fnox: $("${BIN}/fnox" --version) + age-plugin-pq ${_age_v} (${_arch}) in ${BIN}"
