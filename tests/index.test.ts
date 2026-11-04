@@ -46,6 +46,7 @@ vi.mock('#/config.js', () => ({
     homeAssistant: {
       autoDiscovery: true,
       revertStateOnRejection: false,
+      discoveryPrefix: 'homeassistant',
     },
     healthCheck: {
       enabled: false,
@@ -185,7 +186,10 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     })
 
     it('should construct Mqtt with the mqtt section of the config', () => {
-      expect(MockMqttCtor).toHaveBeenCalledWith(expect.objectContaining({ url: 'mqtt://test-broker:1883', qos: 2 }))
+      expect(MockMqttCtor).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'mqtt://test-broker:1883', qos: 2 }),
+        'homeassistant',
+      )
     })
 
     it('should not start main() when imported rather than run as the entry module', () => {
@@ -224,6 +228,21 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
     it('should construct Orchestrator exactly once', () => {
       expect(MockOrchestratorCtor).toHaveBeenCalledTimes(1)
+    })
+
+    it('should give the Orchestrator the bridge as discovery origin', () => {
+      expect(MockOrchestratorCtor).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          discoveryOrigin: {
+            name: 'electrolux-to-mqtt',
+            sw_version: 'development',
+            support_url: 'https://gitlab.com/kirbodev/electrolux-to-mqtt',
+          },
+        }),
+      )
     })
 
     it('should construct Orchestrator with the API, the state sync and the Mqtt instance', () => {

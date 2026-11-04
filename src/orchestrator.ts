@@ -1,4 +1,4 @@
-import type { BaseAppliance } from './appliances/base.js'
+import type { BaseAppliance, DiscoveryContext } from './appliances/base.js'
 import { createAppliance } from './appliances/factory.js'
 import { parseMqttCommand } from './appliances/normalizers.js'
 import { cache } from './cache.js'
@@ -7,6 +7,7 @@ import { writeHealthFile } from './health.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
 import type { StateSync } from './state-sync.js'
+import type { HAOrigin } from './types/homeassistant.js'
 import type { ApplianceStub } from './types.js'
 
 const logger = createLogger('app')
@@ -21,6 +22,8 @@ export interface OrchestratorConfig {
   haBirthRepublish: boolean
   haBirthTopic: string
   haBirthPayload: string
+  /** The bridge as the discovery payloads' `origin` (required by device-based discovery). */
+  discoveryOrigin: HAOrigin
 }
 
 /** The ElectroluxApi calls discovery needs. */
@@ -52,6 +55,14 @@ export class Orchestrator implements AsyncDisposable {
 
   public getApplianceInstances(): ReadonlyMap<string, BaseAppliance> {
     return this.applianceInstances
+  }
+
+  private discoveryContext(): DiscoveryContext {
+    return {
+      topicPrefix: this.mqtt.topicPrefix,
+      availabilityTopic: this.mqtt.availabilityTopic,
+      origin: this.config.discoveryOrigin,
+    }
   }
 
   private trackApiResult(state: unknown, now: number): void {
@@ -109,10 +120,7 @@ export class Orchestrator implements AsyncDisposable {
   private republishAll(): void {
     for (const [applianceId, appliance] of this.applianceInstances) {
       if (this.config.autoDiscovery) {
-        const discoveryConfig = appliance.generateAutoDiscoveryConfig(
-          this.mqtt.topicPrefix,
-          this.mqtt.availabilityTopic,
-        )
+        const discoveryConfig = appliance.generateAutoDiscoveryConfig(this.discoveryContext())
         this.mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), { retain: true, qos: 2 })
       }
 
@@ -267,23 +275,15 @@ export class Orchestrator implements AsyncDisposable {
       if (this.config.autoDiscovery) {
         // Generate and publish auto-discovery config using the appliance-specific logic
         logger.debug(`Using topicPrefix for auto-discovery: "${this.mqtt.topicPrefix}"`)
-        const discoveryConfig = appliance.generateAutoDiscoveryConfig(
-          this.mqtt.topicPrefix,
-          this.mqtt.availabilityTopic,
-        )
+        const discoveryConfig = appliance.generateAutoDiscoveryConfig(this.discoveryContext())
         logger.debug('Generated auto-discovery config:', discoveryConfig)
-        this.mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), {
-          retain: true,
-          qos: 2,
-        })
+        // First publish for this appliance — migrates a legacy single-component config if one is retained.
+        await this.mqtt.initialDiscovery(applianceId, JSON.stringify(discoveryConfig))
 
         applianceDiscoveryCallback = () => {
           const capabilitiesHash = appliance.getCapabilitiesHash()
           const cacheKey = cache.cacheKey(applianceId, capabilitiesHash).autoDiscovery
-          const autoDiscoveryConfig = appliance.generateAutoDiscoveryConfig(
-            this.mqtt.topicPrefix,
-            this.mqtt.availabilityTopic,
-          )
+          const autoDiscoveryConfig = appliance.generateAutoDiscoveryConfig(this.discoveryContext())
 
           if (cache.matchByValue(cacheKey, autoDiscoveryConfig)) {
             return

@@ -94,6 +94,7 @@ const expectDefaults = (config: AppConfig) => {
     statusTopic: 'homeassistant/status',
     birthPayload: 'online',
     birthRepublish: true,
+    discoveryPrefix: 'homeassistant',
   })
   expect(config.logging).toEqual({
     logLevel: 'info',
@@ -159,6 +160,8 @@ describe('configFromEnv', () => {
     ['HA_STATUS_TOPIC', 'ha/birth/status', (c: AppConfig) => c.homeAssistant.statusTopic, 'ha/birth/status'],
     ['HA_BIRTH_PAYLOAD', 'started', (c: AppConfig) => c.homeAssistant.birthPayload, 'started'],
     ['HA_BIRTH_REPUBLISH', 'false', (c: AppConfig) => c.homeAssistant.birthRepublish, false],
+    ['HA_DISCOVERY_PREFIX', 'ha', (c: AppConfig) => c.homeAssistant.discoveryPrefix, 'ha'],
+    ['HA_DISCOVERY_PREFIX', 'my/ha', (c: AppConfig) => c.homeAssistant.discoveryPrefix, 'my/ha'],
     ['LOG_LEVEL', 'debug', (c: AppConfig) => c.logging.logLevel, 'debug'],
     ['LOGGING_SHOW_CHANGES', 'false', (c: AppConfig) => c.logging.showChanges, false],
     ['LOGGING_IGNORED_KEYS', 'a.b, c ,d', (c: AppConfig) => c.logging.ignoredKeys, ['a.b', 'c', 'd']],
@@ -227,6 +230,10 @@ describe('configFromEnv', () => {
     ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '604801'],
     ['LOG_LEVEL', 'verbose'],
     ['HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES', '5'],
+    ['HA_DISCOVERY_PREFIX', 'homeassistant/'],
+    ['HA_DISCOVERY_PREFIX', '/homeassistant'],
+    ['HA_DISCOVERY_PREFIX', 'home/#'],
+    ['HA_DISCOVERY_PREFIX', 'home+assistant'],
   ])('rejects %s=%s, labelled with the env name', (name, value) => {
     expectConfigError(() => configFromEnv(env({ [name]: value })), name)
   })
@@ -286,6 +293,7 @@ describe('parseConfigFile', () => {
       statusTopic: 'homeassistant/status',
       birthPayload: 'online',
       birthRepublish: true,
+      discoveryPrefix: 'homeassistant',
     })
   })
 
@@ -318,6 +326,7 @@ telemetryEnabled: false
     ['electrolux', 'countryCode: se', (c: AppConfig) => c.electrolux.countryCode, 'se'],
     ['homeAssistant', 'statusTopic: custom/status', (c: AppConfig) => c.homeAssistant.statusTopic, 'custom/status'],
     ['homeAssistant', 'birthRepublish: false', (c: AppConfig) => c.homeAssistant.birthRepublish, false],
+    ['homeAssistant', 'discoveryPrefix: custom_ha', (c: AppConfig) => c.homeAssistant.discoveryPrefix, 'custom_ha'],
     ['versionCheck', 'updateChannel: stable', (c: AppConfig) => c.versionCheck.updateChannel, 'stable'],
     ['mqtt', 'url: mqtts://secure.broker:8883', (c: AppConfig) => c.mqtt.url, 'mqtts://secure.broker:8883'],
   ])('reads %s.%s', (section, line, read, expected) => {
@@ -347,6 +356,7 @@ telemetryEnabled: false
     ['electrolux.apiTimeoutSeconds', yamlWith('electrolux', 'apiTimeoutSeconds: 0')],
     ['electrolux.apiTimeoutSeconds', yamlWith('electrolux', 'apiTimeoutSeconds: 121')],
     ['homeAssistant.statusTopic', yamlWith('homeAssistant', "statusTopic: ''")],
+    ['homeAssistant.discoveryPrefix', yamlWith('homeAssistant', "discoveryPrefix: ''")],
     ['logging.logLevel', yamlWith('logging', 'logLevel: verbose')],
   ])('rejects an invalid %s, labelled with the config path', (label, text) => {
     const error = expectConfigError(() => parseConfigFile(text), label)

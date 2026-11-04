@@ -14,18 +14,29 @@ export interface HAAvailability {
   payload_not_available: string
 }
 
-export interface HAClimateDiscoveryConfig {
+export interface HADevice {
+  identifiers: string[]
+  manufacturer: string
+  model: string
   name: string
+}
+
+/** The software publishing the discovery payload — required for device-based discovery. */
+export interface HAOrigin {
+  name: string
+  sw_version: string
+  support_url: string
+}
+
+interface HAEntityComponent {
+  unique_id: string
+  /** '' → the entity takes the device name. */
+  name: string
+}
+
+export interface HAClimateComponent extends HAEntityComponent {
+  platform: 'climate'
   object_id: string
-  uniq_id: string
-  device: {
-    identifiers: string[]
-    manufacturer: string
-    model: string
-    name: string
-  }
-  availability: HAAvailability[]
-  availability_mode: 'all' | 'any' | 'latest'
   json_attributes_topic: string
   modes: HAClimateMode[]
   mode_state_topic: string
@@ -53,4 +64,43 @@ export interface HAClimateDiscoveryConfig {
   swing_mode_state_template: string
   swing_mode_command_topic: string
   swing_mode_command_template: string
+}
+
+export interface HASwitchComponent extends HAEntityComponent {
+  platform: 'switch'
+  icon?: string
+  state_topic: string
+  value_template: string
+  state_on: string
+  state_off: string
+  command_topic: string
+  payload_on: string
+  payload_off: string
+}
+
+export interface HASensorComponent extends HAEntityComponent {
+  platform: 'sensor'
+  icon?: string
+  device_class?: 'temperature' | 'signal_strength'
+  unit_of_measurement?: string
+  state_class?: 'measurement'
+  entity_category?: 'diagnostic'
+  enabled_by_default?: boolean
+  state_topic: string
+  value_template: string
+}
+
+export type HAComponent = HAClimateComponent | HASwitchComponent | HASensorComponent
+
+/**
+ * Device-based discovery payload (`<prefix>/device/<id>/config`): one device, several
+ * entities. Availability is shared by every component.
+ * https://www.home-assistant.io/integrations/mqtt/#device-discovery-payload
+ */
+export interface HADeviceDiscoveryConfig {
+  device: HADevice
+  origin: HAOrigin
+  availability: HAAvailability[]
+  availability_mode: 'all' | 'any' | 'latest'
+  components: Record<string, HAComponent>
 }

@@ -88,6 +88,7 @@ function createMockMqtt(): IMqtt {
     publish: vi.fn(),
     publishInfo: vi.fn(),
     autoDiscovery: vi.fn(),
+    initialDiscovery: vi.fn(() => Promise.resolve()),
     subscribe: vi.fn(() => Promise.resolve()),
     unsubscribe: vi.fn(),
     subscribeAbsolute: vi.fn(() => Promise.resolve()),
@@ -108,6 +109,7 @@ const defaultConfig: OrchestratorConfig = {
   haBirthRepublish: true,
   haBirthTopic: 'homeassistant/status',
   haBirthPayload: 'online',
+  discoveryOrigin: { name: 'electrolux-to-mqtt', sw_version: '2026.11.3', support_url: 'https://example.com' },
 }
 
 const mockStub: ApplianceStub = {
@@ -144,16 +146,21 @@ describe('Orchestrator', () => {
       await orchestrator.initializeAppliance(mockStub)
 
       expect(client.getApplianceInfo).toHaveBeenCalledWith('appliance-1')
-      expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
+      // the first publish goes through initialDiscovery (legacy migration check)
+      expect(mqtt.initialDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String))
       expect(mqtt.subscribe).toHaveBeenCalledWith('appliance-1/command', expect.any(Function))
       expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
     })
 
-    it('should build discovery with the bridge availability topic', async () => {
+    it('should build discovery with the bridge availability topic and origin', async () => {
       await orchestrator.initializeAppliance(mockStub)
 
       const appliance = orchestrator.getApplianceInstances().get('appliance-1')
-      expect(appliance?.generateAutoDiscoveryConfig).toHaveBeenCalledWith('test_appliances', 'test_appliances/status')
+      expect(appliance?.generateAutoDiscoveryConfig).toHaveBeenCalledWith({
+        topicPrefix: 'test_appliances',
+        availabilityTopic: 'test_appliances/status',
+        origin: defaultConfig.discoveryOrigin,
+      })
     })
 
     it('should handle failed appliance info fetch', async () => {
@@ -377,9 +384,9 @@ describe('Orchestrator', () => {
       // Advance past delay — this triggers getApplianceState with the discovery callback
       await vi.advanceTimersByTimeAsync(0)
 
-      // Auto-discovery should have been republished via the callback
-      // Initial publish + callback publish
-      expect(mqtt.autoDiscovery).toHaveBeenCalledTimes(2)
+      // Initial publish (initialDiscovery) + the callback's republish (autoDiscovery)
+      expect(mqtt.initialDiscovery).toHaveBeenCalledTimes(1)
+      expect(mqtt.autoDiscovery).toHaveBeenCalledTimes(1)
     })
 
     it('should skip auto-discovery republish when config unchanged', async () => {
@@ -395,8 +402,9 @@ describe('Orchestrator', () => {
 
       await vi.advanceTimersByTimeAsync(0)
 
-      // Only initial publish, no callback republish (cache matched)
-      expect(mqtt.autoDiscovery).toHaveBeenCalledTimes(1)
+      // Only the initial publish, no callback republish (cache matched)
+      expect(mqtt.initialDiscovery).toHaveBeenCalledTimes(1)
+      expect(mqtt.autoDiscovery).not.toHaveBeenCalled()
     })
   })
 

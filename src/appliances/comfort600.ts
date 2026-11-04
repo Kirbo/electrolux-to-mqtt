@@ -1,7 +1,14 @@
-import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '#/types/homeassistant.js'
+import type {
+  HAClimateComponent,
+  HAClimateMode,
+  HAComponent,
+  HADeviceDiscoveryConfig,
+  HAFanMode,
+  HASwingMode,
+} from '#/types/homeassistant.js'
 import type { NormalizedClimateMode, NormalizedState } from '#/types/normalized.js'
 import type { Appliance } from '#/types.js'
-import { BaseAppliance, type CommandValidationResult } from './base.js'
+import { BaseAppliance, type CommandValidationResult, type DiscoveryContext } from './base.js'
 import { denormalizeClimateMode, denormalizeFanSpeed, normalizeClimateAppliance } from './normalizers.js'
 
 /**
@@ -316,26 +323,66 @@ export class Comfort600Appliance extends BaseAppliance {
     return { valid: true }
   }
 
-  public generateAutoDiscoveryConfig(topicPrefix: string, availabilityTopic: string): HAClimateDiscoveryConfig {
+  public generateAutoDiscoveryConfig(context: DiscoveryContext): HADeviceDiscoveryConfig {
     const info = this.applianceInfo.applianceInfo
-    const tempRange = this.getTemperatureRange()
-    // Ensure topicPrefix ends with /
-    const prefix = topicPrefix.endsWith('/') ? topicPrefix : `${topicPrefix}/`
+    const capabilities = this.applianceInfo.capabilities
+    const prefix = context.topicPrefix.endsWith('/') ? context.topicPrefix : `${context.topicPrefix}/`
     const stateTopic = `${prefix}${this.applianceId}/state`
     const commandTopic = `${prefix}${this.applianceId}/command`
 
+    const components: Record<string, HAComponent> = {
+      climate: this.climateComponent(stateTopic, commandTopic),
+    }
+    if (capabilities.sleepMode?.access === 'readwrite') {
+      components.sleep_mode = {
+        platform: 'switch',
+        unique_id: `${this.applianceId}_sleep_mode`,
+        name: 'Sleep mode',
+        icon: 'mdi:sleep',
+        state_topic: stateTopic,
+        value_template: '{{ value_json.sleepMode }}',
+        state_on: 'on',
+        state_off: 'off',
+        command_topic: commandTopic,
+        payload_on: '{ "sleepMode": "on" }',
+        payload_off: '{ "sleepMode": "off" }',
+      }
+    }
+    if (capabilities.ambientTemperatureC) {
+      components.ambient_temperature = {
+        platform: 'sensor',
+        unique_id: `${this.applianceId}_ambient_temperature`,
+        name: 'Ambient temperature',
+        device_class: 'temperature',
+        unit_of_measurement: '°C',
+        state_class: 'measurement',
+        state_topic: stateTopic,
+        value_template: '{{ value_json.ambientTemperatureC }}',
+      }
+    }
+    components.wifi_signal = {
+      platform: 'sensor',
+      unique_id: `${this.applianceId}_wifi_signal`,
+      name: 'Wi-Fi signal',
+      device_class: 'signal_strength',
+      unit_of_measurement: 'dBm',
+      state_class: 'measurement',
+      entity_category: 'diagnostic',
+      enabled_by_default: false,
+      state_topic: stateTopic,
+      value_template: '{{ value_json.networkInterface.rssi }}',
+    }
+
     return {
-      name: '',
-      object_id: `${info.brand}_${info.model}_${info.serialNumber}`,
-      uniq_id: `${info.brand}_${info.model}_${this.applianceId}`,
       device: {
         identifiers: [this.applianceId],
         manufacturer: info.brand,
         model: info.model,
         name: this.applianceName,
       },
+      origin: context.origin,
       availability: [
-        { topic: availabilityTopic, payload_available: 'online', payload_not_available: 'offline' },
+        { topic: context.availabilityTopic, payload_available: 'online', payload_not_available: 'offline' },
         {
           topic: stateTopic,
           value_template: '{{ value_json.connectionState }}',
@@ -344,6 +391,19 @@ export class Comfort600Appliance extends BaseAppliance {
         },
       ],
       availability_mode: 'all',
+      components,
+    }
+  }
+
+  /** Same unique_id/object_id as the old single-component climate config, so the entity (and its history) carries over. */
+  private climateComponent(stateTopic: string, commandTopic: string): HAClimateComponent {
+    const info = this.applianceInfo.applianceInfo
+    const tempRange = this.getTemperatureRange()
+    return {
+      platform: 'climate',
+      name: '',
+      object_id: `${info.brand}_${info.model}_${info.serialNumber}`,
+      unique_id: `${info.brand}_${info.model}_${this.applianceId}`,
       json_attributes_topic: stateTopic,
       modes: this.getSupportedModes(),
       mode_state_topic: stateTopic,

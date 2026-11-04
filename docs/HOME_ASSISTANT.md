@@ -15,7 +15,18 @@ With the default `topic_prefix` of `electrolux_`, the topics will be e.g.:
 - `electrolux_appliances/950011606313000871110697/state`
 - `electrolux_appliances/950011606313000871110697/command`
 
-When Home Assistant auto-discovery is enabled (default), the bridge publishes discovery configs to `homeassistant/climate/{applianceId}/config` so entities are created automatically — no manual MQTT configuration is needed.
+When Home Assistant auto-discovery is enabled (default), the bridge publishes one **device-based** discovery config per appliance to `{discovery_prefix}/device/{applianceId}/config` (`discovery_prefix` = `homeAssistant.discoveryPrefix`, default `homeassistant`), so entities are created automatically — no manual MQTT configuration is needed. Each appliance becomes one device with these entities (each only when the appliance's capabilities include it):
+
+| Entity | Platform | From state field |
+|--------|----------|------------------|
+| the appliance itself (mode, target/current temperature, fan, swing) | `climate` | `mode`, `targetTemperatureC`, `ambientTemperatureC`, `fanSpeedSetting`, `verticalSwing` |
+| Sleep mode | `switch` | `sleepMode` (commands `{ "sleepMode": "on" }` / `"off"`) |
+| Ambient temperature | `sensor` (temperature, °C) | `ambientTemperatureC` — for history and statistics |
+| Wi-Fi signal | `sensor` (diagnostic, dBm, **disabled by default**) | `networkInterface.rssi` |
+
+Like any command, switching sleep mode on an appliance that is off turns it on (in its last active mode).
+
+**Upgrading from single-component discovery:** older versions published only a climate entity to `{discovery_prefix}/climate/{applianceId}/config`. On first start the bridge finds that retained config and migrates it with Home Assistant's `migrate_discovery` handshake (migrate the old topic → publish the device config with the same `unique_id` → clear the old topic), so the climate entity keeps its entity id, settings and history. Home Assistant logs each migration step at INFO level.
 
 **Example state payload:**
 ```json

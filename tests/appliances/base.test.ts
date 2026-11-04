@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BaseAppliance } from '#/appliances/base.js'
-import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '#/types/homeassistant.js'
+import { BaseAppliance, type DiscoveryContext } from '#/appliances/base.js'
+import type { HAClimateMode, HADeviceDiscoveryConfig, HAFanMode, HASwingMode } from '#/types/homeassistant.js'
 import type { NormalizedState } from '#/types/normalized.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '#/types.js'
 
@@ -27,47 +27,30 @@ class TestAppliance extends BaseAppliance {
     return apiCommand
   }
 
-  generateAutoDiscoveryConfig(topicPrefix: string): HAClimateDiscoveryConfig {
+  generateAutoDiscoveryConfig(context: DiscoveryContext): HADeviceDiscoveryConfig {
     const info = this.getApplianceInfo()
+    const stateTopic = `${context.topicPrefix}${this.getApplianceId()}/state`
     return {
-      name: this.getApplianceName(),
-      object_id: this.getApplianceId(),
-      uniq_id: this.getApplianceId(),
       device: {
         identifiers: [this.getApplianceId()],
         name: this.getApplianceName(),
         manufacturer: info.applianceInfo.brand,
         model: info.applianceInfo.model,
       },
-      availability: [{ topic: `${topicPrefix}status`, payload_available: 'online', payload_not_available: 'offline' }],
+      origin: context.origin,
+      availability: [
+        { topic: context.availabilityTopic, payload_available: 'online', payload_not_available: 'offline' },
+      ],
       availability_mode: 'all',
-      json_attributes_topic: `${topicPrefix}${this.getApplianceId()}/attributes`,
-      mode_state_topic: `${topicPrefix}${this.getApplianceId()}/state`,
-      mode_state_template: '{{ value_json.mode }}',
-      mode_command_topic: `${topicPrefix}${this.getApplianceId()}/set`,
-      mode_command_template: '{{ value }}',
-      precision: 1,
-      temperature_unit: 'C',
-      temperature_state_topic: `${topicPrefix}${this.getApplianceId()}/state`,
-      temperature_state_template: '{{ value_json.targetTemperatureC }}',
-      temperature_command_topic: `${topicPrefix}${this.getApplianceId()}/set`,
-      temperature_command_template: '{{ value }}',
-      current_temperature_topic: `${topicPrefix}${this.getApplianceId()}/state`,
-      current_temperature_template: '{{ value_json.ambientTemperatureC }}',
-      fan_mode_state_topic: `${topicPrefix}${this.getApplianceId()}/state`,
-      fan_mode_state_template: '{{ value_json.fanSpeed }}',
-      fan_mode_command_topic: `${topicPrefix}${this.getApplianceId()}/set`,
-      fan_mode_command_template: '{{ value }}',
-      swing_mode_state_topic: `${topicPrefix}${this.getApplianceId()}/state`,
-      swing_mode_state_template: '{{ value_json.horizontalSwing }}',
-      swing_mode_command_topic: `${topicPrefix}${this.getApplianceId()}/set`,
-      swing_mode_command_template: '{{ value }}',
-      modes: this.getSupportedModes(),
-      fan_modes: this.getSupportedFanModes(),
-      swing_modes: this.getSupportedSwingModes(),
-      min_temp: this.getTemperatureRange().min,
-      max_temp: this.getTemperatureRange().max,
-      initial: this.getTemperatureRange().initial,
+      components: {
+        temperature: {
+          platform: 'sensor',
+          unique_id: `${this.getApplianceId()}_temperature`,
+          name: 'Temperature',
+          state_topic: stateTopic,
+          value_template: '{{ value_json.ambientTemperatureC }}',
+        },
+      },
     }
   }
 
@@ -268,24 +251,34 @@ describe('BaseAppliance', () => {
   })
 
   describe('generateAutoDiscoveryConfig', () => {
-    it('should generate valid auto-discovery config', () => {
-      const appliance = new TestAppliance(mockStub, mockInfo)
-      const config = appliance.generateAutoDiscoveryConfig('test_')
+    const context = {
+      topicPrefix: 'test_',
+      availabilityTopic: 'test_status',
+      origin: { name: 'e2m', sw_version: '1', support_url: 'https://example.com' },
+    }
 
-      expect(config).toBeDefined()
-      expect(config.name).toBe('Test Base Appliance')
-      expect(config.uniq_id).toBe('test-base-123')
-      expect(config.device.identifiers).toContain('test-base-123')
-      expect(config.device.manufacturer).toBe('TestBrand')
+    it('should generate a device-based discovery config from the context', () => {
+      const appliance = new TestAppliance(mockStub, mockInfo)
+      const config = appliance.generateAutoDiscoveryConfig(context)
+
+      expect(config.origin).toEqual(context.origin)
+      expect(config.availability[0]?.topic).toBe('test_status')
+      expect(config.components.temperature).toMatchObject({
+        platform: 'sensor',
+        unique_id: 'test-base-123_temperature',
+      })
     })
 
     it('should include device information in config', () => {
       const appliance = new TestAppliance(mockStub, mockInfo)
-      const config = appliance.generateAutoDiscoveryConfig('test_')
+      const config = appliance.generateAutoDiscoveryConfig(context)
 
-      expect(config.device).toBeDefined()
-      expect(config.device.name).toBe('Test Base Appliance')
-      expect(config.device.model).toBe('TestModel')
+      expect(config.device).toEqual({
+        identifiers: ['test-base-123'],
+        name: 'Test Base Appliance',
+        manufacturer: 'TestBrand',
+        model: 'TestModel',
+      })
     })
   })
 })

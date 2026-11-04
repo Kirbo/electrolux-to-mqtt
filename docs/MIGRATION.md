@@ -17,6 +17,9 @@ Conventions:
 
 ### Added
 - `<NAME>_FILE` for every environment variable (Docker secrets), and the `homeAssistant` section of `config.yml` is now optional (all its fields have defaults).
+- **Home Assistant device-based discovery:** each appliance is now one discovered device with extra entities (sleep-mode switch, ambient-temperature sensor, Wi-Fi signal diagnostic). The discovery topic moves from `homeassistant/climate/<id>/config` to `homeassistant/device/<id>/config`; the bridge migrates the old retained config automatically (Home Assistant's `migrate_discovery`), keeping the climate entity's id and history. Action: none — unless you matched the old discovery topic yourself (e.g. a retained-message cleanup script), then use the new one.
+- `homeAssistant.discoveryPrefix` / `HA_DISCOVERY_PREFIX` (default `homeassistant`) for a non-default Home Assistant discovery prefix.
+- Bridge availability (`{prefix}appliances/status`, MQTT last will): entities go unavailable when the bridge stops or loses its connection.
 
 
 <!--

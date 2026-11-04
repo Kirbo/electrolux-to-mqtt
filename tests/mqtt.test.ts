@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Build a fresh mock client for each test module reset cycle.
 // EventEmitter is required so that module-level client.on('message', …)
@@ -86,7 +86,7 @@ describe('Mqtt', () => {
     // Dynamically import the actual module after mocks are set up
     const module = await import('#/mqtt.js')
     Mqtt = module.default
-    mqttInstance = new Mqtt(MQTT_SETTINGS)
+    mqttInstance = new Mqtt(MQTT_SETTINGS, 'homeassistant')
   })
 
   describe('connection lifecycle', () => {
@@ -102,7 +102,7 @@ describe('Mqtt', () => {
     it('registers a retained last-will "offline" on the bridge status topic', async () => {
       const mqttLib = await import('mqtt')
       vi.mocked(mqttLib.default.connect).mockClear()
-      const instance = new Mqtt(MQTT_SETTINGS)
+      const instance = new Mqtt(MQTT_SETTINGS, 'homeassistant')
 
       expect(instance.availabilityTopic).toBe('test_appliances/status')
       expect(mqttLib.default.connect).toHaveBeenCalledWith(
@@ -151,7 +151,7 @@ describe('Mqtt', () => {
     it('connects with the settings passed to the constructor', async () => {
       const mqttLib = await import('mqtt')
       vi.mocked(mqttLib.default.connect).mockClear()
-      new Mqtt({ ...MQTT_SETTINGS, url: 'mqtts://other:8883', clientId: 'abc' })
+      new Mqtt({ ...MQTT_SETTINGS, url: 'mqtts://other:8883', clientId: 'abc' }, 'homeassistant')
 
       expect(mqttLib.default.connect).toHaveBeenCalledWith(
         'mqtts://other:8883',
@@ -383,56 +383,106 @@ describe('Mqtt', () => {
   })
 
   describe('autoDiscovery', () => {
-    it('should publish to homeassistant discovery topic', () => {
-      const discoveryConfig = JSON.stringify({
-        availability_topic: 'test/availability',
-        mode_state_topic: 'test/mode',
-        mode_command_topic: 'test/mode/set',
-        current_temperature_topic: 'test/temp',
-        temperature_command_topic: 'test/temp/set',
-      })
+    it('publishes the device-based discovery config, retained, under the default prefix', () => {
+      const discoveryConfig = JSON.stringify({ device: {}, components: { climate: { platform: 'climate' } } })
 
       mqttInstance.autoDiscovery('device-123', discoveryConfig)
 
       expect(mqttInstance.client.publish).toHaveBeenCalledWith(
-        'homeassistant/climate/device-123/config',
+        'homeassistant/device/device-123/config',
         discoveryConfig,
         expect.objectContaining({ retain: true, qos: 2 }),
         expect.any(Function),
       )
     })
 
-    it('should log auto-discovery config details', () => {
-      const discoveryConfig = JSON.stringify({
-        availability_topic: 'test/avail',
-        mode_state_topic: 'test/mode',
-      })
+    it('uses a custom discovery prefix', () => {
+      const instance = new Mqtt(MQTT_SETTINGS, 'ha-discovery')
+      instance.autoDiscovery('device-123', '{}')
 
-      mqttInstance.autoDiscovery('device-456', discoveryConfig)
-
-      expect(mqttInstance.client.publish).toHaveBeenCalled()
-    })
-
-    it('should handle discovery config with all fields', () => {
-      const fullConfig = JSON.stringify({
-        name: 'Test Device',
-        unique_id: 'device-789',
-        availability_topic: 'test/availability',
-        mode_state_topic: 'test/mode/state',
-        mode_command_topic: 'test/mode/command',
-        current_temperature_topic: 'test/temperature/current',
-        temperature_command_topic: 'test/temperature/set',
-        temperature_state_topic: 'test/temperature/state',
-      })
-
-      mqttInstance.autoDiscovery('device-789', fullConfig)
-
-      expect(mqttInstance.client.publish).toHaveBeenCalledWith(
-        'homeassistant/climate/device-789/config',
-        fullConfig,
-        expect.objectContaining({ retain: true, qos: 2 }),
+      expect(mockClient.publish).toHaveBeenCalledWith(
+        'ha-discovery/device/device-123/config',
+        '{}',
+        expect.objectContaining({ retain: true }),
         expect.any(Function),
       )
+    })
+
+    it('still publishes a payload that is not valid JSON (the parse is only for the debug log)', () => {
+      mqttInstance.autoDiscovery('device-123', 'not json')
+      expect(mockClient.publish).toHaveBeenCalledWith(
+        'homeassistant/device/device-123/config',
+        'not json',
+        expect.any(Object),
+        expect.any(Function),
+      )
+    })
+  })
+
+  describe('initialDiscovery — migrating a legacy single-component climate config', () => {
+    const LEGACY = 'homeassistant/climate/device-123/config'
+    const DEVICE = 'homeassistant/device/device-123/config'
+    const published = () => vi.mocked(mockClient.publish).mock.calls.map((c) => [c[0], c[1], c[2]])
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('publishes only the device config when no legacy config is retained', async () => {
+      vi.useFakeTimers()
+      const done = mqttInstance.initialDiscovery('device-123', '{"device":{}}')
+      await vi.advanceTimersByTimeAsync(1_000)
+      await done
+
+      expect(mockClient.subscribe).toHaveBeenCalledWith(LEGACY, expect.any(Function))
+      expect(mockClient.unsubscribe).toHaveBeenCalledWith(LEGACY, expect.any(Function))
+      expect(published()).toEqual([[DEVICE, '{"device":{}}', expect.objectContaining({ retain: true })]])
+    })
+
+    it('migrates when a legacy config is retained: migrate_discovery, then the device config, then clear', async () => {
+      vi.useFakeTimers()
+      vi.mocked(mockClient.subscribe).mockImplementation((topic, callback) => {
+        if (typeof callback === 'function') callback(null, [{ topic, qos: 0 }])
+        // the broker delivers the retained message right after SUBACK
+        queueMicrotask(() => mockClient.emit('message', topic, Buffer.from('{"name":""}')))
+        return mockClient
+      })
+
+      const done = mqttInstance.initialDiscovery('device-123', '{"device":{}}')
+      await vi.advanceTimersByTimeAsync(10_000)
+      await done
+
+      expect(published()).toEqual([
+        [LEGACY, '{"migrate_discovery": true}', expect.objectContaining({ retain: true, qos: 1 })],
+        [DEVICE, '{"device":{}}', expect.objectContaining({ retain: true })],
+        [LEGACY, '', expect.objectContaining({ retain: true, qos: 1 })],
+      ])
+    })
+
+    it('ignores an empty retained payload (an already-cleared topic)', async () => {
+      vi.useFakeTimers()
+      vi.mocked(mockClient.subscribe).mockImplementation((topic, callback) => {
+        if (typeof callback === 'function') callback(null, [{ topic, qos: 0 }])
+        queueMicrotask(() => mockClient.emit('message', topic, Buffer.from('')))
+        return mockClient
+      })
+
+      const done = mqttInstance.initialDiscovery('device-123', '{}')
+      await vi.advanceTimersByTimeAsync(10_000)
+      await done
+
+      expect(published().map((p) => p[0])).toEqual([DEVICE])
+    })
+
+    it('still publishes the device config when the legacy check cannot subscribe', async () => {
+      vi.mocked(mockClient.subscribe).mockImplementation((_topic, callback) => {
+        if (typeof callback === 'function') callback(new Error('not authorized') as never, [])
+        return mockClient
+      })
+
+      await mqttInstance.initialDiscovery('device-123', '{}')
+
+      expect(published().map((p) => p[0])).toEqual([DEVICE])
     })
   })
 

@@ -15,7 +15,7 @@ import { startVersionChecker } from './version-checker.js'
 const currentVersion = packageJson.version
 const logger = createLogger('app')
 logger.info(`Starting Electrolux to MQTT (version: ${currentVersion})`)
-const mqtt = new Mqtt(config.mqtt)
+const mqtt = new Mqtt(config.mqtt, config.homeAssistant.discoveryPrefix)
 const { electrolux } = config
 const apiTimeoutMs = electrolux.apiTimeoutSeconds * 1000
 const auth = new ElectroluxAuth({
@@ -56,6 +56,11 @@ const orchestrator = new Orchestrator(api, sync, mqtt, {
   haBirthRepublish: config.homeAssistant.birthRepublish,
   haBirthTopic: config.homeAssistant.statusTopic,
   haBirthPayload: config.homeAssistant.birthPayload,
+  discoveryOrigin: {
+    name: 'electrolux-to-mqtt',
+    sw_version: currentVersion,
+    support_url: 'https://gitlab.com/kirbodev/electrolux-to-mqtt',
+  },
 })
 
 let discoveryIntervalDisposable: Disposable | null = null

@@ -440,33 +440,32 @@ describe('Comfort600Appliance', () => {
     })
   })
 
-  describe('Auto-Discovery Configuration', () => {
-    it('should generate valid Home Assistant config', () => {
-      const config = appliance.generateAutoDiscoveryConfig('test_prefix', 'test_prefix/status')
+  describe('Auto-Discovery Configuration (device-based)', () => {
+    const context = {
+      topicPrefix: 'test_prefix',
+      availabilityTopic: 'test_prefix/status',
+      origin: { name: 'electrolux-to-mqtt', sw_version: '2026.11.3', support_url: 'https://example.com/e2m' },
+    }
+    const config = () => appliance.generateAutoDiscoveryConfig(context)
+    const stateTopic = 'test_prefix/test-appliance-123/state'
+    const commandTopic = 'test_prefix/test-appliance-123/command'
 
-      expect(config.object_id).toContain('Electrolux')
-      expect(config.object_id).toContain('COMFORT600')
-      expect(config.modes).toContain('cool')
-      expect(config.fan_modes).toContain('auto')
-      expect(config.temperature_unit).toBe('C')
-      expect(config.min_temp).toBe(16)
-      expect(config.max_temp).toBe(32)
+    it('describes the device and the bridge as its origin', () => {
+      expect(config().device).toEqual({
+        identifiers: ['test-appliance-123'],
+        manufacturer: 'Electrolux',
+        model: 'COMFORT600',
+        name: 'Test AC',
+      })
+      expect(config().origin).toEqual(context.origin)
     })
 
-    it('should include temperature_state_topic', () => {
-      const config = appliance.generateAutoDiscoveryConfig('test_prefix', 'test_prefix/status')
-      expect(config.temperature_state_topic).toBeDefined()
-      expect(config.temperature_state_template).toBeDefined()
-    })
-
-    it('should be available only while both the bridge and the appliance are online', () => {
-      const config = appliance.generateAutoDiscoveryConfig('test_prefix', 'test_prefix/status')
-
-      expect(config.availability_mode).toBe('all')
-      expect(config.availability).toEqual([
+    it('makes every component available only while both the bridge and the appliance are online', () => {
+      expect(config().availability_mode).toBe('all')
+      expect(config().availability).toEqual([
         { topic: 'test_prefix/status', payload_available: 'online', payload_not_available: 'offline' },
         {
-          topic: `test_prefix/${appliance.getApplianceId()}/state`,
+          topic: stateTopic,
           value_template: '{{ value_json.connectionState }}',
           payload_available: 'connected',
           payload_not_available: 'disconnected',
@@ -474,10 +473,90 @@ describe('Comfort600Appliance', () => {
       ])
     })
 
-    it('should use correct topic prefix', () => {
-      const config = appliance.generateAutoDiscoveryConfig('custom_prefix', 'custom_prefix/status')
-      expect(config.mode_state_topic).toContain('custom_prefix')
-      expect(config.mode_command_topic).toContain('custom_prefix')
+    it('keeps the climate entity identity of the old single-component config (history survives the move)', () => {
+      const climate = config().components.climate
+      expect(climate).toMatchObject({
+        platform: 'climate',
+        unique_id: 'Electrolux_COMFORT600_test-appliance-123',
+        object_id: 'Electrolux_COMFORT600_SN123456',
+        name: '',
+      })
+    })
+
+    it('derives the climate modes, temperatures and topics from the capabilities', () => {
+      const climate = config().components.climate
+      if (climate?.platform !== 'climate') throw new Error('no climate component')
+      expect(climate.modes).toContain('cool')
+      expect(climate.modes).toContain('off')
+      expect(climate.fan_modes).toContain('auto')
+      expect(climate).toMatchObject({
+        temperature_unit: 'C',
+        min_temp: 16,
+        max_temp: 32,
+        mode_state_topic: stateTopic,
+        mode_command_topic: commandTopic,
+        temperature_state_topic: stateTopic,
+        temperature_state_template: '{{ value_json.targetTemperatureC }}',
+        json_attributes_topic: stateTopic,
+      })
+    })
+
+    it('adds a sleep-mode switch that commands through the appliance command topic', () => {
+      expect(config().components.sleep_mode).toEqual({
+        platform: 'switch',
+        unique_id: 'test-appliance-123_sleep_mode',
+        name: 'Sleep mode',
+        icon: 'mdi:sleep',
+        state_topic: stateTopic,
+        value_template: '{{ value_json.sleepMode }}',
+        state_on: 'on',
+        state_off: 'off',
+        command_topic: commandTopic,
+        payload_on: '{ "sleepMode": "on" }',
+        payload_off: '{ "sleepMode": "off" }',
+      })
+    })
+
+    it('adds an ambient temperature sensor (for history/statistics, beside the climate entity)', () => {
+      expect(config().components.ambient_temperature).toEqual({
+        platform: 'sensor',
+        unique_id: 'test-appliance-123_ambient_temperature',
+        name: 'Ambient temperature',
+        device_class: 'temperature',
+        unit_of_measurement: '°C',
+        state_class: 'measurement',
+        state_topic: stateTopic,
+        value_template: '{{ value_json.ambientTemperatureC }}',
+      })
+    })
+
+    it('adds a Wi-Fi signal diagnostic sensor, disabled by default', () => {
+      expect(config().components.wifi_signal).toEqual({
+        platform: 'sensor',
+        unique_id: 'test-appliance-123_wifi_signal',
+        name: 'Wi-Fi signal',
+        device_class: 'signal_strength',
+        unit_of_measurement: 'dBm',
+        state_class: 'measurement',
+        entity_category: 'diagnostic',
+        enabled_by_default: false,
+        state_topic: stateTopic,
+        value_template: '{{ value_json.networkInterface.rssi }}',
+      })
+    })
+
+    it('omits the switch and the temperature sensor when the capabilities lack them', () => {
+      const { sleepMode: _s, ambientTemperatureC: _a, ...rest } = mockInfo.capabilities
+      const bare = new Comfort600Appliance(mockStub, { ...mockInfo, capabilities: rest })
+      const components = bare.generateAutoDiscoveryConfig(context).components
+
+      expect(Object.keys(components).sort()).toEqual(['climate', 'wifi_signal'])
+    })
+
+    it('uses the topic prefix it is given', () => {
+      const climate = appliance.generateAutoDiscoveryConfig({ ...context, topicPrefix: 'custom_prefix/' }).components
+        .climate
+      expect(climate).toMatchObject({ mode_command_topic: 'custom_prefix/test-appliance-123/command' })
     })
   })
 

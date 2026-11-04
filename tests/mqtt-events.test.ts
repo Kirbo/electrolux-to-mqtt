@@ -43,7 +43,7 @@ const MQTT_SETTINGS = {
 /** Constructing a client is what registers its event handlers. */
 const createClient = async () => {
   const Mqtt = (await import('#/mqtt.js')).default
-  return new Mqtt(MQTT_SETTINGS)
+  return new Mqtt(MQTT_SETTINGS, 'homeassistant')
 }
 
 // Mock logger

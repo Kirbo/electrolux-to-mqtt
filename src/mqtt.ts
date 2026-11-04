@@ -14,6 +14,14 @@ const ONLINE = 'online'
 const OFFLINE = 'offline'
 const AVAILABILITY_PUBLISH_OPTIONS: mqtt.IClientPublishOptions = { retain: true, qos: 1 }
 
+// Legacy-discovery check: the broker sends a retained message right after SUBACK.
+const RETAINED_GRACE_MS = 500
+const RETAINED_CHECK_TIMEOUT_MS = 5_000
+// Pause between migration steps so Home Assistant has handled each before the next.
+const MIGRATION_STEP_DELAY_MS = 2_000
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
 export interface IMqtt {
   client: mqtt.MqttClient
   topicPrefix: string
@@ -22,7 +30,14 @@ export interface IMqtt {
   resolveApplianceTopic(applianceId: string): string
   publish(topicSuffix: string, message: string, options?: mqtt.IClientPublishOptions): void
   publishInfo(message: string, options?: mqtt.IClientPublishOptions): void
+  /** Publish (retained) the appliance's device-based discovery config. */
   autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
+  /**
+   * First discovery publish for an appliance: if a legacy single-component climate config
+   * is still retained, migrate it (HA's migrate_discovery handshake) so the entity keeps
+   * its history; otherwise just publish.
+   */
+  initialDiscovery(applianceId: string, message: string): Promise<void>
   subscribe(topicSuffix: string, callback: MessageHandler): Promise<void>
   unsubscribe(topicSuffix: string): void
   /** Subscribe to an absolute topic (no prefix added). */
@@ -40,6 +55,7 @@ class Mqtt implements IMqtt {
   public readonly client: mqtt.MqttClient
   public readonly topicPrefix: string
   public readonly availabilityTopic: string
+  private readonly discoveryPrefix: string
   private readonly defaultOptions: mqtt.IClientPublishOptions
   // Exact-topic router: topic -> handler(topic, payload)
   private readonly topicHandlers = new Map<string, MessageHandler>()
@@ -47,7 +63,8 @@ class Mqtt implements IMqtt {
   private readonly reconnectCallbacks: Array<() => void> = []
 
   /** Connects immediately; nothing connects at import time. */
-  constructor(settings: AppConfig['mqtt']) {
+  constructor(settings: AppConfig['mqtt'], discoveryPrefix: AppConfig['homeAssistant']['discoveryPrefix']) {
+    this.discoveryPrefix = discoveryPrefix
     this.topicPrefix = `${settings.topicPrefix}appliances`
     this.availabilityTopic = `${this.topicPrefix}/status`
     this.defaultOptions = { retain: settings.retain, qos: toQoS(settings.qos) }
@@ -142,24 +159,66 @@ class Mqtt implements IMqtt {
     logger.info(`Publishing auto-discovery config for appliance: ${applianceId}`)
     try {
       const parsed: unknown = JSON.parse(message)
-      if (typeof parsed === 'object' && parsed !== null) {
-        const topics = parsed as Record<string, unknown>
-        logger.debug(`Auto-discovery config topics:`, {
-          availability: topics.availability,
-          mode_state_topic: topics.mode_state_topic,
-          mode_command_topic: topics.mode_command_topic,
-          temperature_state_topic: topics.current_temperature_topic,
-          temperature_command_topic: topics.temperature_command_topic,
-        })
+      if (typeof parsed === 'object' && parsed !== null && 'components' in parsed) {
+        const { components } = parsed
+        if (typeof components === 'object' && components !== null) {
+          logger.debug('Auto-discovery components:', Object.keys(components))
+        }
       }
     } catch {
       // Debug-only parse: callers always pass JSON.stringify output, but a
       // malformed message must not crash the publish below.
     }
-    this._publish(`homeassistant/climate/${applianceId}/config`, message, {
+    this._publish(`${this.discoveryPrefix}/device/${applianceId}/config`, message, {
       ...options,
       retain: true,
       qos: 2,
+    })
+  }
+
+  public async initialDiscovery(applianceId: string, message: string): Promise<void> {
+    const legacyTopic = `${this.discoveryPrefix}/climate/${applianceId}/config`
+    if (!(await this.hasRetainedMessage(legacyTopic))) {
+      this.autoDiscovery(applianceId, message)
+      return
+    }
+    // https://www.home-assistant.io/integrations/mqtt/ "Migration from single component to device discovery":
+    // migrate_discovery on the old topic → the device config (same unique_id) → clear the old topic.
+    logger.info(`Migrating Home Assistant discovery for ${applianceId}: ${legacyTopic} → device-based discovery`)
+    this._publish(legacyTopic, '{"migrate_discovery": true}', AVAILABILITY_PUBLISH_OPTIONS)
+    await delay(MIGRATION_STEP_DELAY_MS)
+    this.autoDiscovery(applianceId, message)
+    await delay(MIGRATION_STEP_DELAY_MS)
+    this._publish(legacyTopic, '', AVAILABILITY_PUBLISH_OPTIONS)
+    logger.info(`Home Assistant discovery for ${applianceId} migrated`)
+  }
+
+  /** Whether a non-empty retained message sits on `topic` (subscribe, wait briefly, unsubscribe). */
+  private hasRetainedMessage(topic: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false
+      let grace: NodeJS.Timeout | undefined
+      const finish = (found: boolean) => {
+        if (settled) return
+        settled = true
+        clearTimeout(grace)
+        clearTimeout(overall)
+        this.unsubscribeAbsolute(topic)
+        resolve(found)
+      }
+      // Offline, the SUBACK never comes — give up rather than stall appliance start-up.
+      const overall = setTimeout(() => finish(false), RETAINED_CHECK_TIMEOUT_MS)
+      this.topicHandlers.set(topic, (_topic, payload) => {
+        if (payload.length > 0) finish(true)
+      })
+      this.client.subscribe(topic, (error) => {
+        if (error) {
+          logger.warn(`Could not check ${topic} for a legacy discovery config:`, error)
+          finish(false)
+          return
+        }
+        grace = setTimeout(() => finish(false), RETAINED_GRACE_MS)
+      })
     })
   }
 

@@ -66,6 +66,10 @@ homeAssistant:
   # next polls and state changes. This feature avoids that by republishing immediately on birth.
   # Default: true
   birthRepublish: true
+  # (Optional) MQTT discovery prefix — must match "Discovery prefix" in Home Assistant's MQTT
+  # integration options. Discovery configs go to <discoveryPrefix>/device/<applianceId>/config.
+  # Default: homeassistant
+  discoveryPrefix: homeassistant
   # (Optional) MQTT topic HA publishes its birth/will message to. Default: homeassistant/status
   statusTopic: homeassistant/status
   # (Optional) Payload that signals HA is online. Default: online

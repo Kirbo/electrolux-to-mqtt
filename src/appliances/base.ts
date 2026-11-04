@@ -1,10 +1,19 @@
 import { createHash } from 'node:crypto'
-import type { HAClimateDiscoveryConfig, HAClimateMode, HAFanMode, HASwingMode } from '#/types/homeassistant.js'
+import type { HAClimateMode, HADeviceDiscoveryConfig, HAFanMode, HAOrigin, HASwingMode } from '#/types/homeassistant.js'
 import type { NormalizedClimateMode, NormalizedState } from '#/types/normalized.js'
 import type { Appliance, ApplianceInfo, ApplianceStub } from '#/types.js'
 import { canonicalStringify } from '../canonical-stringify.js'
 
 export type CommandValidationResult = { valid: true } | { valid: false; reason: string }
+
+/** What an appliance needs to build its discovery payload. */
+export interface DiscoveryContext {
+  /** Appliance topics live under `<topicPrefix>/<applianceId>/` (IMqtt.topicPrefix). */
+  topicPrefix: string
+  /** Bridge status topic (IMqtt.availabilityTopic). */
+  availabilityTopic: string
+  origin: HAOrigin
+}
 
 /**
  * Base class for all Electrolux appliances
@@ -102,12 +111,11 @@ export abstract class BaseAppliance {
   }
 
   /**
-   * Generate Home Assistant MQTT auto-discovery configuration
-   * This creates the configuration message that Home Assistant uses to auto-discover the device
-   * @param availabilityTopic - the bridge status topic (IMqtt.availabilityTopic); entities are
-   *   available only while both the bridge and the appliance report online
+   * Generate the Home Assistant device-based discovery payload: the device, its origin,
+   * and one component per entity. Every component is available only while both the
+   * bridge and the appliance report online.
    */
-  abstract generateAutoDiscoveryConfig(topicPrefix: string, availabilityTopic: string): HAClimateDiscoveryConfig
+  abstract generateAutoDiscoveryConfig(context: DiscoveryContext): HADeviceDiscoveryConfig
 
   /**
    * Get supported climate modes for this appliance

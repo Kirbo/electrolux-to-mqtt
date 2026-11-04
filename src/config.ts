@@ -81,6 +81,10 @@ const configSchema = z.object({
       statusTopic: z.string().min(1, 'must be a non-empty MQTT topic string').default('homeassistant/status'),
       birthPayload: z.string().default('online'),
       birthRepublish: z.boolean().default(true),
+      discoveryPrefix: z
+        .string()
+        .regex(/^[^#+/](?:[^#+]*[^#+/])?$/, 'must be an MQTT topic prefix without wildcards or leading/trailing "/"')
+        .default('homeassistant'),
     })
     .prefault({}),
   logging: z
@@ -159,6 +163,7 @@ const ENV_FIELDS: ReadonlyArray<{ env: string; path: string; kind: EnvKind }> = 
   { env: 'HA_STATUS_TOPIC', path: 'homeAssistant.statusTopic', kind: 'string' },
   { env: 'HA_BIRTH_PAYLOAD', path: 'homeAssistant.birthPayload', kind: 'string' },
   { env: 'HA_BIRTH_REPUBLISH', path: 'homeAssistant.birthRepublish', kind: 'bool' },
+  { env: 'HA_DISCOVERY_PREFIX', path: 'homeAssistant.discoveryPrefix', kind: 'string' },
   { env: 'LOG_LEVEL', path: 'logging.logLevel', kind: 'string' },
   { env: 'LOGGING_SHOW_CHANGES', path: 'logging.showChanges', kind: 'bool' },
   { env: 'LOGGING_IGNORED_KEYS', path: 'logging.ignoredKeys', kind: 'list' },

@@ -23,7 +23,7 @@ A robust TypeScript bridge for controlling Electrolux appliances via MQTT and Ho
 
 ## Features
 
-- **Automatic Home Assistant Discovery** - Zero-configuration MQTT Climate integration
+- **Automatic Home Assistant Discovery** - Zero-configuration: each appliance becomes one MQTT device (climate entity plus sleep-mode switch, ambient-temperature sensor and Wi-Fi signal diagnostic); entities go unavailable when the bridge or the appliance is offline. See [docs/HOME_ASSISTANT.md](docs/HOME_ASSISTANT.md).
 - **Dynamic Appliance Detection** - Automatically detects added/removed appliances
 - **Modular Architecture** - Easy to extend with new appliance models
 - **Secure Token Management** - Automatic OAuth token refresh
@@ -94,6 +94,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `HOME_ASSISTANT_AUTO_DISCOVERY`                       | Enable HA MQTT auto-discovery                                            | `true`                  | No       |
 | `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION`            | Immediately revert HA state on rejected commands                         | `false`                 | No       |
 | `HA_BIRTH_REPUBLISH`                                  | Re-publish discovery config + state when HA comes online (birth message) | `true`                  | No       |
+| `HA_DISCOVERY_PREFIX`                                 | Home Assistant MQTT discovery prefix (match HA's MQTT integration setting) | `homeassistant`       | No       |
 | `HA_STATUS_TOPIC`                                     | MQTT topic HA publishes its birth/will message to                        | `homeassistant/status`  | No       |
 | `HA_BIRTH_PAYLOAD`                                    | Payload that signals HA is online                                        | `online`                | No       |
 | `LOG_LEVEL`                                           | Log level (silent/fatal/error/warn/info/debug/trace)                     | `info`                  | No       |
@@ -166,6 +167,7 @@ docker run --rm \
   # -e HOME_ASSISTANT_AUTO_DISCOVERY=true \
   # -e HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false \
   # -e HA_BIRTH_REPUBLISH=true \
+  # -e HA_DISCOVERY_PREFIX=homeassistant \
   # -e HA_STATUS_TOPIC=homeassistant/status \
   # -e HA_BIRTH_PAYLOAD=online \
   # -e LOG_LEVEL=info \
@@ -246,6 +248,7 @@ services:
       # - HOME_ASSISTANT_AUTO_DISCOVERY=true
       # - HOME_ASSISTANT_REVERT_STATE_ON_REJECTION=false
       # - HA_BIRTH_REPUBLISH=true
+      # - HA_DISCOVERY_PREFIX=homeassistant
       # - HA_STATUS_TOPIC=homeassistant/status
       # - HA_BIRTH_PAYLOAD=online
       # - LOG_LEVEL=info
