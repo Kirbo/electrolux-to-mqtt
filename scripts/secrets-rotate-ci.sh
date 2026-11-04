@@ -53,6 +53,16 @@ unset NATIVE
 # 2. Recipient lines.
 lines=$(grep -c "# ci-${TIER}\$" fnox.toml || true)
 [[ "${lines}" -gt 0 ]] || { echo "Error: fnox.toml has no '# ci-${TIER}' recipient line" >&2; exit 1; }
+# From here fnox.toml is rewritten for an identity that lives only in this process: on
+# any failed exit that identity is gone, so say how to get back to the previous state.
+on_exit() {
+  local code=$?
+  [[ "${code}" -eq 0 ]] && return
+  echo "Rotation of ci-${TIER} aborted (exit ${code}). Restore the previous recipients with:" >&2
+  echo "  git checkout fnox.toml && sh scripts/secrets-local-config.sh" >&2
+  echo "GitLab still holds the old identity unless the 'GitLab' step had already run." >&2
+}
+trap on_exit EXIT
 sed -i.bak -E "s|\"age1[a-z0-9]+\", # ci-${TIER}\$|\"${RECIPIENT}\", # ci-${TIER}|" fnox.toml && rm -f fnox.toml.bak
 echo "fnox.toml: ci-${TIER} recipient replaced on ${lines} provider(s)"
 
