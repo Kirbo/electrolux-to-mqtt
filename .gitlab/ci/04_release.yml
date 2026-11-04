@@ -156,9 +156,15 @@ create gitlab prerelease:
 # Pull latest on the server, then write telemetry-backend/.env there from fnox profile
 # `telemetry`: the dotenv is piped through ssh into a 0600 file, so the plaintext never
 # touches the runner's disk. The server stores neither fnox nor any key.
+# Export FIRST (a failure ends the job before the server is touched), then replace the
+# server's .env atomically (temp file + mv): a truncating `cat > .env` fed by a failed
+# export would leave it empty and the next `up -d` would start the backend without creds.
 .deploy_backend_env: &deploy_backend_env
   - ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "cd ${TELEMETRY_PATH} && git fetch origin ${CI_COMMIT_BRANCH} && git checkout ${CI_COMMIT_BRANCH} && git pull origin ${CI_COMMIT_BRANCH}"
-  - fnox export --no-defaults --if-missing error -P telemetry --format env | ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "umask 077 && cat > ${TELEMETRY_PATH}/telemetry-backend/.env"
+  - BACKEND_ENV=$(fnox export --no-defaults --if-missing error -P telemetry --format env)
+  - test -n "${BACKEND_ENV}" || { echo "fnox profile telemetry exported nothing — refusing to overwrite the server .env" >&2; exit 1; }
+  - printf '%s\n' "${BACKEND_ENV}" | ssh ${TELEMETRY_USER}@${TELEMETRY_HOST} "umask 077 && cd ${TELEMETRY_PATH}/telemetry-backend && cat > .env.tmp && mv .env.tmp .env"
+  - unset BACKEND_ENV
 
 deploy telemetry-backend:
   stage: release
