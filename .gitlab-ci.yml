@@ -104,7 +104,7 @@ default:
 
 .rules_node_changes_or_schedule:
   rules:
-    - if: '$SCHEDULE == "AUDIT"'
+    - if: '$SCHEDULE == "AUDIT" || $SCHEDULE == "RENOVATE"'
       when: never
     - if: $SCHEDULE
       when: on_success

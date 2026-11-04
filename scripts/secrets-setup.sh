@@ -15,7 +15,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 OP_ACCOUNT="${OP_ACCOUNT:-my.1password.com}"
 OP_REF="${E2M_AGE_OP_REF:-op://Personal/electrolux-to-mqtt age key/private key}"
-PROFILES=(read publish deploy telemetry sonar)
+PROFILES=(read publish deploy telemetry sonar renovate)
 
 for cmd in fnox age-plugin-pq op; do
   command -v "${cmd}" >/dev/null 2>&1 || { echo "Error: '${cmd}' not on PATH (activate mise; install the 1Password CLI)" >&2; exit 1; }

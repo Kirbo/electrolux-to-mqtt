@@ -13,7 +13,8 @@ You run this yourself, in-loop, at the current session model. No subagent spawni
 1. **Dependency updates** — find outdated, check safety, apply. Batch minors/patches; majors individually with changelog review.
 2. **Vulnerability remediation** — `pnpm audit` + `pnpm osv-scan`, triage by severity + reachability, fix via upgrades/overrides/mitigations.
 3. **Breakage resolution** — an upgrade breaks typecheck/tests/lint/Sonar → diagnose, adapt to the new API, verify the pipeline.
-4. **Cross-tree coordination** — every toolchain/base-image version (Node major, Alpine, Corepack, pnpm, fnox, age, git-cliff) lives in `versions.env` (see CLAUDE.md § Sync). Edit it, run `pnpm sync:versions` (or `mise run sync-versions`), commit. CI job `versions in sync` enforces the derived `package.json` fields. Node/Alpine tags: check the hardened-image catalog — https://hub.docker.com/hardened-images/catalog/dhi/node/images (Node = major only).
+4. **Renovate MRs** — the scheduled CI job `renovate` (`renovate.json`) opens weekly MRs against `next`; review/finish them (pnpm/Corepack/Node/Alpine MRs need `pnpm sync:versions` on their branch, fnox/age MRs need the sha256 pins) instead of duplicating the bumps by hand. A new `versions.env` key needs a `# renovate:` annotation line above it. Setup: `docs/CONTRIBUTING.md` § Dependency updates.
+5. **Cross-tree coordination** — every toolchain/base-image version (Node major, Alpine, Corepack, pnpm, fnox, age, git-cliff) lives in `versions.env` (see CLAUDE.md § Sync). Edit it, run `pnpm sync:versions` (or `mise run sync-versions`), commit. CI job `versions in sync` enforces the derived `package.json` fields. Node/Alpine tags: check the hardened-image catalog — https://hub.docker.com/hardened-images/catalog/dhi/node/images (Node = major only).
 
 ## Workflow (in order)
 

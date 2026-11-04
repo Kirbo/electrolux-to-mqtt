@@ -120,3 +120,40 @@ install dependencies:
   script:
     - echo "Installing dependencies..."
     - pnpm install --frozen-lockfile --config.scripts-prepend-node-path=true
+
+# Renovate (renovate.json): weekly dependency MRs against `next`. Runs ONLY from a
+# pipeline schedule with variable SCHEDULE=RENOVATE (on `main`, so the protected
+# environment can hand out its key). Tier ci/renovate: RENOVATE_TOKEN (GitLab PAT,
+# scopes api + write_repository) and GITHUB_COM_TOKEN (read-only, for GitHub release
+# lookups) come from fnox profile `renovate`, in renovate's environment only.
+# Setup: docs/CONTRIBUTING.md § Dependency updates.
+renovate:
+  stage: init
+  image: ghcr.io/renovatebot/renovate:${RENOVATE_VERSION}
+  interruptible: true
+  rules:
+    - if: '$SCHEDULE == "RENOVATE"'
+      when: on_success
+    - when: never
+  needs:
+    - job: initialise variables
+      artifacts: true
+  cache:
+    key: renovate
+    paths:
+      - renovate/cache
+  environment:
+    name: ci/renovate
+    action: prepare
+  variables:
+    RENOVATE_PLATFORM: gitlab
+    RENOVATE_ENDPOINT: ${CI_API_V4_URL}
+    RENOVATE_REPOSITORIES: ${CI_PROJECT_PATH}
+    RENOVATE_ONBOARDING: "false"
+    RENOVATE_REQUIRE_CONFIG: required
+    RENOVATE_BASE_DIR: ${CI_PROJECT_DIR}/renovate
+    RENOVATE_CACHE_DIR: ${CI_PROJECT_DIR}/renovate/cache
+    LOG_LEVEL: info
+  script:
+    - . ci/secrets.sh
+    - fnox exec --no-defaults --if-missing error -P renovate -- renovate

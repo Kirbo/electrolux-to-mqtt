@@ -1,49 +1,71 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Runs from the scheduled GitLab CI job `renovate` (SCHEDULE=RENOVATE, .gitlab/ci/01_init.yml). Setup: docs/CONTRIBUTING.md § Dependency updates.",
   "extends": ["config:recommended", ":semanticCommitTypeAll(chore)", ":semanticCommitScope(deps)"],
   "labels": ["dependencies"],
   "schedule": ["before 9am on monday"],
   "timezone": "Europe/Helsinki",
+  "minimumReleaseAge": "14 days",
+  "baseBranchPatterns": ["next"],
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": ["before 9am on monday"]
   },
+  "ignoreDeps": ["@types/node"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "versions.env: every toolchain/base-image version, annotated with a `# renovate:` comment on the line above.",
+      "managerFilePatterns": ["/^versions\\.env$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\n[A-Z][A-Z0-9_]*=(?<currentValue>\\S+)"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver-coerced{{/if}}",
+      "extractVersionTemplate": "{{#if extractVersion}}{{{extractVersion}}}{{/if}}"
+    }
+  ],
   "packageRules": [
     {
       "description": "Group all non-major npm updates into a single MR per week.",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "npm minor and patch",
-      "schedule": ["before 9am on monday"]
+      "groupName": "npm minor and patch"
     },
     {
       "description": "Major npm updates open individually so breaking-change review stays scoped.",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["major"],
-      "automerge": false,
       "labels": ["dependencies", "major-update"]
     },
     {
-      "description": "Pin GitHub-style action SHAs for supply-chain integrity (used by GitLab CI helpers if any).",
-      "matchManagers": ["github-actions"],
-      "pinDigests": true
+      "description": "packageManager and engines.node are DERIVED from versions.env by scripts/sync-versions.sh — never bump them directly.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["packageManager", "engines"],
+      "enabled": false
     },
     {
-      "description": "Docker base images (incl. dhi.io) — separate MRs so security-relevant changes are reviewed individually.",
-      "matchManagers": ["dockerfile", "docker-compose"],
-      "groupName": null
+      "description": "pnpm / Corepack / Node / Alpine feed derived package.json fields: the MR fails CI job `versions in sync` until someone runs `pnpm sync:versions` on its branch.",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["pnpm", "corepack", "node", "alpine"],
+      "labels": ["dependencies", "toolchain"],
+      "prBodyNotes": [
+        "⚠️ Derived fields: check out this branch, run `pnpm sync:versions` (then `mise install`), commit, and push. For node/alpine, first confirm the `<NODE_MAJOR>-alpine<ALPINE_VERSION>` tag exists on BOTH `dhi.io/node` and stock `node`."
+      ]
     },
     {
-      "description": "Node.js engine + @types/node grouped; manual merge — package.json engines.node is the single Node source; @types/node is derived by scripts/sync-versions.sh.",
-      "matchPackageNames": ["node", "@types/node"],
-      "groupName": "node runtime",
-      "automerge": false,
-      "labels": ["dependencies", "node-runtime"]
+      "description": "fnox / age carry sha256 pins that Renovate cannot compute: CI fails `install-fnox: sha256 mismatch` until they are updated.",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["jdx/fnox", "FiloSottile/age"],
+      "labels": ["dependencies", "toolchain"],
+      "prBodyNotes": [
+        "⚠️ Update the matching `*_SHA256_LINUX_X86_64` / `*_SHA256_LINUX_AARCH64` pins in `versions.env` from the release assets' digests, then run `mise install`."
+      ]
     }
   ],
   "vulnerabilityAlerts": {
     "labels": ["security"],
-    "schedule": []
+    "schedule": [],
+    "minimumReleaseAge": null
   },
   "prConcurrentLimit": 5,
   "prHourlyLimit": 0,

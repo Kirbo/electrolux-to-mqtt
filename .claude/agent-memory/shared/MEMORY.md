@@ -39,3 +39,4 @@
 - [tsc-alias → #/* subpath imports](dep_subpath_imports_braces.md) — removed for unfixable braces vuln; src runners need `--conditions=development` (after `watch`)
 - [Release/merge gotchas](reference_release_merge_gotchas.md) — non-gated MR needs manual main pipeline to release; cancelled release leaves Docker Hub tags; protected `next` is never deleted on merge
 - [SonarCloud only analyzes main](reference_sonar_branch_issues.md) — read issues via public API (no token); fix on next, verify after MR
+- [fnox outside repo cwd](tool_fnox_outside_repo_cwd.md) — 'age-plugin-pq unexpectedly died' = mise shim has no version outside the repo; run from repo root with -c

@@ -15,6 +15,7 @@ Each fnox **provider** encrypts to a fixed set of recipients (public keys), so t
 | `deploy` | `SSH_KEY` (base64), `SSH_KNOWN_HOSTS`, `TELEMETRY_HOST`, `TELEMETRY_USER`, `TELEMETRY_PATH` | `age_deploy` | maintainer, ci-deploy |
 | `telemetry` | `APTABASE_APP_ID`, `CLICKHOUSE_URL`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` (the backend's runtime `.env`) | `age_deploy` | maintainer, ci-deploy |
 | `sonar` | `SONAR_TOKEN`, `SONAR_HOST_URL` | `age_sonar` | maintainer, ci-sonar |
+| `renovate` | `RENOVATE_TOKEN` (GitLab PAT: `api`, `write_repository`), `GITHUB_COM_TOKEN` (read-only, public repos — GitHub release lookups) | `age_renovate` | maintainer, ci-renovate |
 
 All keys are post-quantum (`age-keygen -pq`, ML-KEM-768 + X25519). fnox reaches them through `age-plugin-pq`, which ships with age ≥ 1.3.2, so fnox needs the identity in its plugin form (`AGE-PLUGIN-PQ-1…`, made with `age-plugin-pq -identity`).
 
@@ -27,6 +28,7 @@ All keys are post-quantum (`age-keygen -pq`, ML-KEM-768 + X25519). fnox reaches 
 | ci-publish | `FNOX_AGE_KEY_FILE`, scope `release/publish`, protected |
 | ci-deploy | `FNOX_AGE_KEY_FILE`, scope `release/deploy`, protected |
 | ci-sonar | `FNOX_AGE_KEY_FILE`, scope `ci/sonar`, protected |
+| ci-renovate | `FNOX_AGE_KEY_FILE`, scope `ci/renovate`, protected. Until it is generated, its `# ci-renovate` recipient line in `fnox.toml` holds a copy of the maintainer key as a placeholder. |
 
 CI identities exist only in GitLab. A lost or leaked one is replaced, never recovered: `pnpm secrets:rotate-ci <tier>`.
 
@@ -42,7 +44,7 @@ One-time per machine (needs the 1Password CLI): `pnpm secrets:setup`. After that
 | `pnpm secrets:set <profile> <NAME>` | Encrypt one value (stdin) with that profile's provider |
 | `pnpm secrets:env` | Write `telemetry-backend/.env` (0600, gitignored) for `pnpm backend:docker` |
 | `pnpm sonar` | Runs the scanner under `fnox exec -P sonar` |
-| `pnpm secrets:rotate-ci <tier>` | New identity for `read`/`publish`/`deploy`/`sonar`: rewrites its recipient lines, re-encrypts, proves the tier reads exactly its profiles, and stores it in GitLab. Commit `fnox.toml` afterwards. |
+| `pnpm secrets:rotate-ci <tier>` | New identity for `read`/`publish`/`deploy`/`sonar`/`renovate`: rewrites its recipient lines, re-encrypts, proves the tier reads exactly its profiles, and stores it in GitLab. Commit `fnox.toml` afterwards. |
 | `fnox exec --no-defaults -P <profile> -- <cmd>` | Anything else |
 
 ## CI
@@ -55,6 +57,7 @@ A job's `environment:` (`action: prepare`) selects its tier, and so the one `FNO
 | `build and deploy [beta] docker images`, `update dockerhub description` | `release/publish` | `read`, `publish` |
 | `deploy telemetry-backend`, `refresh telemetry badges` | `release/deploy` | `deploy`, `telemetry` |
 | `sonarcloud-check` | `ci/sonar` | `sonar` |
+| `renovate` (schedule `SCHEDULE=RENOVATE` only) | `ci/renovate` | `renovate` |
 
 `ci/secrets.sh` installs fnox + `age-plugin-pq` (`ci/install-fnox.sh`: release tarballs checked against the sha256 pins in `versions.env`, x86_64 and aarch64) and provides `secrets_load <profile>…` (export into the job shell) and `secret <NAME> <profile>` (print one value for a pipe). A wrong tier fails the job. GitLab masks none of these values, so jobs never `set -x` or echo them.
 

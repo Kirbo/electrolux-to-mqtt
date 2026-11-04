@@ -45,9 +45,24 @@ Every toolchain and base-image version lives in **one file, `versions.env`** at 
 | GitLab CI | job `initialise variables` turns its lines into dotenv variables for every later job |
 | Scripts, git hooks, deploy jobs | `set -a; . ./versions.env; set +a` (or a `sed` lookup) |
 
-Keys: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (these change the shipped images), `FNOX_VERSION`, `AGE_VERSION` (+ their sha256 pins for CI), `GIT_CLIFF_VERSION` (dev/CI tooling only). The minimum mise is `min_version` in `mise.toml`.
+Keys: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (these change the shipped images), `FNOX_VERSION`, `AGE_VERSION` (+ their sha256 pins for CI), `GIT_CLIFF_VERSION`, `RENOVATE_VERSION` (dev/CI tooling only). Each line carries a `# renovate:` annotation on the line above it so Renovate can track it. The minimum mise is `min_version` in `mise.toml`.
 
 After editing `versions.env`, run `pnpm sync:versions`. It writes the derived copies into `package.json` — `engines.node` and `@types/node` in both packages, `packageManager` (with Corepack's integrity hash), `alpineVersion`, `corepackVersion` — and re-resolves the lockfiles when the `@types/node` range moves. Never edit those fields by hand; CI job `versions in sync` fails on any drift. They exist because `package.json` is the release-gated path: bumping Node, Alpine, Corepack or pnpm changes `package.json` and so cuts a release, while a dev-tool bump (fnox, age, git-cliff) does not. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+
+### Dependency updates
+
+Renovate opens weekly merge requests against `next` (`renovate.json`): one grouped MR for npm minor/patch updates, one per npm major, and one per `versions.env` entry. Releases younger than 14 days are held back (security fixes skip the wait). It runs as the CI job `renovate` from a pipeline schedule — there is no hosted bot. Some MRs need a manual step that Renovate cannot do; the MR description says which:
+
+- **pnpm, Corepack, Node, Alpine** feed derived `package.json` fields: check out the branch, run `pnpm sync:versions`, commit and push (CI job `versions in sync` fails until then).
+- **fnox, age** carry sha256 pins: copy the new release assets' digests into the `*_SHA256_LINUX_*` lines (CI fails `install-fnox: sha256 mismatch` until then).
+
+`/maintain` (see [AI-Assisted Development](#ai-assisted-development)) covers what Renovate does not: vulnerability triage, overrides, breakage fixes.
+
+One-time setup (maintainer):
+
+1. Create a GitLab project access token (role Developer, scopes `api` + `write_repository`) and a read-only GitHub fine-grained token (public repositories); then `pnpm secrets:set renovate RENOVATE_TOKEN` and `pnpm secrets:set renovate GITHUB_COM_TOKEN` (value on stdin).
+2. `pnpm secrets:rotate-ci renovate` — generates the `ci-renovate` identity, re-encrypts to it, stores it in GitLab (environment `ci/renovate`, protected). Commit `fnox.toml`.
+3. CI/CD → Pipeline schedules: weekly on `main`, variable `SCHEDULE=RENOVATE`.
 
 ### Secrets (maintainers only)
 

@@ -6,6 +6,7 @@
 #   publish  release/publish  protected    read, publish       (release image jobs, Docker Hub)
 #   deploy   release/deploy   protected    deploy, telemetry   (telemetry-backend server)
 #   sonar    ci/sonar         protected    sonar               (SonarCloud)
+#   renovate ci/renovate      protected    renovate            (scheduled Renovate job)
 #
 # Steps — the private key exists only in this process's memory:
 #   1. Generate a post-quantum age identity (age-keygen -pq) and its plugin form.
@@ -26,14 +27,15 @@ cd "${ROOT}"
 TIER="${1:-}"
 PUSH=1
 [[ "${2:-}" == "--no-push" ]] && PUSH=0
-ALL_PROFILES=(read publish deploy telemetry sonar)
+ALL_PROFILES=(read publish deploy telemetry sonar renovate)
 
 case "${TIER}" in
   read) SCOPE="ci/read" PROTECTED=false OWN=(read) ;;
   publish) SCOPE="release/publish" PROTECTED=true OWN=(read publish) ;;
   deploy) SCOPE="release/deploy" PROTECTED=true OWN=(deploy telemetry) ;;
   sonar) SCOPE="ci/sonar" PROTECTED=true OWN=(sonar) ;;
-  *) echo "Usage: $0 read|publish|deploy|sonar [--no-push]" >&2; exit 1 ;;
+  renovate) SCOPE="ci/renovate" PROTECTED=true OWN=(renovate) ;;
+  *) echo "Usage: $0 read|publish|deploy|sonar|renovate [--no-push]" >&2; exit 1 ;;
 esac
 
 for cmd in fnox age-keygen age-plugin-pq jq; do

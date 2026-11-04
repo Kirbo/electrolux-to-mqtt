@@ -33,3 +33,5 @@ MR.md
 
 # scripts/osv-scan.sh splits pnpm 12 multi-document lockfiles here while scanning
 .osv-scan-split/
+# CI job `renovate` working/cache dir (RENOVATE_BASE_DIR)
+renovate/

@@ -9,14 +9,16 @@
 #   deploy     age_deploy   maintainer, ci-deploy
 #   telemetry  age_deploy   maintainer, ci-deploy
 #   sonar      age_sonar    maintainer, ci-sonar
+#   renovate   age_renovate maintainer, ci-renovate
 set -eu
 
-[ $# -eq 2 ] || { echo "Usage: $0 read|publish|deploy|telemetry|sonar NAME  (value on stdin)" >&2; exit 1; }
+[ $# -eq 2 ] || { echo "Usage: $0 read|publish|deploy|telemetry|sonar|renovate NAME  (value on stdin)" >&2; exit 1; }
 case "$1" in
   read) provider=age_read ;;
   publish) provider=age_publish ;;
   deploy | telemetry) provider=age_deploy ;;
   sonar) provider=age_sonar ;;
+  renovate) provider=age_renovate ;;
   *) echo "Unknown profile '$1'" >&2; exit 1 ;;
 esac
 cd "$(dirname "$0")/.."

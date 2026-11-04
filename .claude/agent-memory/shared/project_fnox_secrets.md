@@ -1,6 +1,6 @@
 ---
 name: project_fnox_secrets
-description: "All secrets moved SOPS → fnox (2026-11-02): fnox.toml age ciphertext, 4 CI tiers via env-scoped FNOX_AGE_KEY_FILE; non-obvious operational facts + migration state"
+description: "All secrets moved SOPS → fnox (2026-11-02): fnox.toml age ciphertext, 4 CI tiers (+ renovate, pending user setup since 2026-11-04) via env-scoped FNOX_AGE_KEY_FILE; non-obvious operational facts + migration state"
 metadata:
   node_type: memory
   type: project
@@ -27,3 +27,5 @@ Since 2026-11-02 (user request, switchboard as reference) every secret is in `fn
 **PAT:** `scripts/rotate-gitlab-pat.sh` self-rotates the 1Password "electrolux-to-mqtt - GitLab API Token" (used only by `secrets:rotate-ci` → `gitlab-set-ci-var.sh`). Repo path is `KirboDev/electrolux-to-mqtt` (project id 69776314).
 
 Related: [[project_versions_env]], [[project_aptabase_telemetry]].
+
+**5th tier `renovate` (added 2026-11-04, NOT yet live):** provider `age_renovate` + empty profile `renovate`; its `# ci-renovate` recipient line is a PLACEHOLDER copy of the maintainer key until the user runs `pnpm secrets:set renovate RENOVATE_TOKEN` / `GITHUB_COM_TOKEN`, then `pnpm secrets:rotate-ci renovate`, then creates the weekly `SCHEDULE=RENOVATE` pipeline schedule on `main` (steps in docs/CONTRIBUTING.md § Dependency updates). Until then the `renovate` CI job never runs. Once live, update this note.

@@ -26,7 +26,7 @@
     "deps:check": "pnpm outdated ; pnpm audit ; pnpm osv-scan",
     "deps:update": "pnpm update --latest && pnpm sync:versions && pnpm install",
     "secrets:setup": "bash scripts/secrets-setup.sh",
-    "secrets:check": "fnox check --no-defaults -P read,publish,deploy,telemetry,sonar",
+    "secrets:check": "fnox check --no-defaults -P read,publish,deploy,telemetry,sonar,renovate",
     "secrets:set": "sh scripts/secrets-set.sh",
     "secrets:env": "sh scripts/secrets-env.sh",
     "secrets:rotate-ci": "bash scripts/secrets-rotate-ci.sh",
