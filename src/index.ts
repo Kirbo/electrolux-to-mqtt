@@ -37,19 +37,37 @@ let discoveryIntervalDisposable: Disposable | null = null
 let stopVersionChecker: (() => void) | null = null
 let restartTimeoutDisposable: Disposable | null = null
 
+// Docker's stop grace period is 10 s; give the MQTT flush half of it, then exit regardless.
+const SHUTDOWN_TIMEOUT_MS = 5_000
+
 // Graceful shutdown handler
-const shutdown = () => {
+const shutdown = async () => {
   restartTimeoutDisposable?.[Symbol.dispose]()
   restartTimeoutDisposable = null
   discoveryIntervalDisposable?.[Symbol.dispose]()
   discoveryIntervalDisposable = null
   if (stopVersionChecker) stopVersionChecker()
-  orchestrator.shutdown()
+  let timeout: NodeJS.Timeout | undefined
+  const timedOut = new Promise<void>((resolve) => {
+    timeout = setTimeout(() => {
+      logger.warn(`MQTT disconnect did not finish within ${SHUTDOWN_TIMEOUT_MS / 1000}s — exiting anyway`)
+      resolve()
+    }, SHUTDOWN_TIMEOUT_MS)
+  })
+  await Promise.race([orchestrator.shutdown(), timedOut])
+  clearTimeout(timeout)
   process.exit(0)
 }
 
-process.on('SIGTERM', shutdown)
-process.on('SIGINT', shutdown)
+const onSignal = () => {
+  shutdown().catch((err: unknown) => {
+    logger.error('Error during shutdown:', err)
+    process.exit(1)
+  })
+}
+
+process.on('SIGTERM', onSignal)
+process.on('SIGINT', onSignal)
 
 // Wait for client login — login() has its own exponential backoff retry
 const waitForLogin = async () => {

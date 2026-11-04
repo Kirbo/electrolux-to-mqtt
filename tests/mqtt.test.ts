@@ -17,7 +17,10 @@ function createMockClient() {
     unsubscribe: vi.fn((_topic: unknown, callback: (err: null) => void) => {
       if (callback) callback(null)
     }),
-    end: vi.fn(),
+    // mqtt.js end(force, opts, cb): call the callback so disconnect() resolves
+    end: vi.fn((_force: unknown, _opts: unknown, callback?: () => void) => {
+      if (callback) callback()
+    }),
   })
   return mockClient
 }
@@ -457,7 +460,26 @@ describe('Mqtt', () => {
     it('should disconnect from MQTT broker', () => {
       mqttInstance.disconnect()
 
-      expect(mqttInstance.client.end).toHaveBeenCalledWith(expect.any(Function))
+      expect(mqttInstance.client.end).toHaveBeenCalledWith(false, {}, expect.any(Function))
+    })
+
+    it('should resolve disconnect() only once the client has ended', async () => {
+      const mockClientTyped = mqttInstance.client as unknown as { end: ReturnType<typeof vi.fn> }
+      let finishEnd: (() => void) | undefined
+      mockClientTyped.end = vi.fn((_force: unknown, _opts: unknown, callback: () => void) => {
+        finishEnd = callback
+      })
+
+      let resolved = false
+      const done = mqttInstance.disconnect().then(() => {
+        resolved = true
+      })
+      await Promise.resolve()
+      expect(resolved).toBe(false)
+
+      finishEnd?.()
+      await done
+      expect(resolved).toBe(true)
     })
 
     it('should call end callback when disconnecting', () => {

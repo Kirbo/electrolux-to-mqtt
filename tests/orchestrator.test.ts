@@ -93,7 +93,7 @@ function createMockMqtt(): IMqtt {
     unsubscribe: vi.fn(),
     subscribeAbsolute: vi.fn(() => Promise.resolve()),
     unsubscribeAbsolute: vi.fn(),
-    disconnect: vi.fn(),
+    disconnect: vi.fn(() => Promise.resolve()),
     onReconnect: vi.fn(),
     [Symbol.asyncDispose]: vi.fn(() => Promise.resolve()),
   }
@@ -777,6 +777,36 @@ describe('Orchestrator', () => {
       // getApplianceState should have been called twice
       expect(client.getApplianceState).toHaveBeenCalledTimes(2)
       expect(orchestrator.isShuttingDown).toBe(false)
+    })
+  })
+
+  describe('shutdown completion', () => {
+    it('should resolve only after the MQTT client has disconnected', async () => {
+      let finishDisconnect: (() => void) | undefined
+      vi.mocked(mqtt.disconnect).mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishDisconnect = resolve
+          }),
+      )
+
+      let resolved = false
+      const done = orchestrator.shutdown().then(() => {
+        resolved = true
+      })
+      await Promise.resolve()
+      expect(resolved).toBe(false)
+
+      finishDisconnect?.()
+      await done
+      expect(resolved).toBe(true)
+    })
+
+    it('should not disconnect twice when shutdown is called again', async () => {
+      await orchestrator.shutdown()
+      await orchestrator.shutdown()
+
+      expect(mqtt.disconnect).toHaveBeenCalledTimes(1)
     })
   })
 

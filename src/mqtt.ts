@@ -76,7 +76,8 @@ export interface IMqtt {
   subscribeAbsolute(topic: string, callback: (topic: string, message: Buffer) => void): Promise<void>
   /** Unsubscribe from an absolute topic (no prefix added). */
   unsubscribeAbsolute(topic: string): void
-  disconnect(): void
+  /** Ends the client; resolves once in-flight messages are flushed and it has closed. */
+  disconnect(): Promise<void>
   /** Register a callback to be fired on every MQTT 'connect' event (initial + reconnects). */
   onReconnect(callback: () => void): void
   [Symbol.asyncDispose](): Promise<void>
@@ -221,15 +222,17 @@ class Mqtt implements IMqtt {
     })
   }
 
-  public disconnect() {
-    this.client.end(() => {
-      logger.info('Disconnected from MQTT broker')
+  public disconnect(): Promise<void> {
+    return new Promise((resolve) => {
+      this.client.end(false, {}, () => {
+        logger.info('Disconnected from MQTT broker')
+        resolve()
+      })
     })
   }
 
   public [Symbol.asyncDispose](): Promise<void> {
-    this.disconnect()
-    return Promise.resolve()
+    return this.disconnect()
   }
 
   public onReconnect(callback: () => void): void {

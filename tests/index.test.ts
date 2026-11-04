@@ -67,7 +67,7 @@ let mockOrchestratorInstance: {
 }
 
 const MockOrchestratorCtor = vi.fn(function (this: typeof mockOrchestratorInstance) {
-  this.shutdown = vi.fn()
+  this.shutdown = vi.fn(() => Promise.resolve())
   this.isShuttingDown = false
   this.initializeAppliance = vi.fn().mockResolvedValue(undefined)
   this.discoverAppliances = vi.fn()
@@ -190,6 +190,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
       try {
         await sigtermHandler?.()
+        await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalled())
         expect(mockOrchestratorInstance.shutdown).toHaveBeenCalledTimes(1)
       } finally {
         processExitSpy.mockRestore()
@@ -203,9 +204,50 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
       try {
         await sigintHandler?.()
+        await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalled())
         expect(mockOrchestratorInstance.shutdown).toHaveBeenCalledTimes(1)
       } finally {
         processExitSpy.mockRestore()
+      }
+    })
+  })
+
+  describe('shutdown waits for the MQTT disconnect', () => {
+    it('should exit only after orchestrator.shutdown() has resolved', async () => {
+      let finishShutdown: (() => void) | undefined
+      mockOrchestratorInstance.shutdown.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishShutdown = resolve
+          }),
+      )
+      const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+      try {
+        registeredHandlers.get('SIGTERM')?.()
+        await Promise.resolve()
+        expect(processExitSpy).not.toHaveBeenCalled()
+
+        finishShutdown?.()
+        await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalledWith(0))
+      } finally {
+        processExitSpy.mockRestore()
+      }
+    })
+
+    it('should exit anyway when the disconnect hangs past the shutdown timeout', async () => {
+      vi.useFakeTimers()
+      mockOrchestratorInstance.shutdown.mockImplementation(() => new Promise<void>(() => {}))
+      const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+      try {
+        registeredHandlers.get('SIGTERM')?.()
+        await vi.advanceTimersByTimeAsync(4_999)
+        expect(processExitSpy).not.toHaveBeenCalled()
+
+        await vi.advanceTimersByTimeAsync(1)
+        expect(processExitSpy).toHaveBeenCalledWith(0)
+      } finally {
+        processExitSpy.mockRestore()
+        vi.useRealTimers()
       }
     })
   })
@@ -445,6 +487,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
       try {
         await sigtermHandler?.()
+        await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalled())
         // shutdown() was called and should have cleared the pending timeout
         expect(mockOrchestratorInstance.shutdown).toHaveBeenCalledTimes(1)
       } finally {
@@ -467,6 +510,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
       try {
         await sigtermHandler?.()
+        await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalled())
         expect(mockOrchestratorInstance.shutdown).toHaveBeenCalledTimes(1)
       } finally {
         processExitSpy.mockRestore()

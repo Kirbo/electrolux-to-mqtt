@@ -445,8 +445,7 @@ export class Orchestrator implements AsyncDisposable {
   }
 
   public [Symbol.asyncDispose](): Promise<void> {
-    this.shutdown()
-    return Promise.resolve()
+    return this.shutdown()
   }
 
   /**
@@ -454,8 +453,9 @@ export class Orchestrator implements AsyncDisposable {
    * pending startup timeouts, appliance polling intervals, client state, and
    * MQTT connection. External resources (version checker, discovery interval)
    * are owned by the caller (src/index.ts) and must be disposed there.
+   * Resolves once the MQTT client has flushed and closed.
    */
-  public shutdown() {
+  public async shutdown(): Promise<void> {
     if (this.isShuttingDown) return
     this.isShuttingDown = true
 
@@ -481,8 +481,8 @@ export class Orchestrator implements AsyncDisposable {
       this.mqtt.unsubscribeAbsolute(this.config.haBirthTopic)
     }
 
-    // Disconnect MQTT
-    this.mqtt.disconnect()
+    // Disconnect MQTT — wait for it, so in-flight publishes are flushed before exit
+    await this.mqtt.disconnect()
 
     logger.info('Shutdown complete')
   }
