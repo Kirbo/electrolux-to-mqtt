@@ -1,7 +1,7 @@
-import { isAppliance } from './appliances/normalizers.js'
-import { describeError, HttpError, httpRequest } from './http.js'
-import createLogger from './logger.js'
-import type { Appliance, ApplianceInfo, ApplianceStub } from './types.js'
+import { isAppliance } from './appliances/normalizers.ts'
+import { describeError, HttpError, httpRequest } from './http.ts'
+import createLogger from './logger.ts'
+import type { Appliance, ApplianceInfo, ApplianceStub } from './types.d.ts'
 
 const logger = createLogger('electrolux')
 
@@ -64,10 +64,13 @@ export class ElectroluxApi {
   /** applianceId → name from the last successful list, for change logging and 429 advice. */
   private readonly knownAppliances = new Map<string, string>()
 
-  constructor(
-    private readonly auth: TokenSource,
-    private readonly settings: ApiSettings,
-  ) {}
+  private readonly auth: TokenSource
+  private readonly settings: ApiSettings
+
+  constructor(auth: TokenSource, settings: ApiSettings) {
+    this.auth = auth
+    this.settings = settings
+  }
 
   async getAppliances(): Promise<ApplianceStub[] | undefined> {
     const appliances = await this.request('GET', '/api/v1/appliances', isApplianceStubArray, 'Error getting appliances')

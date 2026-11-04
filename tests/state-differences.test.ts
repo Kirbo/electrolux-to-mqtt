@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatStateDifferences, getStateDifferences } from '#/state-sync.js'
-import type { NormalizedState } from '#/types/normalized.js'
+import { formatStateDifferences, getStateDifferences } from '#/state-sync.ts'
+import type { NormalizedState } from '#/types/normalized.ts'
 
 describe('State Differences', () => {
   describe('getStateDifferences', () => {

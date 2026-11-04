@@ -6,8 +6,8 @@
 #
 # Three Dockerfiles build from this same repo-root context, so the list is the
 # union of what all three need:
-#   docker/Dockerfile          (prod)  — COPY . . in builder, runs `pnpm run build`
-#   docker/Dockerfile.local    (dev)   — COPY . ., runs `pnpm dev` (tsx watch src/)
+#   docker/Dockerfile          (prod)  — package.json + lockfile, COPY src (Node runs .ts directly)
+#   docker/Dockerfile.local    (dev)   — COPY . ., runs `pnpm dev` (node --watch src/index.ts)
 #   telemetry-backend/Dockerfile       — root package.json + telemetry-backend/
 #
 # Docker applies last-match-wins, so ordering matters: exclude-all, re-include,
@@ -24,7 +24,6 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
-!tsconfig.json
 # engine-strict=true — enforces engines.node during the in-image `pnpm install`.
 # Excluding this silently drops that guard, so it must stay.
 !.npmrc

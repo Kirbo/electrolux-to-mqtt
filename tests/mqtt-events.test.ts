@@ -42,12 +42,12 @@ const MQTT_SETTINGS = {
 
 /** Constructing a client is what registers its event handlers. */
 const createClient = async () => {
-  const Mqtt = (await import('#/mqtt.js')).default
+  const Mqtt = (await import('#/mqtt.ts')).default
   return new Mqtt(MQTT_SETTINGS, 'homeassistant')
 }
 
 // Mock logger
-vi.mock('#/logger.js', () => ({
+vi.mock('#/logger.ts', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: vi.fn(),

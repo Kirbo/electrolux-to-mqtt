@@ -1,7 +1,7 @@
-import createLogger from '#/logger.js'
-import type { ApplianceInfo, ApplianceStub } from '#/types.js'
-import type { BaseAppliance } from './base.js'
-import { Comfort600Appliance } from './comfort600.js'
+import createLogger from '#/logger.ts'
+import type { ApplianceInfo, ApplianceStub } from '#/types.d.ts'
+import type { BaseAppliance } from './base.ts'
+import { Comfort600Appliance } from './comfort600.ts'
 
 const logger = createLogger('factory')
 

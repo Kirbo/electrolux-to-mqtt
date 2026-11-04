@@ -1,8 +1,8 @@
-import { isNormalizedState } from './appliances/normalizers.js'
-import { canonicalStringify } from './canonical-stringify.js'
-import config from './config.js'
-import createLogger from './logger.js'
-import type { NormalizedState } from './types/normalized.js'
+import { isNormalizedState } from './appliances/normalizers.ts'
+import { canonicalStringify } from './canonical-stringify.ts'
+import config from './config.ts'
+import createLogger from './logger.ts'
+import type { NormalizedState } from './types/normalized.ts'
 
 const logger = createLogger('cache')
 const skipCacheLogging = config.logging.skipCacheLogging

@@ -1,16 +1,16 @@
 import packageJson from '../package.json' with { type: 'json' }
-import { computeBackoffDelay } from './backoff.js'
-import { cache } from './cache.js'
-import config from './config.js'
-import { disposableInterval, disposableTimeout } from './disposable.js'
-import { ElectroluxApi } from './electrolux-api.js'
-import { ElectroluxAuth } from './electrolux-auth.js'
-import createLogger from './logger.js'
-import Mqtt from './mqtt.js'
-import { Orchestrator } from './orchestrator.js'
-import { StateSync } from './state-sync.js'
-import { deriveTelemetrySessionId, summarizeAppliances } from './telemetry.js'
-import { startVersionChecker } from './version-checker.js'
+import { computeBackoffDelay } from './backoff.ts'
+import { cache } from './cache.ts'
+import config from './config.ts'
+import { disposableInterval, disposableTimeout } from './disposable.ts'
+import { ElectroluxApi } from './electrolux-api.ts'
+import { ElectroluxAuth } from './electrolux-auth.ts'
+import createLogger from './logger.ts'
+import Mqtt from './mqtt.ts'
+import { Orchestrator } from './orchestrator.ts'
+import { StateSync } from './state-sync.ts'
+import { deriveTelemetrySessionId, summarizeAppliances } from './telemetry.ts'
+import { startVersionChecker } from './version-checker.ts'
 
 const currentVersion = packageJson.version
 const logger = createLogger('app')

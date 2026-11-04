@@ -5,11 +5,11 @@ import type {
   HADeviceDiscoveryConfig,
   HAFanMode,
   HASwingMode,
-} from '#/types/homeassistant.js'
-import type { NormalizedClimateMode, NormalizedState } from '#/types/normalized.js'
-import type { Appliance } from '#/types.js'
-import { BaseAppliance, type CommandValidationResult, type DiscoveryContext } from './base.js'
-import { denormalizeClimateMode, denormalizeFanSpeed, normalizeClimateAppliance } from './normalizers.js'
+} from '#/types/homeassistant.ts'
+import type { NormalizedClimateMode, NormalizedState } from '#/types/normalized.ts'
+import type { Appliance } from '#/types.d.ts'
+import { BaseAppliance, type CommandValidationResult, type DiscoveryContext } from './base.ts'
+import { denormalizeClimateMode, denormalizeFanSpeed, normalizeClimateAppliance } from './normalizers.ts'
 
 /**
  * Runtime type guard for the fanSpeedSetting action shape returned by

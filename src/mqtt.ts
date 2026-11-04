@@ -1,6 +1,6 @@
 import mqtt from 'mqtt'
-import type { AppConfig } from './config.js'
-import createLogger from './logger.js'
+import type { AppConfig } from './config.ts'
+import createLogger from './logger.ts'
 
 type QoS = 0 | 1 | 2
 type MessageHandler = (topic: string, message: Buffer) => void

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BaseAppliance } from '#/appliances/base.js'
-import type { IMqtt } from '#/mqtt.js'
-import { type ApplianceSync, type DiscoveryApi, Orchestrator, type OrchestratorConfig } from '#/orchestrator.js'
-import type { NormalizedState } from '#/types/normalized.js'
-import type { ApplianceInfo, ApplianceStub } from '#/types.js'
+import type { BaseAppliance } from '#/appliances/base.ts'
+import type { IMqtt } from '#/mqtt.ts'
+import { type ApplianceSync, type DiscoveryApi, Orchestrator, type OrchestratorConfig } from '#/orchestrator.ts'
+import type { NormalizedState } from '#/types/normalized.ts'
+import type { ApplianceInfo, ApplianceStub } from '#/types.d.ts'
 
 // Hoisted spy so we can assert on logger.error in m11 tests without recreating
 // the module. The orchestrator module captures its logger reference at import
@@ -11,7 +11,7 @@ import type { ApplianceInfo, ApplianceStub } from '#/types.js'
 const loggerErrorSpy = vi.hoisted(() => vi.fn())
 
 // Mock dependencies
-vi.mock('#/logger.js', () => ({
+vi.mock('#/logger.ts', () => ({
   default: vi.fn(() => ({
     info: vi.fn(),
     error: loggerErrorSpy,
@@ -20,11 +20,11 @@ vi.mock('#/logger.js', () => ({
   })),
 }))
 
-vi.mock('#/health.js', () => ({
+vi.mock('#/health.ts', () => ({
   writeHealthFile: vi.fn(),
 }))
 
-vi.mock('#/cache.js', () => ({
+vi.mock('#/cache.ts', () => ({
   cache: {
     cacheKey: vi.fn((id: string, capabilitiesHash?: string) => ({
       state: `${id}:state`,
@@ -36,7 +36,7 @@ vi.mock('#/cache.js', () => ({
   },
 }))
 
-vi.mock('#/appliances/factory.js', () => ({
+vi.mock('#/appliances/factory.ts', () => ({
   createAppliance: vi.fn(
     (stub: ApplianceStub, _info: ApplianceInfo): BaseAppliance =>
       ({
@@ -371,7 +371,7 @@ describe('Orchestrator', () => {
     })
 
     it('should republish auto-discovery config when it changes', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
 
       // Mock getApplianceState to invoke its callback
       vi.mocked(client.pollState).mockImplementation(async (_appliance, callback) => {
@@ -390,7 +390,7 @@ describe('Orchestrator', () => {
     })
 
     it('should skip auto-discovery republish when config unchanged', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
 
       // Mock getApplianceState to invoke its callback
       vi.mocked(client.pollState).mockImplementation(async (_appliance, callback) => {
@@ -453,7 +453,7 @@ describe('Orchestrator', () => {
     })
 
     it('should delete cache entries for both state and autoDiscovery on cleanup', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
 
       await orchestrator.initializeAppliance(mockStub)
 
@@ -1055,7 +1055,7 @@ describe('Orchestrator', () => {
     })
 
     it('should republish the cached (normalized) state on every connect event', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       const cached = cachedState('appliance-1')
       vi.mocked(cache.getState).mockReturnValue(cached)
 
@@ -1077,7 +1077,7 @@ describe('Orchestrator', () => {
     })
 
     it('should skip republish for an appliance with no cached state', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       // cache.get returns undefined = no state cached yet
       vi.mocked(cache.getState).mockReturnValue(null)
 
@@ -1093,7 +1093,7 @@ describe('Orchestrator', () => {
     })
 
     it('should republish normalized cached state for all initialized appliances on reconnect', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       const cached1 = cachedState('appliance-1')
       const cached2 = cachedState('appliance-2')
 
@@ -1199,7 +1199,7 @@ describe('Orchestrator', () => {
     })
 
     it('should republish discovery and the cached state for each appliance when birth payload matches', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       const cached = cachedState('appliance-1')
       vi.mocked(cache.getState).mockReturnValue(cached)
 
@@ -1224,7 +1224,7 @@ describe('Orchestrator', () => {
     })
 
     it('should not republish when birth payload does not match (e.g. offline)', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       vi.mocked(cache.getState).mockReturnValue(cachedState('appliance-1'))
 
       await orchestrator.initializeAppliance(mockStub)
@@ -1245,7 +1245,7 @@ describe('Orchestrator', () => {
     })
 
     it('should skip appliances with no cached state during birth republish', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       vi.mocked(cache.getState).mockReturnValue(null)
 
       await orchestrator.initializeAppliance(mockStub)
@@ -1266,7 +1266,7 @@ describe('Orchestrator', () => {
     })
 
     it('should republish for all appliances on birth', async () => {
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
       const state1 = cachedState('appliance-1')
       const state2 = cachedState('appliance-2')
       const anotherStub: ApplianceStub = {

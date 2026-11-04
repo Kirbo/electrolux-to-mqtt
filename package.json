@@ -3,15 +3,14 @@
   "version": "development",
   "description": "TypeScript bridge from the Electrolux appliance API to MQTT, with Home Assistant auto-discovery.",
   "private": true,
-  "main": "dist/index.js",
+  "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "build": "tsc",
     "check": "pnpm biome check --write",
     "clean": "rimraf node_modules",
     "dev:docker": "docker compose -f docker/docker-compose.local.yml down && docker compose -f docker/docker-compose.local.yml up --build",
     "backend:docker": "docker compose -f telemetry-backend/docker-compose.yml down && sh scripts/backend-up.sh",
-    "dev": "tsx watch --conditions=development src/index.ts",
+    "dev": "node --watch src/index.ts",
     "format": "pnpm biome format --write",
     "lint": "pnpm biome lint --write",
     "nuke": "pnpm clean ; pnpm install",
@@ -44,10 +43,7 @@
   "author": "Kimmo Saari <kirbo@kirbo-designs.com>",
   "license": "MIT",
   "imports": {
-    "#/*": {
-      "development": "./src/*",
-      "default": "./dist/*"
-    }
+    "#/*": "./src/*"
   },
   "alpineVersion": "3.24",
   "corepackVersion": "0.36.0",
@@ -66,7 +62,6 @@
     "@biomejs/biome": "^2.6.4",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^5.1.0",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"

@@ -110,9 +110,8 @@ build_local() {
     echo "  FAIL: build failed"; tail -15 /tmp/e2m-bt-local.log | sed 's/^/    /'; FAILED=1; return
   fi
   BUILT_TAGS+=("${tag}")
-  # CMD is `pnpm dev` (tsx watch), which never exits — run the entrypoint once instead.
-  # Mirror its flags: --conditions=development maps the `#/*` imports to src/ (not dist/).
-  smoke "${tag}" "Environment variable validation failed" sh -c 'pnpm exec tsx --conditions=development src/index.ts'
+  # CMD is `pnpm dev` (node --watch), which never exits — run the entrypoint once instead.
+  smoke "${tag}" "Environment variable validation failed" node src/index.ts
 }
 
 build_backend() {

@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
-import { computeBackoffDelay } from './backoff.js'
-import { describeError, HttpError, httpRequest } from './http.js'
-import createLogger from './logger.js'
+import { computeBackoffDelay } from './backoff.ts'
+import { describeError, HttpError, httpRequest } from './http.ts'
+import createLogger from './logger.ts'
 
 const logger = createLogger('electrolux')
 
@@ -87,7 +87,11 @@ export class ElectroluxAuth implements Disposable {
   private pending: Promise<Tokens> | null = null
   private readonly stopped = new AbortController()
 
-  constructor(private readonly settings: AuthSettings) {}
+  private readonly settings: AuthSettings
+
+  constructor(settings: AuthSettings) {
+    this.settings = settings
+  }
 
   get isLoggedIn(): boolean {
     return this.tokens !== null

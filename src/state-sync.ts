@@ -1,10 +1,10 @@
-import type { BaseAppliance } from './appliances/base.js'
-import { normalizeClimateMode, normalizeFanSpeed, normalizeOnOffState } from './appliances/normalizers.js'
-import type { Cache } from './cache.js'
-import createLogger from './logger.js'
-import type { IMqtt } from './mqtt.js'
-import type { NormalizedClimateMode, NormalizedState } from './types/normalized.js'
-import type { Appliance } from './types.js'
+import type { BaseAppliance } from './appliances/base.ts'
+import { normalizeClimateMode, normalizeFanSpeed, normalizeOnOffState } from './appliances/normalizers.ts'
+import type { Cache } from './cache.ts'
+import createLogger from './logger.ts'
+import type { IMqtt } from './mqtt.ts'
+import type { NormalizedClimateMode, NormalizedState } from './types/normalized.ts'
+import type { Appliance } from './types.d.ts'
 
 const logger = createLogger('electrolux')
 
@@ -89,12 +89,17 @@ export class StateSync {
   private readonly lastCommandTime = new Map<string, number>()
   private readonly lastActiveMode = new Map<string, NormalizedClimateMode>()
 
-  constructor(
-    private readonly api: ApplianceStateApi,
-    private readonly mqtt: IMqtt,
-    private readonly cache: Cache,
-    private readonly settings: StateSyncSettings,
-  ) {}
+  private readonly api: ApplianceStateApi
+  private readonly mqtt: IMqtt
+  private readonly cache: Cache
+  private readonly settings: StateSyncSettings
+
+  constructor(api: ApplianceStateApi, mqtt: IMqtt, cache: Cache, settings: StateSyncSettings) {
+    this.api = api
+    this.mqtt = mqtt
+    this.cache = cache
+    this.settings = settings
+  }
 
   /**
    * Poll one appliance. Resolves the current normalized state — the cached one during

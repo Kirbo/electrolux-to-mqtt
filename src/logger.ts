@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import pino from 'pino'
 import packageJson from '../package.json' with { type: 'json' }
-import config from './config.js'
+import config from './config.ts'
 
 const appVersion = packageJson.version
 

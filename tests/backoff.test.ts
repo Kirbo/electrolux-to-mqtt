@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { computeBackoffDelay } from '#/backoff.js'
+import { computeBackoffDelay } from '#/backoff.ts'
 
 describe('computeBackoffDelay', () => {
   afterEach(() => {

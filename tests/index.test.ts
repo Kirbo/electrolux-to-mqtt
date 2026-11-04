@@ -10,13 +10,13 @@
  * directly in dedicated tests to cover its branches.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startVersionChecker as mockStartVersionChecker } from '#/version-checker.js'
+import { startVersionChecker as mockStartVersionChecker } from '#/version-checker.ts'
 
 // ─── Mock all modules that perform side-effects on import ────────────────────
 
 // vi.mock calls are hoisted to the top of the module by Vitest.
 
-vi.mock('#/config.js', () => ({
+vi.mock('#/config.ts', () => ({
   default: {
     mqtt: {
       url: 'mqtt://test-broker:1883',
@@ -80,7 +80,7 @@ const MockOrchestratorCtor = vi.fn(function (this: typeof mockOrchestratorInstan
   mockOrchestratorInstance = this
 })
 
-vi.mock('#/orchestrator.js', () => ({
+vi.mock('#/orchestrator.ts', () => ({
   Orchestrator: MockOrchestratorCtor,
 }))
 
@@ -96,7 +96,7 @@ const MockMqttCtor = vi.fn(function (this: Record<string, unknown>) {
   this.onReconnect = vi.fn()
 })
 
-vi.mock('#/mqtt.js', () => ({
+vi.mock('#/mqtt.ts', () => ({
   default: MockMqttCtor,
 }))
 
@@ -119,31 +119,31 @@ const mockComputeBackoffDelay = vi.fn((retryCount: number, baseMs: number, maxMs
   Math.min(baseMs * 2 ** retryCount, maxMs),
 )
 
-vi.mock('#/electrolux-api.js', () => ({
+vi.mock('#/electrolux-api.ts', () => ({
   ElectroluxApi: MockElectroluxApiCtor,
 }))
 
-vi.mock('#/electrolux-auth.js', () => ({
+vi.mock('#/electrolux-auth.ts', () => ({
   ElectroluxAuth: MockElectroluxAuthCtor,
 }))
 
-vi.mock('#/state-sync.js', () => ({
+vi.mock('#/state-sync.ts', () => ({
   StateSync: MockStateSyncCtor,
 }))
 
-vi.mock('#/cache.js', () => ({
+vi.mock('#/cache.ts', () => ({
   cache: { name: 'shared-cache' },
 }))
 
-vi.mock('#/backoff.js', () => ({
+vi.mock('#/backoff.ts', () => ({
   computeBackoffDelay: mockComputeBackoffDelay,
 }))
 
-vi.mock('#/version-checker.js', () => ({
+vi.mock('#/version-checker.ts', () => ({
   startVersionChecker: vi.fn().mockReturnValue(() => {}),
 }))
 
-vi.mock('#/logger.js', () => ({
+vi.mock('#/logger.ts', () => ({
   default: vi.fn().mockReturnValue({
     info: vi.fn(),
     error: vi.fn(),
@@ -157,7 +157,7 @@ vi.mock('#/logger.js', () => ({
 describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
   let processOnSpy: ReturnType<typeof vi.spyOn>
   let registeredHandlers: Map<string, (...args: unknown[]) => unknown>
-  let indexModule: typeof import('#/index.js')
+  let indexModule: typeof import('#/index.ts')
 
   beforeEach(async () => {
     vi.resetModules()
@@ -173,7 +173,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     })
 
     // Dynamic import triggers module evaluation; VITEST=true guards main().
-    indexModule = await import('#/index.js')
+    indexModule = await import('#/index.ts')
   })
 
   afterEach(() => {
@@ -506,7 +506,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       vi.useRealTimers()
 
       // .catch() at line 75 should have been invoked — logger.error should have been called
-      const createLoggerMod = await import('#/logger.js')
+      const createLoggerMod = await import('#/logger.ts')
       const createLoggerMock = vi.mocked(createLoggerMod.default)
       const loggerInstance = createLoggerMock.mock.results[0]?.value as { error: ReturnType<typeof vi.fn> }
       expect(loggerInstance?.error).toHaveBeenCalled()
@@ -526,7 +526,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
       vi.useRealTimers()
 
-      const createLoggerMod = await import('#/logger.js')
+      const createLoggerMod = await import('#/logger.ts')
       const createLoggerMock = vi.mocked(createLoggerMod.default)
       const loggerInstance = createLoggerMock.mock.results[0]?.value as { error: ReturnType<typeof vi.fn> }
       expect(loggerInstance?.error).toHaveBeenCalled()

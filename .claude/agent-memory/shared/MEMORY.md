@@ -35,7 +35,7 @@
 - [pnpm override needs pnpm-workspace.yaml in every Dockerfile prod stage](dep_override_dockerfile_workspace.md) — else ERR_PNPM_LOCKFILE_CONFIG_MISMATCH; verify with docker build not just pnpm test
 - [vite vulns GHSA-fx2h-pf6j-xcff + GHSA-v6wh-96g9-6wx3](vuln_vite_GHSA-fx2h-pf6j-xcff.md) — override doesn't fix peer dep vulns; add vite as direct devDep in telemetry-backend instead
 - [coreutils CVEs in the dhi hardened base](vuln_coreutils_dhi_base.md) — 3 Scout findings, no fix in any Alpine branch, unreachable (no shell, node-only runtime); base bump does not help
-- [tsc-alias → #/* subpath imports](dep_subpath_imports_braces.md) — removed for unfixable braces vuln; src runners need `--conditions=development` (after `watch`)
+- [Native TS execution + #/* imports](dep_subpath_imports_braces.md) — `node src/index.ts`, no build/tsx; erasableSyntaxOnly (no param properties), `.ts` import specifiers, `import type`
 - [Release/merge gotchas](reference_release_merge_gotchas.md) — non-gated MR needs manual main pipeline to release; cancelled release leaves Docker Hub tags; protected `next` is never deleted on merge
 - [SonarCloud only analyzes main](reference_sonar_branch_issues.md) — read issues via public API (no token); fix on next, verify after MR
 - [fnox outside repo cwd](tool_fnox_outside_repo_cwd.md) — 'age-plugin-pq unexpectedly died' = mise shim has no version outside the repo; run from repo root with -c

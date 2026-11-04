@@ -200,12 +200,14 @@ const pathToEnvVar = new Map(ENV_FIELDS.map((f) => [f.path, f.env]))
 
 /** Validation failure, already formatted for the user (env-var or config-file field names). */
 export class ConfigError extends Error {
-  constructor(
-    readonly heading: string,
-    readonly details: readonly string[],
-  ) {
+  readonly heading: string
+  readonly details: readonly string[]
+
+  constructor(heading: string, details: readonly string[]) {
     super(`${heading}\n${details.map((d) => `  - ${d}`).join('\n')}`)
     this.name = 'ConfigError'
+    this.heading = heading
+    this.details = details
   }
 }
 

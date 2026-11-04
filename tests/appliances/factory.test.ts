@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { Comfort600Appliance } from '#/appliances/comfort600.js'
-import { createAppliance, getSupportedModels } from '#/appliances/factory.js'
-import type { ApplianceInfo, ApplianceStub } from '#/types.js'
+import { Comfort600Appliance } from '#/appliances/comfort600.ts'
+import { createAppliance, getSupportedModels } from '#/appliances/factory.ts'
+import type { ApplianceInfo, ApplianceStub } from '#/types.d.ts'
 
 const mockStub: ApplianceStub = {
   applianceId: 'test-123',

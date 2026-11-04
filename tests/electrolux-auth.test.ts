@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ElectroluxAuth } from '#/electrolux-auth.js'
+import { ElectroluxAuth } from '#/electrolux-auth.ts'
 
-vi.mock('#/logger.js', () => ({
+vi.mock('#/logger.ts', () => ({
   default: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 

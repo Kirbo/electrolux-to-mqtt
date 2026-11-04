@@ -24,16 +24,20 @@ export interface HttpResponse {
 }
 
 export class HttpError extends Error {
-  constructor(
-    message: string,
-    readonly method: string,
-    readonly url: string,
-    readonly status?: number,
-    readonly statusText?: string,
-    readonly data?: unknown,
-  ) {
+  readonly method: string
+  readonly url: string
+  readonly status: number | undefined
+  readonly statusText: string | undefined
+  readonly data: unknown
+
+  constructor(message: string, method: string, url: string, status?: number, statusText?: string, data?: unknown) {
     super(message)
     this.name = 'HttpError'
+    this.method = method
+    this.url = url
+    this.status = status
+    this.statusText = statusText
+    this.data = data
   }
 
   /** e.g. `Request failed with status code 404 (404 Not Found) [GET /api/v1/x] - {"error":"…"}` */

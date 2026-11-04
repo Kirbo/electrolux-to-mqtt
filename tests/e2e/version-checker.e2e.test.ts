@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { httpRequest } from '#/http.js'
+import { httpRequest } from '#/http.ts'
 
 const isE2EEnabled = process.env.E2E === 'true' || process.env.E2E_TEST === 'true'
 const NOTIFY_TOPIC = process.env.E2M_NTFY_TOPIC || 'vB66ozQaRiqhTE9j'

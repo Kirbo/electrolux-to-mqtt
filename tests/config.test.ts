@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { type AppConfig, ConfigError, configFromEnv, loadConfig, parseConfigFile } from '#/config.js'
+import { type AppConfig, ConfigError, configFromEnv, loadConfig, parseConfigFile } from '#/config.ts'
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -405,7 +405,7 @@ describe('loadConfig', () => {
 describe('default export', () => {
   it('loads the configured file at import', async () => {
     vi.resetModules()
-    const { default: config } = await import('#/config.js')
+    const { default: config } = await import('#/config.ts')
     // tests/config.yml (CONFIG_FILE_OVERRIDE from vitest.config.ts)
     expect(config.electrolux.countryCode).toBe('US')
   })
@@ -417,7 +417,7 @@ describe('default export', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       vi.resetModules()
-      await import('#/config.js')
+      await import('#/config.ts')
 
       expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
       expect(errorSpy.mock.calls.some((call) => String(call[0]).includes('mqtt.qos'))).toBe(true)

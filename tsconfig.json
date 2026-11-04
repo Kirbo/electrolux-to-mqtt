@@ -4,9 +4,13 @@
     "lib": ["ES2022", "esnext.disposable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "dist",
-    "rootDir": "src",
-    "customConditions": ["development"],
+    // Node runs src/*.ts directly (built-in type stripping) — tsc only type-checks.
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    // Only syntax Node can strip: no enums, namespaces or constructor parameter properties.
+    "erasableSyntaxOnly": true,
+    // Type-only imports must say `import type` — Node erases them; a plain import of a type would fail at runtime.
+    "verbatimModuleSyntax": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { BaseAppliance } from '#/appliances/base.js'
-import { deriveTelemetrySessionId, getOsInfo, mapOsName, summarizeAppliances } from '#/telemetry.js'
+import type { BaseAppliance } from '#/appliances/base.ts'
+import { deriveTelemetrySessionId, getOsInfo, mapOsName, summarizeAppliances } from '#/telemetry.ts'
 
 vi.mock('node:os', () => ({
   default: {

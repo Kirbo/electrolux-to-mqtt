@@ -12,4 +12,4 @@ TypeScript 7 is the native (Go-port, "tsgo") compiler rewrite. 7.0.2 was adopted
 
 **Why:** ships per-platform static Go binaries as optional/regular deps (`@typescript/typescript-linux-x64`, `-linux-arm64`, …) — no cgo/glibc dependency, so Alpine (musl) Docker builds work like esbuild's binaries do.
 
-**How to apply:** on future TS majors, re-verify the same checklist: both root tsconfigs, `#/*` imports resolving in `dist/`, backend build, and Docker CI (multi-arch needs linux-x64 + linux-arm64 binaries present in the lockfile). Related: [[dep-atypes-node-pin]] (@types/node stays pinned to the Node runtime major regardless of TS version).
+**How to apply:** on future TS majors, re-verify the same checklist: both root tsconfigs (the bridge is typecheck-only now — Node runs `src/*.ts`, see [[dep_subpath_imports_braces]]), backend build, and Docker CI (multi-arch needs linux-x64 + linux-arm64 binaries present in the lockfile). Related: [[dep-atypes-node-pin]] (@types/node stays pinned to the Node runtime major regardless of TS version).

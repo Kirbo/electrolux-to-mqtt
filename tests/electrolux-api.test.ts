@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
-import { ElectroluxApi } from '#/electrolux-api.js'
+import { ElectroluxApi } from '#/electrolux-api.ts'
 import {
   mockApplianceInfoResponse,
   mockApplianceStateResponse,
   mockAppliancesResponse,
-} from './fixtures/api-responses.js'
+} from './fixtures/api-responses.ts'
 
 const log = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
-vi.mock('#/logger.js', () => ({ default: () => log }))
+vi.mock('#/logger.ts', () => ({ default: () => log }))
 
 const fetchMock = vi.fn<typeof fetch>()
 vi.stubGlobal('fetch', fetchMock)

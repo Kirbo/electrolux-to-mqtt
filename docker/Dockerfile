@@ -26,55 +26,33 @@ ARG VERSION=development
 ARG BUILD_DATE
 ARG VCS_REF
 
-################## Create the build image
+################## Stamp the version
+# Node runs src/*.ts directly (built-in type stripping) — there is no compile step.
+# This stage only writes the release version into package.json (read at runtime).
 FROM ${NODE_IMAGE}-dev AS builder
 
-# Define build arguments for this stage
 ARG VERSION
 ARG NODE_IMAGE
-ARG COREPACK_VERSION
 
-# Set environment variables from build args (baked in at build time)
-ENV VERSION=${VERSION}
-ENV NODE_IMAGE=${NODE_IMAGE}
-ENV NODE_ENV=production
-
-# Set working directory
 WORKDIR /app
 
-# Copy only dependency manifests first for better layer caching.
 # CHANGELOG.m[d] glob: the file is a CI artifact (generate changelog job) and does
 # not exist in a fresh clone — the glob makes it optional so local builds work.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml CHANGELOG.m[d] ./
+COPY package.json CHANGELOG.m[d] ./
 
-# Install dependencies (including dev dependencies for building).
-# Node 25+ no longer bundles Corepack: install COREPACK_VERSION (versions.env) first
-# (npm is still bundled; scripts/bootstrap-pnpm.sh does the same in CI).
-RUN PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager") && \
-  npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
-  corepack enable && \
-  corepack install && \
-  echo "====================================================================================" && \
-  echo "                Application Version:          ${VERSION}" && \
-  echo "                Node Image:                   ${NODE_IMAGE}" && \
-  echo "                Package manager:              ${PACKAGE_MANAGER}" && \
-  echo "====================================================================================" && \
-  DOCKER_BUILD=1 pnpm install --frozen-lockfile --config.scripts-prepend-node-path=true
-
-# Copy source code
-COPY . .
-
-# Update version and build
 RUN if [ -n "${VERSION}" ]; then \
   npm pkg set version="${VERSION}"; \
   fi && \
-  pnpm run build
+  echo "====================================================================================" && \
+  echo "                Application Version:          ${VERSION}" && \
+  echo "                Node Image:                   ${NODE_IMAGE}" && \
+  echo "===================================================================================="
 
 
 
 
 
-################## Create the purge image
+################## Install production dependencies + the source
 FROM ${NODE_IMAGE}-dev AS purge
 
 # Set environment for production
@@ -87,15 +65,18 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
-# Install only production dependencies
+# Install only production dependencies.
+# Node 25+ no longer bundles Corepack: install COREPACK_VERSION (versions.env) first
+# (npm is still bundled; scripts/bootstrap-pnpm.sh does the same in CI).
 RUN npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?COREPACK_VERSION build-arg is required}" && \
   corepack enable && \
   corepack install && \
+  echo "                Package manager:              $(node -p "require('./package.json').packageManager")" && \
   DOCKER_BUILD=1 pnpm install --frozen-lockfile --prod --config.scripts-prepend-node-path=true
 
-# Copy built application from builder (CHANGELOG optional — absent in local builds)
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json /app/CHANGELOG.m[d] ./
+# The TypeScript source runs as-is (CHANGELOG optional — absent in local builds)
+COPY src ./src
+COPY --from=builder /app/CHANGELOG.m[d] ./
 
 
 
@@ -151,7 +132,7 @@ STOPSIGNAL SIGTERM
 # HEALTH_CHECK_ENABLED env var, silently no-oping for YAML-configured installs.
 # Checks every 2s during the 5s startup period, then every 30s thereafter.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=5s --start-interval=2s \
-  CMD ["node", "-e", "import('./dist/health.js').then(m=>{if(!m.healthCheckEnabled)process.exit(0);process.exit(m.isHealthy(60)?0:1)}).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "import('./src/health.ts').then(m=>{if(!m.healthCheckEnabled)process.exit(0);process.exit(m.isHealthy(60)?0:1)}).catch(()=>process.exit(1))"]
 
 # Run the application
-CMD ["node", "dist/index.js"]
+CMD ["node", "src/index.ts"]

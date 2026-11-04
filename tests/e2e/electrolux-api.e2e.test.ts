@@ -33,12 +33,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createAppliance } from '#/appliances/factory.js'
-import config from '#/config.js'
-import { ElectroluxApi } from '#/electrolux-api.js'
-import { ElectroluxAuth } from '#/electrolux-auth.js'
-import createLogger from '#/logger.js'
-import type { ApplianceInfo, ApplianceStub } from '#/types.js'
+import { createAppliance } from '#/appliances/factory.ts'
+import config from '#/config.ts'
+import { ElectroluxApi } from '#/electrolux-api.ts'
+import { ElectroluxAuth } from '#/electrolux-auth.ts'
+import createLogger from '#/logger.ts'
+import type { ApplianceInfo, ApplianceStub } from '#/types.d.ts'
 
 const log = createLogger('e2e')
 

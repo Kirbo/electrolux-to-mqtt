@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Cache } from '#/cache.js'
-import type { NormalizedState } from '#/types/normalized.js'
+import { Cache } from '#/cache.ts'
+import type { NormalizedState } from '#/types/normalized.ts'
 
 describe('Cache', () => {
   const state = (overrides: Record<string, unknown> = {}) =>
@@ -194,14 +194,14 @@ describe('Cache', () => {
 
     it('should log debug messages when skipCacheLogging is false', async () => {
       vi.resetModules()
-      vi.doMock('#/config.js', () => ({
+      vi.doMock('#/config.ts', () => ({
         default: { logging: { skipCacheLogging: false } },
       }))
-      vi.doMock('#/logger.js', () => ({
+      vi.doMock('#/logger.ts', () => ({
         default: () => ({ debug: loggerDebugSpy, info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
       }))
 
-      const { cache } = await import('#/cache.js')
+      const { cache } = await import('#/cache.ts')
 
       cache.setState('appliance-1', { applianceId: 'appliance-1', mode: 'cool' } as NormalizedState)
       expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('Set "appliance-1:state"'), expect.anything())

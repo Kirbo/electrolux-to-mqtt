@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { describeError, HttpError, httpRequest } from '#/http.js'
+import { describeError, HttpError, httpRequest } from '#/http.ts'
 
 const fetchMock = vi.fn<typeof fetch>()
 vi.stubGlobal('fetch', fetchMock)

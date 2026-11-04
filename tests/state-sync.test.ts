@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
-import type { BaseAppliance } from '#/appliances/base.js'
-import { Cache } from '#/cache.js'
-import type { IMqtt } from '#/mqtt.js'
-import { type ApplianceStateApi, StateSync, type StateSyncSettings } from '#/state-sync.js'
-import type { NormalizedState } from '#/types/normalized.js'
-import type { Appliance } from '#/types.js'
-import { mockApplianceStateResponse } from './fixtures/api-responses.js'
+import type { BaseAppliance } from '#/appliances/base.ts'
+import { Cache } from '#/cache.ts'
+import type { IMqtt } from '#/mqtt.ts'
+import { type ApplianceStateApi, StateSync, type StateSyncSettings } from '#/state-sync.ts'
+import type { NormalizedState } from '#/types/normalized.ts'
+import type { Appliance } from '#/types.d.ts'
+import { mockApplianceStateResponse } from './fixtures/api-responses.ts'
 
 const log = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
-vi.mock('#/logger.js', () => ({ default: () => log }))
+vi.mock('#/logger.ts', () => ({ default: () => log }))
 
 const ID = 'test-appliance-123'
 

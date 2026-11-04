@@ -1,6 +1,6 @@
 import fs from 'node:fs'
-import config from './config.js'
-import createLogger from './logger.js'
+import config from './config.ts'
+import createLogger from './logger.ts'
 
 const logger = createLogger('health')
 

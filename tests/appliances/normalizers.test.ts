@@ -19,8 +19,8 @@ import {
   normalizeTemperatureUnit,
   normalizeUpgradeState,
   parseMqttCommand,
-} from '#/appliances/normalizers.js'
-import type { Appliance } from '#/types.js'
+} from '#/appliances/normalizers.ts'
+import type { Appliance } from '#/types.d.ts'
 
 describe('normalizers', () => {
   describe('denormalizeClimateMode', () => {

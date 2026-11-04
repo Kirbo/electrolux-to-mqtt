@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import os from 'node:os'
-import type { BaseAppliance } from './appliances/base.js'
+import type { BaseAppliance } from './appliances/base.ts'
 
 /**
  * Derive a stable, GUID-shaped Aptabase session id for this install.

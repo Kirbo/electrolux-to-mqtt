@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalStringify } from '#/canonical-stringify.js'
+import { canonicalStringify } from '#/canonical-stringify.ts'
 
 describe('canonicalStringify', () => {
   it('should sort object keys recursively', () => {

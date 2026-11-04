@@ -8,7 +8,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 
 | Command | What |
 |---|---|
-| `pnpm dev` | `tsx watch --conditions=development src/index.ts` (condition maps `#/*` imports to `src/`) |
+| `pnpm dev` | `node --watch src/index.ts` — Node runs the TypeScript directly (built-in type stripping); there is no build step, `tsc` only type-checks |
 | `pnpm dev:docker` / `pnpm backend:docker` | Rebuild + run local / telemetry-backend compose stack |
 | `pnpm check` | Biome lint + format (auto-fix) |
 | `pnpm typecheck` | `tsc --noEmit` |
@@ -55,6 +55,7 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 - Never `any`. Use `unknown` + type guards. No `as` without runtime check. No `// @ts-ignore`. No non-null assertions (`!`).
 - Keep `strict: true`, `noUncheckedIndexedAccess: true`. `telemetry-backend/tsconfig.json` must maintain the same settings — don't let the backend drift weaker.
 - Validate state/config files from disk, don't cast blindly.
+- Node runs `src/*.ts` directly (type stripping): erasable syntax only — no enums, namespaces or constructor parameter properties; imports use `.ts` specifiers (`#/types.d.ts` for the raw API types); type-only imports are `import type`. tsconfig enforces all three.
 
 ### Code quality
 - No `console.log` in `src/` — use `src/logger.ts` (pino). Exceptions: pre-pino bootstrap files (`config.ts`, `logger.ts`). `telemetry-backend/` uses `console.*` directly.

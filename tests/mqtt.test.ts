@@ -54,7 +54,7 @@ const MQTT_SETTINGS = {
 }
 
 // Mock logger — captures logger spies so tests can assert on them
-vi.mock('#/logger.js', () => ({
+vi.mock('#/logger.ts', () => ({
   default: vi.fn(() => {
     loggerWarnSpy = vi.fn()
     loggerInfoSpy = vi.fn()
@@ -70,8 +70,8 @@ vi.mock('#/logger.js', () => ({
 }))
 
 describe('Mqtt', () => {
-  let Mqtt: typeof import('#/mqtt.js').default
-  let mqttInstance: InstanceType<typeof import('#/mqtt.js').default>
+  let Mqtt: typeof import('#/mqtt.ts').default
+  let mqttInstance: InstanceType<typeof import('#/mqtt.ts').default>
 
   beforeEach(async () => {
     // Reset modules so topicHandlers Map and module-level client state is fresh.
@@ -84,7 +84,7 @@ describe('Mqtt', () => {
     mockClient = createMockClient()
 
     // Dynamically import the actual module after mocks are set up
-    const module = await import('#/mqtt.js')
+    const module = await import('#/mqtt.ts')
     Mqtt = module.default
     mqttInstance = new Mqtt(MQTT_SETTINGS, 'homeassistant')
   })
@@ -94,7 +94,7 @@ describe('Mqtt', () => {
       vi.resetModules()
       const mqttLib = await import('mqtt')
       vi.mocked(mqttLib.default.connect).mockClear()
-      await import('#/mqtt.js')
+      await import('#/mqtt.ts')
 
       expect(mqttLib.default.connect).not.toHaveBeenCalled()
     })
