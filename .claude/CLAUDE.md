@@ -2,7 +2,7 @@
 
 ## Project
 
-Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest. Standalone `telemetry-backend/` is a single HTTP service that generates SVG badges from Aptabase ClickHouse (written to a disk volume, served statically by the reverse proxy) and forwards legacy `/telemetry` POSTs to Aptabase — delete the ingest half once `source=legacy` traffic drops to ~0.
+Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant via MQTT auto-discovery. pnpm, Biome, Vitest.
 
 ## Commands
 
@@ -10,9 +10,6 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 |---|---|
 | `pnpm dev` | `node --watch src/index.ts` — Node runs the TypeScript directly (built-in type stripping); there is no build step, `tsc` only type-checks |
 | `pnpm dev:docker` / `pnpm backend:docker` | Rebuild + run local / telemetry-backend compose stack |
-| `pnpm check` | Biome lint + format (auto-fix) |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | Vitest + coverage (all suites under `tests/`) |
 | `pnpm test:e2e` | `tests/e2e/*.test.ts` with `E2E_TEST=true`. Override ntfy topic via `E2M_NTFY_TOPIC` |
 | `pnpm sonar` | SonarQube scanner under `fnox exec -P sonar` (token from fnox, see `docs/SECRETS.md`). Skips on any branch but `main` (free tier) |
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
@@ -20,30 +17,14 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
 | `pnpm sync:versions` | Derive the `package.json` version fields (`engines.node` + `@types/node` in both packages, `packageManager`, `alpineVersion`, `corepackVersion`) from `versions.env`, re-resolving lockfiles (also: `mise run sync-versions`) |
 
-Single test: `pnpm vitest run tests/mqtt.test.ts`, or filter: `pnpm vitest run -t "pattern"`.
+## Architecture — what the code doesn't tell you
 
-Telemetry backend separate pnpm package — `cd telemetry-backend && pnpm test` / `pnpm typecheck` / `pnpm build`.
-
-## Architecture
-
-Single long-running process. `src/index.ts` wires `ElectroluxAuth` → `ElectroluxApi` → `StateSync`, `Mqtt`, `Orchestrator`, delegates to orchestrator main loop.
-
-- **`Orchestrator`** — polls appliances, periodic discovery, subscribes command topics, clean shutdown. Holds mutable runtime state (with `Cache`).
-- **`ElectroluxAuth`** — token lifecycle: account password login, refresh, exponential-backoff retries until success; callers just `await getAccessToken()` (memory-only tokens, re-authenticates on startup).
-- **`ElectroluxApi`** — typed REST client over `src/http.ts` (built-in `fetch`, per-request timeout). Resolves validated bodies or `undefined` after logging; 403 → one forced refresh + retry, 429 → rate-limit advice. No MQTT, no state.
-- **`StateSync`** — polls, diffs against the cache, publishes changes, sends commands with immediate feedback / revert. The state cache holds **normalized state only** (`cache.getState` / `setState`).
-- **`Mqtt`** — thin broker wrapper behind `IMqtt` interface (testable). Discovery payloads from appliance instance, not MQTT layer.
-- **`appliances/`** — `BaseAppliance` abstract → `createAppliance()` factory function. Each owns discovery config, normalization, command denormalization.
-- **`config.ts`** — Zod schemas. YAML or env vars, never mixed. `envSchema` coerces/defaults; `configSchema` validates.
-- **`cache.ts`** — state cache. Orchestrator diffs vs cache for MQTT publishing.
-- **`version-checker.ts`** — periodic release check + ntfy on the user's `checkInterval`, plus anon telemetry to self-hosted Aptabase on its **own fixed 15-min cadence** (`TELEMETRY_PING_INTERVAL_MS`, decoupled from `checkInterval`). `src/telemetry.ts` builds the event (OS/arch + appliance model(s)/count) and `deriveTelemetrySessionId` — the stable per-install session id = HMAC-SHA256(key = Electrolux API key, msg = username) formatted as a UUID; keyed so the id cannot be confirmed from an email address (an unkeyed hash could). Legacy bridges still reach the backend's `userHashToSessionId` (plain `sha256(username)`), so a legacy→direct upgrade gets a new id once. The badge counts distinct `session_id` over a rolling 26h window.
-- **`health.ts`** — Docker HEALTHCHECK file touch. Best-effort (read-only fs safe).
-
-`telemetry-backend/` standalone pnpm package. A single HTTP service (Node built-in `http`, no Express) that:
-1. Generates badge artifacts — every `BADGE_INTERVAL_SECONDS` (default 300) it reads aggregates from self-hosted Aptabase ClickHouse (`ClickHouseLike` / `FakeClickHouse` in tests) and writes `users.svg`, `stable.svg`, `beta.svg`, `telemetry.json` to `OUTPUT_DIR`, which the reverse proxy serves statically (incl. `/` → `302 /users.svg`). `peaks.ts` samples the count each cycle into hourly-max buckets persisted as `peaks-history.json` (same dir) and reports trailing-window peaks (`24h`/`7d`/`30d`/`182d`/`365d`) under `peaks` in `telemetry.json` plus one `peak-<key>.svg` badge each (root README embeds `30d` + `365d`). Its own routes: `GET /telemetry` (in-memory JSON, 503 until the first cycle completes), `GET /stable`·`/beta` (302 to the latest release page), `GET /health`. `regenerate-badges.ts` is the one-shot CI variant run after a release.
-2. Receives legacy `POST /telemetry {userHash, version, channel}` from old bridge versions and forwards them to Aptabase as `version_check` events (`AptabaseForwarder` interface, testable with a fake). Delete the ingest half once `source=legacy` traffic drops to ~0.
-
-API type unions in `src/types.d.ts` + `src/types/normalized.ts` sync with E2E fixtures under `tests/e2e/snapshots/<model>/`. The `/engineer` skill holds the per-change-type file checklists; the `/audit` + `/maintain` skills hold the full audit + dependency workflows.
+- `src/index.ts` wires `ElectroluxAuth` → `ElectroluxApi` → `StateSync`, `Mqtt`, `Orchestrator`.
+- The state cache holds **normalized state only** (`cache.getState` / `setState`) — every republish sends it as-is.
+- Discovery payloads come from the appliance instance (`generateAutoDiscoveryConfig`), never the MQTT layer.
+- Telemetry pings on its own fixed 15-min cadence, decoupled from `checkInterval`. Session id = HMAC-SHA256(key = API key, msg = username) as a UUID — keyed so it can't be confirmed from an email; the badge counts distinct `session_id` over a rolling 26h window.
+- `telemetry-backend/` (own pnpm package: `cd telemetry-backend && pnpm test|typecheck|build`) = badge generator + legacy `POST /telemetry` forwarder. Legacy bridges map to plain `sha256(username)`, so a legacy→direct upgrade gets a new id once. Delete the ingest half once `source=legacy` traffic drops to ~0.
+- Raw API unions in `src/types.d.ts` (pre-normalization) and `src/types/normalized.ts` must match `tests/e2e/snapshots/<model>/`. File checklists: `/engineer`; audits: `/audit`; deps: `/maintain`.
 
 ## Subagents
 
@@ -80,7 +61,7 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 - Docs (`*.md`), examples, config files must sync with code.
 - **Config options**: add/modify/delete → reflect in `config.example.yml`, both compose examples, all four README locations (env var table, `docker run`, compose snippet, Portainer inline YAML). Full checklist in the `/engineer` skill (§ Config).
 - Follow the file checklists in the `/engineer` skill for code changes.
-- **Version source: `versions.env`** (repo root) is the single source of truth for every toolchain/base-image version — `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (shipped in the images) and `FNOX_VERSION`, `AGE_VERSION` (+ sha256 pins for CI), `GIT_CLIFF_VERSION`, `RENOVATE_VERSION` (dev/CI only). Plain `KEY=value` lines (each annotated with a `# renovate:` comment above it for Renovate), read under the SAME names everywhere: mise (`[env] _.file`, `[tools]` via `{{ env.* }}`), CI (job `initialise variables` → dotenv), Dockerfiles/compose (required build-args, no defaults, loud failure — every Node image, dhi or stock, is `<NODE_MAJOR>-alpine<ALPINE_VERSION>`), scripts/hooks/deploy jobs (`set -a; . ./versions.env; set +a`). After editing it run `pnpm sync:versions`: it writes the derived `package.json` copies (`engines.node` + `@types/node` in both packages, `packageManager` with Corepack's hash, `alpineVersion`, `corepackVersion`) — they exist because `package.json` is the release-gated path, so an image-affecting bump cuts a release and a dev-tool bump does not. CI job `versions in sync` guards drift. Never hand-edit a derived value. Node 25+ bundles no Corepack: images/CI install `COREPACK_VERSION` via npm (`scripts/bootstrap-pnpm.sh`, the Dockerfiles). `mise.toml` holds no versions, only `min_version` (oldest supported mise).
+- **Version source: `versions.env`** is the single source of truth for every toolchain/base-image version (plain `KEY=value`, each with a `# renovate:` annotation above it). After editing it run `pnpm sync:versions`; never hand-edit a derived `package.json` value (CI `versions in sync` guards drift) — those copies exist because `package.json` is the release-gated path, so an image-affecting bump cuts a release and a dev-tool bump does not. Dockerfiles/compose take same-named build-args with no defaults. Mechanics: `/maintain`, `docs/CONTRIBUTING.md` § Version sources.
 - `@types/node` must never lead the Node runtime major. A version range cannot enforce that (`pnpm update --latest` rewrites the spec whatever it declares), so it is listed under `updateConfig.ignoreDependencies` in **both** `pnpm-workspace.yaml` files and `sync-versions.sh` is its only writer. Never run `pnpm update --latest @types/node` — naming a package explicitly overrides the ignore list.
 - When `.claude/skills/` change, update `docs/AI_DEVELOPMENT.md`.
 - `.gitignore` must cover all generated/cached artifacts.
