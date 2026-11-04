@@ -291,6 +291,38 @@ describe('logger', () => {
       })
     })
 
+    it('should keep the cause of an Error that cannot take err (cause is non-enumerable)', async () => {
+      const spies = await loadWithPinoSpies()
+      const root = new Error('socket hang up')
+      const second = new Error('request failed', { cause: root })
+      spies.createLogger('test').error('Two failures:', new Error('first'), second)
+
+      const [fields] = spies.error.mock.calls[0] ?? []
+      // A nested Error cause is flattened too — left as an Error it would print as `{}` again.
+      expect(fields).toMatchObject({
+        data: { message: 'request failed', cause: { type: 'Error', message: 'socket hang up' } },
+      })
+    })
+
+    it('should keep a non-Error cause as-is', async () => {
+      const spies = await loadWithPinoSpies()
+      const second = new Error('request failed', { cause: { status: 503 } })
+      spies.createLogger('test').error('Two failures:', new Error('first'), second)
+
+      const [fields] = spies.error.mock.calls[0] ?? []
+      expect(fields).toMatchObject({ data: { message: 'request failed', cause: { status: 503 } } })
+    })
+
+    it('should stop at a cyclic Error cause instead of recursing forever', async () => {
+      const spies = await loadWithPinoSpies()
+      const looped = new Error('looped')
+      looped.cause = looped
+      spies.createLogger('test').error('Two failures:', new Error('first'), looped)
+
+      const [fields] = spies.error.mock.calls[0] ?? []
+      expect(fields).toMatchObject({ data: { message: 'looped', cause: '[Circular]' } })
+    })
+
     it('should merge two plain objects whose keys do not clash', async () => {
       const spies = await loadWithPinoSpies()
       spies.createLogger('test').info('Both', { a: 1 }, { b: 2 })

@@ -87,13 +87,17 @@ const freeDataKey = (fields: Fields): string => {
 }
 
 // pino serializes only the `err` key as an error; any other Error would print as `{}`
-// (message and stack are non-enumerable), so extra Errors are flattened like pino's err.
-const serializeError = (error: Error): Fields => ({
-  ...error,
-  type: error.name,
-  message: error.message,
-  stack: error.stack,
-})
+// (message, stack and cause are non-enumerable), so extra Errors are flattened like pino's
+// err. An Error cause is flattened the same way (a cycle ends as '[Circular]', like pino);
+// any other cause is kept as-is.
+const serializeError = (error: Error, seen = new Set<Error>()): Fields => {
+  seen.add(error)
+  const fields: Fields = { ...error, type: error.name, message: error.message, stack: error.stack }
+  const { cause } = error
+  if (cause instanceof Error) fields.cause = seen.has(cause) ? '[Circular]' : serializeError(cause, seen)
+  else if (cause !== undefined) fields.cause = cause
+  return fields
+}
 
 const addObject = (fields: Fields, value: object): void => {
   if (value instanceof Error) {
