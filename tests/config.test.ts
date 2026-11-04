@@ -1,13 +1,24 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { type AppConfig, ConfigError, configFromEnv, loadConfig, parseConfigFile } from '#/config.js'
 
-describe('config', () => {
-  const originalEnv = process.env
-  // Use config.test.yml specifically for config.test.ts manipulation
-  const configPath = path.resolve(process.cwd(), 'config.test.yml')
-  const defaultValidConfig = `mqtt:
+// ── Fixtures ────────────────────────────────────────────────────────────────
+
+const REQUIRED_ENV = {
+  MQTT_URL: 'mqtt://test-broker',
+  MQTT_USERNAME: 'test-user',
+  MQTT_PASSWORD: 'test-pass',
+  ELECTROLUX_API_KEY: 'test-key',
+  ELECTROLUX_USERNAME: 'test@example.com',
+  ELECTROLUX_PASSWORD: 'electrolux-pass',
+  ELECTROLUX_COUNTRY_CODE: 'FI',
+} as const
+
+const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => ({ ...REQUIRED_ENV, ...extra })
+
+const MINIMAL_YAML = `mqtt:
   url: mqtt://localhost
   username: test
   password: test
@@ -17,2379 +28,394 @@ electrolux:
   password: test
   countryCode: FI
 homeAssistant:
-  autoDiscovery: true`
+  autoDiscovery: true
+`
 
-  beforeAll(() => {
-    // Clean up any existing config.test.yml
-    if (fs.existsSync(configPath)) {
-      fs.unlinkSync(configPath)
-    }
+/** MINIMAL_YAML with extra lines appended to one top-level section (or a new section). */
+const yamlWith = (section: string, lines: string): string => {
+  const indented = lines
+    .trim()
+    .split('\n')
+    .map((l) => `  ${l}`)
+    .join('\n')
+  if (MINIMAL_YAML.includes(`${section}:\n`)) {
+    return MINIMAL_YAML.replace(`${section}:\n`, `${section}:\n${indented}\n`)
+  }
+  return `${MINIMAL_YAML}${section}:\n${indented}\n`
+}
+
+/** Assert fn throws a ConfigError whose detail lines mention `label` (and return it). */
+const expectConfigError = (fn: () => unknown, label: string): ConfigError => {
+  let caught: unknown
+  try {
+    fn()
+  } catch (error) {
+    caught = error
+  }
+  expect(caught).toBeInstanceOf(ConfigError)
+  const configError = caught as ConfigError
+  expect(configError.details.some((d) => d.startsWith(`${label}:`))).toBe(true)
+  return configError
+}
+
+let tmpDir: string
+beforeAll(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2m-config-'))
+})
+afterAll(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+})
+
+const writeTmp = (name: string, content: string): string => {
+  const file = path.join(tmpDir, name)
+  fs.writeFileSync(file, content, 'utf8')
+  return file
+}
+
+// Every default the schema promises, checked for both config sources.
+const expectDefaults = (config: AppConfig) => {
+  expect(config.mqtt).toMatchObject({
+    clientId: 'electrolux-comfort600',
+    topicPrefix: 'electrolux_',
+    retain: false,
+    qos: 2,
+  })
+  expect(config.electrolux).toMatchObject({
+    refreshInterval: 30,
+    applianceDiscoveryInterval: 300,
+    renewTokenBeforeExpiry: 60,
+    commandStateDelaySeconds: 30,
+    applianceRemovalGracePeriodMinutes: 30,
+    apiTimeoutSeconds: 25,
+  })
+  expect(config.homeAssistant).toMatchObject({
+    autoDiscovery: true,
+    revertStateOnRejection: false,
+    statusTopic: 'homeassistant/status',
+    birthPayload: 'online',
+    birthRepublish: true,
+  })
+  expect(config.logging).toEqual({
+    logLevel: 'info',
+    showChanges: true,
+    ignoredKeys: [],
+    showVersionNumber: true,
+    skipCacheLogging: true,
+    showTimestamp: true,
+  })
+  expect(config.versionCheck).toEqual({ checkInterval: 3600, notifyGracePeriod: 3600 })
+  expect(config.versionCheck.updateChannel).toBeUndefined()
+  expect(config.healthCheck).toEqual({ enabled: true, filePath: '/tmp/e2m-health', unHealthyRestartMinutes: 45 })
+  expect(config.telemetryEnabled).toBe(true)
+}
+
+// ── Env-var mode ────────────────────────────────────────────────────────────
+
+describe('configFromEnv', () => {
+  it('builds the config from the required variables and applies every default', () => {
+    const config = configFromEnv(env())
+
+    expect(config.mqtt).toMatchObject({ url: 'mqtt://test-broker', username: 'test-user', password: 'test-pass' })
+    expect(config.electrolux).toMatchObject({
+      apiKey: 'test-key',
+      username: 'test@example.com',
+      password: 'electrolux-pass',
+      countryCode: 'FI',
+    })
+    expectDefaults(config)
   })
 
-  afterAll(() => {
-    // Clean up config.test.yml after all tests
-    if (fs.existsSync(configPath)) {
-      try {
-        fs.unlinkSync(configPath)
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
+  it('reports every missing required variable by its env name', () => {
+    const { MQTT_URL: _url, MQTT_USERNAME: _user, ...rest } = REQUIRED_ENV
+    const error = expectConfigError(() => configFromEnv(rest), 'MQTT_URL')
+
+    expect(error.heading).toBe('Environment variable validation failed:')
+    expect(error.details.some((d) => d.startsWith('MQTT_USERNAME:'))).toBe(true)
   })
 
-  beforeEach(() => {
-    vi.resetModules()
-    process.env = {
-      ...originalEnv,
-      NODE_ENV: 'test',
-      VITEST: 'true',
-      CONFIG_FILE_OVERRIDE: 'config.test.yml',
-    }
-    // Ensure a valid config exists before each test
-    if (!fs.existsSync(configPath)) {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-    }
+  it.each([
+    ['MQTT_CLIENT_ID', 'custom-client', (c: AppConfig) => c.mqtt.clientId, 'custom-client'],
+    ['MQTT_TOPIC_PREFIX', 'custom_', (c: AppConfig) => c.mqtt.topicPrefix, 'custom_'],
+    ['MQTT_RETAIN', 'true', (c: AppConfig) => c.mqtt.retain, true],
+    ['MQTT_QOS', '1', (c: AppConfig) => c.mqtt.qos, 1],
+    ['ELECTROLUX_REFRESH_INTERVAL', '60', (c: AppConfig) => c.electrolux.refreshInterval, 60],
+    ['ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL', '600', (c: AppConfig) => c.electrolux.applianceDiscoveryInterval, 600],
+    ['ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY', '120', (c: AppConfig) => c.electrolux.renewTokenBeforeExpiry, 120],
+    ['ELECTROLUX_COMMAND_STATE_DELAY_SECONDS', '45', (c: AppConfig) => c.electrolux.commandStateDelaySeconds, 45],
+    [
+      'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
+      '90',
+      (c: AppConfig) => c.electrolux.applianceRemovalGracePeriodMinutes,
+      90,
+    ],
+    ['ELECTROLUX_API_TIMEOUT_SECONDS', '30', (c: AppConfig) => c.electrolux.apiTimeoutSeconds, 30],
+    ['HOME_ASSISTANT_AUTO_DISCOVERY', 'false', (c: AppConfig) => c.homeAssistant.autoDiscovery, false],
+    [
+      'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
+      'true',
+      (c: AppConfig) => c.homeAssistant.revertStateOnRejection,
+      true,
+    ],
+    ['HA_STATUS_TOPIC', 'ha/birth/status', (c: AppConfig) => c.homeAssistant.statusTopic, 'ha/birth/status'],
+    ['HA_BIRTH_PAYLOAD', 'started', (c: AppConfig) => c.homeAssistant.birthPayload, 'started'],
+    ['HA_BIRTH_REPUBLISH', 'false', (c: AppConfig) => c.homeAssistant.birthRepublish, false],
+    ['LOG_LEVEL', 'debug', (c: AppConfig) => c.logging.logLevel, 'debug'],
+    ['LOGGING_SHOW_CHANGES', 'false', (c: AppConfig) => c.logging.showChanges, false],
+    ['LOGGING_IGNORED_KEYS', 'a.b, c ,d', (c: AppConfig) => c.logging.ignoredKeys, ['a.b', 'c', 'd']],
+    ['LOGGING_SHOW_VERSION_NUMBER', 'false', (c: AppConfig) => c.logging.showVersionNumber, false],
+    ['LOGGING_SKIP_CACHE_LOGGING', 'false', (c: AppConfig) => c.logging.skipCacheLogging, false],
+    ['LOGGING_SHOW_TIMESTAMP', 'false', (c: AppConfig) => c.logging.showTimestamp, false],
+    ['VERSION_CHECK_INTERVAL', '7200', (c: AppConfig) => c.versionCheck.checkInterval, 7200],
+    [
+      'VERSION_CHECK_NTFY_WEBHOOK_URL',
+      'https://ntfy.sh/topic',
+      (c: AppConfig) => c.versionCheck.ntfyWebhookUrl,
+      'https://ntfy.sh/topic',
+    ],
+    ['VERSION_CHECK_UPDATE_CHANNEL', 'beta', (c: AppConfig) => c.versionCheck.updateChannel, 'beta'],
+    ['VERSION_CHECK_UPDATE_CHANNEL', 'stable', (c: AppConfig) => c.versionCheck.updateChannel, 'stable'],
+    ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '0', (c: AppConfig) => c.versionCheck.notifyGracePeriod, 0],
+    ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '7200', (c: AppConfig) => c.versionCheck.notifyGracePeriod, 7200],
+    ['HEALTH_CHECK_ENABLED', 'false', (c: AppConfig) => c.healthCheck.enabled, false],
+    ['HEALTH_CHECK_FILE_PATH', '/data/health', (c: AppConfig) => c.healthCheck.filePath, '/data/health'],
+    ['HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES', '60', (c: AppConfig) => c.healthCheck.unHealthyRestartMinutes, 60],
+    ['E2M_TELEMETRY_ENABLED', 'false', (c: AppConfig) => c.telemetryEnabled, false],
+  ])('maps %s=%s into the config', (name, value, read, expected) => {
+    expect(read(configFromEnv(env({ [name]: value })))).toEqual(expected)
   })
 
-  afterEach(() => {
-    process.env = originalEnv
-    // Restore valid config after each test
-    if (fs.existsSync(configPath)) {
-      // If config exists but might be invalid, replace it
-      try {
-        fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-      } catch {
-        // Ignore write errors
-      }
-    } else {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-    }
+  it.each(['true', 'TRUE', '1', 'yes', 'on'])('reads boolean %s as true', (value) => {
+    expect(configFromEnv(env({ MQTT_RETAIN: value })).mqtt.retain).toBe(true)
   })
 
-  describe('createConfigFromEnv', () => {
-    it('should create config file from environment variables with all required vars', async () => {
-      // Set required environment variables
-      process.env.MQTT_URL = 'mqtt://test-broker'
-      process.env.MQTT_USERNAME = 'test-user'
-      process.env.MQTT_PASSWORD = 'test-pass'
-      process.env.ELECTROLUX_API_KEY = 'test-key'
-      process.env.ELECTROLUX_USERNAME = 'test@example.com'
-      process.env.ELECTROLUX_PASSWORD = 'electrolux-pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
+  it.each(['false', '0', 'no', 'off'])('reads boolean %s as false', (value) => {
+    expect(configFromEnv(env({ HOME_ASSISTANT_AUTO_DISCOVERY: value })).homeAssistant.autoDiscovery).toBe(false)
+  })
 
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
+  it('rejects an unrecognised boolean instead of silently treating it as false', () => {
+    expectConfigError(() => configFromEnv(env({ MQTT_RETAIN: 'banana' })), 'MQTT_RETAIN')
+  })
 
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+  it('treats empty optional values as unset so the defaults apply', () => {
+    const config = configFromEnv(
+      env({ MQTT_QOS: '', ELECTROLUX_REFRESH_INTERVAL: '', MQTT_RETAIN: '', LOGGING_IGNORED_KEYS: '' }),
+    )
+    expect(config.mqtt.qos).toBe(2)
+    expect(config.electrolux.refreshInterval).toBe(30)
+    expect(config.mqtt.retain).toBe(false)
+    expect(config.logging.ignoredKeys).toEqual([])
+  })
 
-      const content = createConfigFromEnv()
+  it.each([
+    ['MQTT_URL', 'http://broker'],
+    ['MQTT_QOS', '5'],
+    ['ELECTROLUX_COUNTRY_CODE', 'FIN'],
+    ['ELECTROLUX_REFRESH_INTERVAL', '5'],
+    ['ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL', '5000'],
+    ['ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY', '4'],
+    ['ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY', '716'],
+    ['ELECTROLUX_COMMAND_STATE_DELAY_SECONDS', '4'],
+    ['ELECTROLUX_COMMAND_STATE_DELAY_SECONDS', '301'],
+    ['ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES', '0'],
+    ['ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES', '1441'],
+    ['ELECTROLUX_API_TIMEOUT_SECONDS', '0'],
+    ['ELECTROLUX_API_TIMEOUT_SECONDS', '121'],
+    ['VERSION_CHECK_NTFY_WEBHOOK_URL', 'not-a-url'],
+    ['VERSION_CHECK_INTERVAL', '10'],
+    ['VERSION_CHECK_UPDATE_CHANNEL', 'nightly'],
+    ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '-1'],
+    ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '604801'],
+    ['LOG_LEVEL', 'verbose'],
+    ['HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES', '5'],
+  ])('rejects %s=%s, labelled with the env name', (name, value) => {
+    expectConfigError(() => configFromEnv(env({ [name]: value })), name)
+  })
 
-      expect(infoSpy).toHaveBeenCalledWith('Config file not found. Loading config from environment variables.')
-      expect(content).toContain('mqtt:')
-      expect(content).toContain('url: mqtt://test-broker')
-      expect(content).toContain('username: test-user')
+  it.each([
+    ['refreshInterval', { ELECTROLUX_REFRESH_INTERVAL: '3600', ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: '30' }],
+    [
+      'applianceDiscoveryInterval',
+      { ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: '3600', ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: '30' },
+    ],
+  ])('rejects a renewTokenBeforeExpiry shorter than %s', (_interval, vars) => {
+    const error = expectConfigError(() => configFromEnv(env(vars)), 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY')
+    expect(error.details.join('\n')).toContain('the longest polling interval is 3600 seconds')
+  })
 
-      infoSpy.mockRestore()
+  describe('<NAME>_FILE (Docker secrets)', () => {
+    it('reads the value from the file, without its trailing newline', () => {
+      const file = writeTmp('mqtt-password', 's3cret\n')
+      const { MQTT_PASSWORD: _pw, ...rest } = REQUIRED_ENV
+
+      expect(configFromEnv({ ...rest, MQTT_PASSWORD_FILE: file }).mqtt.password).toBe('s3cret')
     })
 
-    it('should fail when mandatory environment variables are missing', async () => {
-      // Clear required environment variables
-      delete process.env.MQTT_URL
-      delete process.env.MQTT_USERNAME
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(infoSpy).toHaveBeenCalledWith('Config file not found. Loading config from environment variables.')
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
+    it('works for optional variables too', () => {
+      const file = writeTmp('qos', '1\n')
+      expect(configFromEnv(env({ MQTT_QOS_FILE: file })).mqtt.qos).toBe(1)
     })
 
-    it('should use default values when optional vars are not provided', async () => {
-      // Set only required vars
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('clientId: electrolux-comfort600')
-      expect(content).toContain('topicPrefix: electrolux_')
-      expect(content).toContain('qos: 2')
-      expect(content).toContain('retain: false')
-
-      infoSpy.mockRestore()
+    it('rejects setting both NAME and NAME_FILE', () => {
+      const file = writeTmp('both', 'x')
+      const error = expectConfigError(() => configFromEnv(env({ MQTT_PASSWORD_FILE: file })), 'MQTT_PASSWORD')
+      expect(error.details.join('\n')).toContain('not both')
     })
 
-    it('should treat empty numeric env vars as unset (defaults apply)', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      // Compose files commonly leave values empty: MQTT_QOS= must not coerce '' → 0
-      process.env.MQTT_QOS = ''
-      process.env.ELECTROLUX_REFRESH_INTERVAL = ''
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('qos: 2')
-      expect(content).toContain('refreshInterval: 30')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should reject a malformed ntfy webhook URL', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_NTFY_WEBHOOK_URL = 'ntfy.sh/topic-without-scheme'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toBeUndefined()
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('VERSION_CHECK_NTFY_WEBHOOK_URL'))
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should validate refresh interval with Zod - value too low', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_REFRESH_INTERVAL = '5' // Too low
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_REFRESH_INTERVAL'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should validate appliance discovery interval with Zod - value too high', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL = '5000' // Too high
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should validate appliance removal grace period with env var - value too low', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES = '0' // Too low
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(
-        errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES')),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should validate appliance removal grace period with env var - value too high', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES = '1441' // Too high
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(
-        errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES')),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should validate token refresh threshold with Zod - value too low', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '3' // Too low (min 5)
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should validate token refresh threshold with Zod - value too high', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '720' // Too high (max 715)
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should reject renewTokenBeforeExpiry shorter than refreshInterval', async () => {
-      if (fs.existsSync(configPath)) fs.unlinkSync(configPath)
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_REFRESH_INTERVAL = '600' // 10 minutes
-      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '5' // 5 minutes — shorter than refresh interval
-
-      vi.resetModules()
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected — config validation fails at module load
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      warnSpy.mockRestore()
-    })
-
-    it('should reject renewTokenBeforeExpiry shorter than applianceDiscoveryInterval', async () => {
-      if (fs.existsSync(configPath)) fs.unlinkSync(configPath)
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_REFRESH_INTERVAL = '30' // 30 seconds — fine
-      process.env.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL = '3600' // 60 minutes
-      process.env.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY = '30' // 30 minutes — shorter than discovery interval
-
-      vi.resetModules()
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected — config validation fails at module load
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('RENEW_TOKEN_BEFORE_EXPIRY'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      warnSpy.mockRestore()
-    })
-
-    it('should validate QoS value with Zod - invalid value', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.MQTT_QOS = '5' // Invalid
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should transform MQTT_RETAIN string to boolean in config content', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.MQTT_RETAIN = 'true'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('retain: true')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should parse and format LOGGING_IGNORED_KEYS correctly', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOGGING_IGNORED_KEYS = 'key1,key2,key3'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('- key1')
-      expect(content).toContain('- key2')
-      expect(content).toContain('- key3')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should handle empty LOGGING_IGNORED_KEYS', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOGGING_IGNORED_KEYS = ''
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('ignoredKeys:')
-
-      infoSpy.mockRestore()
-    })
-
-    it('returns config content from env vars without writing to disk', async () => {
-      process.env.MQTT_URL = 'mqtt://test-broker'
-      process.env.MQTT_USERNAME = 'test-user'
-      process.env.MQTT_PASSWORD = 'test-pass'
-      process.env.ELECTROLUX_API_KEY = 'test-key'
-      process.env.ELECTROLUX_USERNAME = 'test@example.com'
-      process.env.ELECTROLUX_PASSWORD = 'electrolux-pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toBeDefined()
-      expect(result).toContain('mqtt:')
-      expect(result).toContain('url: mqtt://test-broker')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should return undefined when env validation fails', async () => {
-      delete process.env.MQTT_URL
-      delete process.env.MQTT_USERNAME
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toBeUndefined()
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should use custom MQTT settings when provided', async () => {
-      process.env.MQTT_URL = 'mqtt://custom'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.MQTT_CLIENT_ID = 'my-client'
-      process.env.MQTT_TOPIC_PREFIX = 'my_prefix_'
-      process.env.MQTT_QOS = '1'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('clientId: my-client')
-      expect(content).toContain('topicPrefix: my_prefix_')
-      expect(content).toContain('qos: 1')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include versionCheck in generated config content', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_INTERVAL = '7200'
-      process.env.VERSION_CHECK_NTFY_WEBHOOK_URL = 'https://ntfy.sh/test-topic'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('checkInterval: 7200')
-      expect(result).toContain('ntfyWebhookUrl: https://ntfy.sh/test-topic')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should validate VERSION_CHECK_INTERVAL too low', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_INTERVAL = '10'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('VERSION_CHECK_INTERVAL'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should accept VERSION_CHECK_UPDATE_CHANNEL=beta and include it in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_UPDATE_CHANNEL = 'beta'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('updateChannel: beta')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should reject an invalid VERSION_CHECK_UPDATE_CHANNEL value', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_UPDATE_CHANNEL = 'nightly'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => (call[0] as string).includes('VERSION_CHECK_UPDATE_CHANNEL'))).toBe(
-        true,
+    it('reports an unreadable file', () => {
+      const { ELECTROLUX_PASSWORD: _pw, ...rest } = REQUIRED_ENV
+      expectConfigError(
+        () => configFromEnv({ ...rest, ELECTROLUX_PASSWORD_FILE: path.join(tmpDir, 'missing') }),
+        'ELECTROLUX_PASSWORD_FILE',
       )
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
     })
-
-    it('should yield updateChannel absent in generated config when VERSION_CHECK_UPDATE_CHANNEL is not set', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      delete process.env.VERSION_CHECK_UPDATE_CHANNEL
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      // updateChannel must not appear in the YAML when unset — it must remain undefined
-      expect(result).not.toContain('updateChannel:')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include updateChannel: stable in generated config when explicitly set to stable', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_UPDATE_CHANNEL = 'stable'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('updateChannel: stable')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include notifyGracePeriod in generated config when VERSION_CHECK_NOTIFY_GRACE_PERIOD is set', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '7200'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('notifyGracePeriod: 7200')
-
-      infoSpy.mockRestore()
-      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
-    })
-
-    it('should default VERSION_CHECK_NOTIFY_GRACE_PERIOD to 3600 when not set', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.versionCheck.notifyGracePeriod).toBe(3600)
-
-      infoSpy.mockRestore()
-    })
-
-    it('should reject VERSION_CHECK_NOTIFY_GRACE_PERIOD below 0', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '-1'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(
-        errorSpy.mock.calls.some((call) => (call[0] as string).includes('VERSION_CHECK_NOTIFY_GRACE_PERIOD')),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
-    })
-
-    it('should reject VERSION_CHECK_NOTIFY_GRACE_PERIOD above 604800', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '604801'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(
-        errorSpy.mock.calls.some((call) => (call[0] as string).includes('VERSION_CHECK_NOTIFY_GRACE_PERIOD')),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
-    })
-
-    it('should accept VERSION_CHECK_NOTIFY_GRACE_PERIOD=0 (notify immediately)', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD = '0'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(errorSpy).not.toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(result).toContain('notifyGracePeriod: 0')
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      delete process.env.VERSION_CHECK_NOTIFY_GRACE_PERIOD
-    })
-
-    it('should include logLevel in generated config content', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOG_LEVEL = 'debug'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('logLevel: debug')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should default LOG_LEVEL to info when not provided', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      delete process.env.LOG_LEVEL
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('logLevel: info')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should reject invalid LOG_LEVEL value', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOG_LEVEL = 'invalid'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('LOG_LEVEL'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-    })
-
-    it('should include showTimestamp in generated config content', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOGGING_SHOW_TIMESTAMP = 'false'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('showTimestamp: false')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should use default values for healthCheck fields', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('enabled: true')
-      expect(content).toContain('filePath: /tmp/e2m-health')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include HEALTH_CHECK_ENABLED env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HEALTH_CHECK_ENABLED = 'true'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('enabled: true')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include HEALTH_CHECK_FILE_PATH env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HEALTH_CHECK_FILE_PATH = '/custom/health'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('filePath: /custom/health')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES = '30'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('unHealthyRestartMinutes: 30')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should default revertStateOnRejection to false in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('revertStateOnRejection: false')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include HOME_ASSISTANT_REVERT_STATE_ON_REJECTION env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HOME_ASSISTANT_REVERT_STATE_ON_REJECTION = 'true'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('revertStateOnRejection: true')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include HOME_ASSISTANT_AUTO_DISCOVERY env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HOME_ASSISTANT_AUTO_DISCOVERY = 'false'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('autoDiscovery: false')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include LOGGING_SHOW_CHANGES env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOGGING_SHOW_CHANGES = 'false'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('showChanges: false')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include LOGGING_SHOW_VERSION_NUMBER env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOGGING_SHOW_VERSION_NUMBER = 'false'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('showVersionNumber: false')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should include LOGGING_SKIP_CACHE_LOGGING env var in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.LOGGING_SKIP_CACHE_LOGGING = 'true'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('skipCacheLogging: true')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should default telemetryEnabled to true in generated config', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('telemetryEnabled: true')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should set telemetryEnabled to false when E2M_TELEMETRY_ENABLED=false', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'user@test.com'
-      process.env.ELECTROLUX_PASSWORD = 'pass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.E2M_TELEMETRY_ENABLED = 'false'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const content = createConfigFromEnv()
-
-      expect(content).toContain('telemetryEnabled: false')
-
-      infoSpy.mockRestore()
-
-      delete process.env.E2M_TELEMETRY_ENABLED
+  })
+})
+
+// ── File mode ───────────────────────────────────────────────────────────────
+
+describe('parseConfigFile', () => {
+  it('parses a minimal file and applies every default', () => {
+    expectDefaults(parseConfigFile(MINIMAL_YAML))
+  })
+
+  it('treats an absent homeAssistant section as all defaults', () => {
+    const config = parseConfigFile(MINIMAL_YAML.replace('homeAssistant:\n  autoDiscovery: true\n', ''))
+    expect(config.homeAssistant).toEqual({
+      autoDiscovery: true,
+      revertStateOnRejection: false,
+      statusTopic: 'homeassistant/status',
+      birthPayload: 'online',
+      birthRepublish: true,
     })
   })
 
-  describe('Zod schema validation', () => {
-    it('should validate MQTT URL format - valid mqtt://', () => {
-      const urlSchema = z.string().regex(/^mqtts?:\/\/.+/)
-
-      expect(() => urlSchema.parse('mqtt://localhost')).not.toThrow()
-      expect(() => urlSchema.parse('mqtt://broker.com:1883')).not.toThrow()
-    })
-
-    it('should validate MQTT URL format - valid mqtts://', () => {
-      const urlSchema = z.string().regex(/^mqtts?:\/\/.+/)
-
-      expect(() => urlSchema.parse('mqtts://secure.broker.com:8883')).not.toThrow()
-    })
-
-    it('should reject invalid MQTT URL protocols', () => {
-      const urlSchema = z.string().regex(/^mqtts?:\/\/.+/)
-
-      expect(() => urlSchema.parse('http://localhost:1883')).toThrow()
-      expect(() => urlSchema.parse('localhost:1883')).toThrow()
-      expect(() => urlSchema.parse('ftp://broker.com')).toThrow()
-    })
-
-    it('should validate QoS range - valid values', () => {
-      const qosSchema = z.number().int().min(0).max(2)
-
-      expect(() => qosSchema.parse(0)).not.toThrow()
-      expect(() => qosSchema.parse(1)).not.toThrow()
-      expect(() => qosSchema.parse(2)).not.toThrow()
-    })
-
-    it('should validate QoS range - invalid values', () => {
-      const qosSchema = z.number().int().min(0).max(2)
-
-      expect(() => qosSchema.parse(3)).toThrow()
-      expect(() => qosSchema.parse(-1)).toThrow()
-      expect(() => qosSchema.parse(10)).toThrow()
-    })
-
-    it('should validate refresh interval range - valid values', () => {
-      const intervalSchema = z.number().int().min(10).max(3600)
-
-      expect(() => intervalSchema.parse(10)).not.toThrow()
-      expect(() => intervalSchema.parse(30)).not.toThrow()
-      expect(() => intervalSchema.parse(3600)).not.toThrow()
-      expect(() => intervalSchema.parse(100)).not.toThrow()
-    })
-
-    it('should validate refresh interval range - invalid values', () => {
-      const intervalSchema = z.number().int().min(10).max(3600)
-
-      expect(() => intervalSchema.parse(5)).toThrow()
-      expect(() => intervalSchema.parse(9)).toThrow()
-      expect(() => intervalSchema.parse(4000)).toThrow()
-    })
-
-    it('should validate appliance discovery interval range - valid values', () => {
-      const intervalSchema = z.number().int().min(60).max(3600)
-
-      expect(() => intervalSchema.parse(60)).not.toThrow()
-      expect(() => intervalSchema.parse(300)).not.toThrow()
-      expect(() => intervalSchema.parse(3600)).not.toThrow()
-    })
-
-    it('should validate appliance discovery interval range - invalid values', () => {
-      const intervalSchema = z.number().int().min(60).max(3600)
-
-      expect(() => intervalSchema.parse(30)).toThrow()
-      expect(() => intervalSchema.parse(59)).toThrow()
-      expect(() => intervalSchema.parse(5000)).toThrow()
-    })
-
-    it('should transform string to boolean correctly', () => {
-      const boolSchema = z.string().transform((val) => val.toLowerCase() === 'true')
-
-      expect(boolSchema.parse('true')).toBe(true)
-      expect(boolSchema.parse('TRUE')).toBe(true)
-      expect(boolSchema.parse('True')).toBe(true)
-      expect(boolSchema.parse('false')).toBe(false)
-      expect(boolSchema.parse('FALSE')).toBe(false)
-      expect(boolSchema.parse('anything')).toBe(false)
-    })
-
-    it('should coerce string to number', () => {
-      const numSchema = z.coerce.number()
-
-      expect(numSchema.parse('30')).toBe(30)
-      expect(numSchema.parse('100')).toBe(100)
-      expect(numSchema.parse('0')).toBe(0)
-      expect(numSchema.parse(50)).toBe(50)
-    })
-
-    it('should transform comma-separated string to array', () => {
-      const arraySchema = z.string().transform((val) => (val ? val.split(',').map((k) => k.trim()) : []))
-
-      expect(arraySchema.parse('key1,key2,key3')).toEqual(['key1', 'key2', 'key3'])
-      expect(arraySchema.parse('key1, key2, key3')).toEqual(['key1', 'key2', 'key3'])
-      expect(arraySchema.parse('')).toEqual([])
-    })
-
-    it('should use default values with Zod', () => {
-      const schema = z.object({
-        clientId: z.string().default('electrolux-comfort600'),
-        qos: z.coerce.number().default(2),
-        retain: z.string().default('false'),
-      })
-
-      const result = schema.parse({})
-      expect(result.clientId).toBe('electrolux-comfort600')
-      expect(result.qos).toBe(2)
-      expect(result.retain).toBe('false')
-    })
-
-    it('should handle optional fields', () => {
-      const schema = z.object({
-        required: z.string(),
-        optional: z.string().optional(),
-      })
-
-      expect(() => schema.parse({ required: 'value' })).not.toThrow()
-      expect(() => schema.parse({ required: 'value', optional: 'other' })).not.toThrow()
-      expect(() => schema.parse({ optional: 'value' })).toThrow()
-    })
-
-    it('should validate nested objects', () => {
-      const schema = z.object({
-        mqtt: z.object({
-          url: z.string(),
-          qos: z.number().min(0).max(2).optional(),
-        }),
-        electrolux: z.object({
-          apiKey: z.string(),
-          refreshInterval: z.number().min(10).optional(),
-        }),
-      })
-
-      expect(() =>
-        schema.parse({
-          mqtt: { url: 'mqtt://test' },
-          electrolux: { apiKey: 'key' },
-        }),
-      ).not.toThrow()
-
-      expect(() =>
-        schema.parse({
-          mqtt: { url: 'mqtt://test', qos: 5 },
-          electrolux: { apiKey: 'key' },
-        }),
-      ).toThrow()
-    })
-
-    it('should collect multiple validation errors', () => {
-      const schema = z.object({
-        qos: z.number().min(0).max(2),
-        interval: z.number().min(10).max(3600),
-      })
-
-      try {
-        schema.parse({ qos: 5, interval: 5 })
-        expect.fail('Should have thrown validation error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(z.ZodError)
-        if (error instanceof z.ZodError) {
-          expect(error.issues).toHaveLength(2)
-        }
-      }
-    })
-  })
-
-  describe('TypeScript types', () => {
-    it('should infer types from Zod schema', () => {
-      const schema = z.object({
-        mqtt: z.object({
-          url: z.string(),
-          username: z.string(),
-          qos: z.number().optional(),
-        }),
-      })
-
-      type InferredType = z.infer<typeof schema>
-
-      const validConfig: InferredType = {
-        mqtt: {
-          url: 'mqtt://test',
-          username: 'user',
-          qos: 2,
-        },
-      }
-
-      expect(validConfig.mqtt.url).toBe('mqtt://test')
-      expect(validConfig.mqtt.qos).toBe(2)
-    })
-
-    it('should handle partial schemas', () => {
-      const fullSchema = z.object({
-        accessToken: z.string(),
-        refreshToken: z.string(),
-        eat: z.number(),
-      })
-
-      const partialSchema = fullSchema.partial()
-
-      expect(() => partialSchema.parse({})).not.toThrow()
-      expect(() => partialSchema.parse({ accessToken: 'token' })).not.toThrow()
-      expect(() => partialSchema.parse({ accessToken: 'token', eat: 1234 })).not.toThrow()
-    })
-  })
-
-  describe('Error messages', () => {
-    it('should provide helpful error messages for invalid URLs', () => {
-      const schema = z.string().regex(/^mqtts?:\/\/.+/, 'mqtt.url must start with mqtt:// or mqtts://')
-
-      try {
-        schema.parse('http://localhost')
-        expect.fail('Should have thrown')
-      } catch (error) {
-        expect(error).toBeInstanceOf(z.ZodError)
-        if (error instanceof z.ZodError) {
-          const firstIssue = error.issues[0]
-          expect(firstIssue?.message).toContain('mqtt.url must start with mqtt://')
-        }
-      }
-    })
-
-    it('should provide helpful error messages for invalid intervals', () => {
-      const schema = z
-        .number()
-        .int()
-        .min(10, 'electrolux.refreshInterval must be at least 10 seconds')
-        .max(3600, 'electrolux.refreshInterval should not exceed 3600 seconds')
-
-      try {
-        schema.parse(5)
-        expect.fail('Should have thrown')
-      } catch (error) {
-        expect(error).toBeInstanceOf(z.ZodError)
-        if (error instanceof z.ZodError) {
-          const firstIssue = error.issues[0]
-          expect(firstIssue?.message).toContain('must be at least 10 seconds')
-        }
-      }
-    })
-
-    it('should include field path in error messages', () => {
-      const schema = z.object({
-        mqtt: z.object({
-          qos: z.number().min(0).max(2),
-        }),
-      })
-
-      try {
-        schema.parse({ mqtt: { qos: 5 } })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        expect(error).toBeInstanceOf(z.ZodError)
-        if (error instanceof z.ZodError) {
-          const firstIssue = error.issues[0]
-          expect(firstIssue?.path).toEqual(['mqtt', 'qos'])
-        }
-      }
-    })
-  })
-
-  describe('Config file validation on import', () => {
-    beforeEach(() => {
-      // Set config file override to use config.test.yml for these tests
-      process.env.CONFIG_FILE_OVERRIDE = 'config.test.yml'
-    })
-
-    afterEach(() => {
-      // Restore valid config after each test
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-      delete process.env.CONFIG_FILE_OVERRIDE
-    })
-
-    it('should reject a countryCode that is not exactly two letters', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FIN
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.countryCode'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should accept a valid two-letter countryCode', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: SE
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      const config = await import('../src/config.js')
-
-      expect(errorSpy).not.toHaveBeenCalledWith('Configuration validation failed:')
-      expect(config.default.electrolux.countryCode).toBe('SE')
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch invalid QoS', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-  qos: 5
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('mqtt.qos'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch invalid refresh interval', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  refreshInterval: 5
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(
-        errorSpy.mock.calls.some(
-          (call) => call[0].includes('electrolux.refreshInterval') || call[0].includes('10 seconds'),
-        ),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch invalid appliance discovery interval', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  applianceDiscoveryInterval: 5000
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(
-        errorSpy.mock.calls.some(
-          (call) => call[0].includes('electrolux.applianceDiscoveryInterval') || call[0].includes('3600 seconds'),
-        ),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch invalid token refresh threshold', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  renewTokenBeforeExpiry: 2
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(
-        errorSpy.mock.calls.some(
-          (call) => call[0].includes('electrolux.renewTokenBeforeExpiry') || call[0].includes('5 minutes'),
-        ),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch renewTokenBeforeExpiry shorter than polling intervals', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  refreshInterval: 600
-  renewTokenBeforeExpiry: 5
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('renewTokenBeforeExpiry'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch invalid MQTT URL', async () => {
-      const invalidConfig = `mqtt:
-  url: http://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('mqtt.url'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should catch multiple validation errors at once', async () => {
-      const invalidConfig = `mqtt:
-  url: http://localhost
-  username: test
-  password: test
-  qos: 10
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  refreshInterval: 5
-  applianceDiscoveryInterval: 5000
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      // Should report multiple errors
-      expect(errorSpy.mock.calls.length).toBeGreaterThan(2)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should validate config file and catch invalid logLevel', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true
-logging:
-  logLevel: invalid`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('logging.logLevel'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should handle valid config file successfully', async () => {
-      const validConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-  clientId: test-client
-  topicPrefix: test_
-  retain: false
-  qos: 1
-electrolux:
-  apiKey: test-key
-  username: test@example.com
-  password: test-pass
-  countryCode: FI
-  refreshInterval: 30
-  applianceDiscoveryInterval: 300
-homeAssistant:
-  autoDiscovery: true
-logging:
-  logLevel: info
-  showChanges: true
-  ignoredKeys: []
-  showVersionNumber: true
-  skipCacheLogging: true
-  showTimestamp: true`
-
-      fs.writeFileSync(configPath, validConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      const config = await import('../src/config.js')
-
-      expect(errorSpy).not.toHaveBeenCalledWith('Configuration validation failed:')
-      expect(config.default).toBeDefined()
-      expect(config.default.mqtt).toBeDefined()
-      expect(config.default.electrolux).toBeDefined()
-
-      errorSpy.mockRestore()
-    })
-
-    it('should yield updateChannel: undefined when versionCheck is absent from config file', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.versionCheck.updateChannel).toBeUndefined()
-    })
-
-    it('should preserve explicit updateChannel: stable from config file as distinct from undefined', async () => {
-      const configWithStable = `${defaultValidConfig}
+  it('accepts a fully specified file', () => {
+    const config = parseConfigFile(
+      `${yamlWith('mqtt', 'clientId: test-client\ntopicPrefix: test_\nretain: true\nqos: 1')}logging:
+  logLevel: debug
+  ignoredKeys: [networkInterface]
 versionCheck:
-  updateChannel: stable`
-      fs.writeFileSync(configPath, configWithStable, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.versionCheck.updateChannel).toBe('stable')
-    })
-
-    it('should preserve explicit updateChannel: beta from config file', async () => {
-      const configWithBeta = `${defaultValidConfig}
-versionCheck:
-  updateChannel: beta`
-      fs.writeFileSync(configPath, configWithBeta, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.versionCheck.updateChannel).toBe('beta')
-    })
-
-    it('should default telemetryEnabled to true when not specified in config file', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.telemetryEnabled).toBe(true)
-    })
-
-    it('should read telemetryEnabled: false from config file', async () => {
-      const configWithOptOut = `${defaultValidConfig}
-telemetryEnabled: false`
-      fs.writeFileSync(configPath, configWithOptOut, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.telemetryEnabled).toBe(false)
-    })
-
-    it('should default commandStateDelaySeconds to 30 when not specified', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.commandStateDelaySeconds).toBe(30)
-    })
-
-    it('should accept a valid custom commandStateDelaySeconds', async () => {
-      const configWithDelay = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  commandStateDelaySeconds: 60
-homeAssistant:
-  autoDiscovery: true`
-      fs.writeFileSync(configPath, configWithDelay, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.commandStateDelaySeconds).toBe(60)
-    })
-
-    it('should reject commandStateDelaySeconds below 5', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  commandStateDelaySeconds: 4
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.commandStateDelaySeconds'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should reject commandStateDelaySeconds above 300', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  commandStateDelaySeconds: 301
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.commandStateDelaySeconds'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should default applianceRemovalGracePeriodMinutes to 30 when not specified', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.applianceRemovalGracePeriodMinutes).toBe(30)
-    })
-
-    it('should accept a valid custom applianceRemovalGracePeriodMinutes', async () => {
-      const configWithGrace = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  applianceRemovalGracePeriodMinutes: 60
-homeAssistant:
-  autoDiscovery: true`
-      fs.writeFileSync(configPath, configWithGrace, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.applianceRemovalGracePeriodMinutes).toBe(60)
-    })
-
-    it('should reject applianceRemovalGracePeriodMinutes below 1', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  applianceRemovalGracePeriodMinutes: 0
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(
-        errorSpy.mock.calls.some((call) => call[0].includes('electrolux.applianceRemovalGracePeriodMinutes')),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should reject applianceRemovalGracePeriodMinutes above 1440', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  applianceRemovalGracePeriodMinutes: 1441
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(
-        errorSpy.mock.calls.some((call) => call[0].includes('electrolux.applianceRemovalGracePeriodMinutes')),
-      ).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    // HA birth-message recovery config options
-    it('should default homeAssistant.statusTopic to homeassistant/status', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.homeAssistant.statusTopic).toBe('homeassistant/status')
-    })
-
-    it('should default homeAssistant.birthPayload to online', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.homeAssistant.birthPayload).toBe('online')
-    })
-
-    it('should default homeAssistant.birthRepublish to true', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.homeAssistant.birthRepublish).toBe(true)
-    })
-
-    it('should accept custom statusTopic from config file', async () => {
-      const configWithStatus = `${defaultValidConfig}
-  statusTopic: custom/ha/status`
-      fs.writeFileSync(configPath, configWithStatus, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.homeAssistant.statusTopic).toBe('custom/ha/status')
-    })
-
-    it('should accept birthRepublish: false from config file', async () => {
-      const configWithOff = `${defaultValidConfig}
-  birthRepublish: false`
-      fs.writeFileSync(configPath, configWithOff, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.homeAssistant.birthRepublish).toBe(false)
-    })
-
-    it('should reject empty statusTopic', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-homeAssistant:
-  autoDiscovery: true
-  statusTopic: ''`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('homeAssistant.statusTopic'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
+  updateChannel: beta
+  ntfyWebhookUrl: https://ntfy.sh/x
+telemetryEnabled: false
+`,
+    )
+    expect(config.mqtt).toMatchObject({ clientId: 'test-client', topicPrefix: 'test_', retain: true, qos: 1 })
+    expect(config.logging).toMatchObject({ logLevel: 'debug', ignoredKeys: ['networkInterface'], showChanges: true })
+    expect(config.versionCheck).toMatchObject({ updateChannel: 'beta', checkInterval: 3600 })
+    expect(config.telemetryEnabled).toBe(false)
   })
 
-  describe('electrolux.apiTimeoutSeconds', () => {
-    it('should default apiTimeoutSeconds to 25 when not specified', async () => {
-      fs.writeFileSync(configPath, defaultValidConfig, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.apiTimeoutSeconds).toBe(25)
-    })
-
-    it('should accept a valid custom apiTimeoutSeconds', async () => {
-      const configWithTimeout = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  apiTimeoutSeconds: 30
-homeAssistant:
-  autoDiscovery: true`
-      fs.writeFileSync(configPath, configWithTimeout, 'utf8')
-
-      vi.resetModules()
-      const config = await import('../src/config.js')
-
-      expect(config.default.electrolux.apiTimeoutSeconds).toBe(30)
-    })
-
-    it('should reject apiTimeoutSeconds below 1', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  apiTimeoutSeconds: 0
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.apiTimeoutSeconds'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should reject apiTimeoutSeconds above 120', async () => {
-      const invalidConfig = `mqtt:
-  url: mqtt://localhost
-  username: test
-  password: test
-electrolux:
-  apiKey: test
-  username: test
-  password: test
-  countryCode: FI
-  apiTimeoutSeconds: 121
-homeAssistant:
-  autoDiscovery: true`
-
-      fs.writeFileSync(configPath, invalidConfig, 'utf8')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        await import('../src/config.js')
-      } catch {
-        // Expected to fail
-      }
-
-      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('electrolux.apiTimeoutSeconds'))).toBe(true)
-
-      errorSpy.mockRestore()
-    })
-
-    it('should set apiTimeoutSeconds from ELECTROLUX_API_TIMEOUT_SECONDS env var', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_API_TIMEOUT_SECONDS = '20'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('apiTimeoutSeconds: 20')
-
-      infoSpy.mockRestore()
-      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
-    })
-
-    it('should default apiTimeoutSeconds to 25 when ELECTROLUX_API_TIMEOUT_SECONDS is not set', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('apiTimeoutSeconds: 25')
-
-      infoSpy.mockRestore()
-    })
-
-    it('should reject ELECTROLUX_API_TIMEOUT_SECONDS=0 via env vars', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_API_TIMEOUT_SECONDS = '0'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_API_TIMEOUT_SECONDS'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
-    })
-
-    it('should reject ELECTROLUX_API_TIMEOUT_SECONDS=121 via env vars', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.ELECTROLUX_API_TIMEOUT_SECONDS = '121'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      createConfigFromEnv()
-
-      expect(errorSpy).toHaveBeenCalledWith('Environment variable validation failed:')
-      expect(errorSpy.mock.calls.some((call) => call[0].includes('ELECTROLUX_API_TIMEOUT_SECONDS'))).toBe(true)
-
-      errorSpy.mockRestore()
-      infoSpy.mockRestore()
-      delete process.env.ELECTROLUX_API_TIMEOUT_SECONDS
-    })
+  it.each([
+    ['electrolux', 'commandStateDelaySeconds: 45', (c: AppConfig) => c.electrolux.commandStateDelaySeconds, 45],
+    [
+      'electrolux',
+      'applianceRemovalGracePeriodMinutes: 120',
+      (c: AppConfig) => c.electrolux.applianceRemovalGracePeriodMinutes,
+      120,
+    ],
+    ['electrolux', 'apiTimeoutSeconds: 30', (c: AppConfig) => c.electrolux.apiTimeoutSeconds, 30],
+    ['electrolux', 'countryCode: se', (c: AppConfig) => c.electrolux.countryCode, 'se'],
+    ['homeAssistant', 'statusTopic: custom/status', (c: AppConfig) => c.homeAssistant.statusTopic, 'custom/status'],
+    ['homeAssistant', 'birthRepublish: false', (c: AppConfig) => c.homeAssistant.birthRepublish, false],
+    ['versionCheck', 'updateChannel: stable', (c: AppConfig) => c.versionCheck.updateChannel, 'stable'],
+    ['mqtt', 'url: mqtts://secure.broker:8883', (c: AppConfig) => c.mqtt.url, 'mqtts://secure.broker:8883'],
+  ])('reads %s.%s', (section, line, read, expected) => {
+    const text = line.startsWith('url:')
+      ? MINIMAL_YAML.replace('url: mqtt://localhost', line)
+      : line.startsWith('countryCode:')
+        ? MINIMAL_YAML.replace('countryCode: FI', line)
+        : yamlWith(section, line)
+    expect(read(parseConfigFile(text))).toEqual(expected)
   })
 
-  describe('HA birth-message env vars', () => {
-    it('should set homeAssistant.statusTopic from HA_STATUS_TOPIC', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HA_STATUS_TOPIC = 'ha/birth/status'
+  it.each([
+    ['mqtt.url', MINIMAL_YAML.replace('url: mqtt://localhost', 'url: http://localhost:1883')],
+    ['mqtt.qos', yamlWith('mqtt', 'qos: 5')],
+    ['electrolux.countryCode', MINIMAL_YAML.replace('countryCode: FI', 'countryCode: FIN')],
+    ['electrolux.refreshInterval', yamlWith('electrolux', 'refreshInterval: 5')],
+    ['electrolux.applianceDiscoveryInterval', yamlWith('electrolux', 'applianceDiscoveryInterval: 5000')],
+    ['electrolux.renewTokenBeforeExpiry', yamlWith('electrolux', 'renewTokenBeforeExpiry: 4')],
+    ['electrolux.renewTokenBeforeExpiry', yamlWith('electrolux', 'refreshInterval: 3600\nrenewTokenBeforeExpiry: 30')],
+    ['electrolux.commandStateDelaySeconds', yamlWith('electrolux', 'commandStateDelaySeconds: 4')],
+    ['electrolux.commandStateDelaySeconds', yamlWith('electrolux', 'commandStateDelaySeconds: 301')],
+    ['electrolux.applianceRemovalGracePeriodMinutes', yamlWith('electrolux', 'applianceRemovalGracePeriodMinutes: 0')],
+    [
+      'electrolux.applianceRemovalGracePeriodMinutes',
+      yamlWith('electrolux', 'applianceRemovalGracePeriodMinutes: 1441'),
+    ],
+    ['electrolux.apiTimeoutSeconds', yamlWith('electrolux', 'apiTimeoutSeconds: 0')],
+    ['electrolux.apiTimeoutSeconds', yamlWith('electrolux', 'apiTimeoutSeconds: 121')],
+    ['homeAssistant.statusTopic', yamlWith('homeAssistant', "statusTopic: ''")],
+    ['logging.logLevel', yamlWith('logging', 'logLevel: verbose')],
+  ])('rejects an invalid %s, labelled with the config path', (label, text) => {
+    const error = expectConfigError(() => parseConfigFile(text), label)
+    expect(error.heading).toBe('Configuration validation failed:')
+  })
 
+  it('collects several validation errors at once', () => {
+    const error = expectConfigError(
+      () => parseConfigFile(yamlWith('mqtt', 'qos: 9').replace('url: mqtt://localhost', 'url: nope')),
+      'mqtt.qos',
+    )
+    expect(error.details.some((d) => d.startsWith('mqtt.url:'))).toBe(true)
+  })
+
+  it('formats the error message as heading plus one line per issue', () => {
+    const error = expectConfigError(() => parseConfigFile(yamlWith('mqtt', 'qos: 9')), 'mqtt.qos')
+    expect(error.message).toMatch(/^Configuration validation failed:\n {2}- mqtt\.qos: /)
+  })
+})
+
+// ── Source selection ────────────────────────────────────────────────────────
+
+describe('loadConfig', () => {
+  it('uses the config file when it exists and ignores environment variables', () => {
+    const file = writeTmp('present.yml', MINIMAL_YAML)
+    const config = loadConfig({ CONFIG_FILE_OVERRIDE: file, MQTT_URL: 'mqtt://from-env' })
+
+    expect(config.mqtt.url).toBe('mqtt://localhost')
+  })
+
+  it('falls back to environment variables when the file is missing', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const config = loadConfig({ ...env(), CONFIG_FILE_OVERRIDE: path.join(tmpDir, 'absent.yml') })
+
+    expect(config.mqtt.url).toBe('mqtt://test-broker')
+    expect(infoSpy).toHaveBeenCalledWith('Config file not found. Loading config from environment variables.')
+    infoSpy.mockRestore()
+  })
+
+  it('throws a ConfigError for an invalid file', () => {
+    const file = writeTmp('invalid.yml', yamlWith('mqtt', 'qos: 5'))
+    expect(() => loadConfig({ CONFIG_FILE_OVERRIDE: file })).toThrow(ConfigError)
+  })
+})
+
+describe('default export', () => {
+  it('loads the configured file at import', async () => {
+    vi.resetModules()
+    const { default: config } = await import('#/config.js')
+    // tests/config.yml (CONFIG_FILE_OVERRIDE from vitest.config.ts)
+    expect(config.electrolux.countryCode).toBe('US')
+  })
+
+  it('prints the validation errors and exits 1 when the config is invalid', async () => {
+    const file = writeTmp('invalid-import.yml', yamlWith('mqtt', 'qos: 5'))
+    vi.stubEnv('CONFIG_FILE_OVERRIDE', file)
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
       vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+      await import('#/config.js')
 
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('statusTopic: ha/birth/status')
-
-      infoSpy.mockRestore()
-      delete process.env.HA_STATUS_TOPIC
-    })
-
-    it('should set homeAssistant.birthPayload from HA_BIRTH_PAYLOAD', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HA_BIRTH_PAYLOAD = 'started'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('birthPayload: started')
-
-      infoSpy.mockRestore()
-      delete process.env.HA_BIRTH_PAYLOAD
-    })
-
-    it('should set homeAssistant.birthRepublish to false from HA_BIRTH_REPUBLISH=false', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      process.env.HA_BIRTH_REPUBLISH = 'false'
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('birthRepublish: false')
-
-      infoSpy.mockRestore()
-      delete process.env.HA_BIRTH_REPUBLISH
-    })
-
-    it('should default birthRepublish to true when HA_BIRTH_REPUBLISH is not set', async () => {
-      process.env.MQTT_URL = 'mqtt://test'
-      process.env.MQTT_USERNAME = 'user'
-      process.env.MQTT_PASSWORD = 'pass'
-      process.env.ELECTROLUX_API_KEY = 'key'
-      process.env.ELECTROLUX_USERNAME = 'euser'
-      process.env.ELECTROLUX_PASSWORD = 'epass'
-      process.env.ELECTROLUX_COUNTRY_CODE = 'FI'
-      delete process.env.HA_BIRTH_REPUBLISH
-
-      vi.resetModules()
-      const { createConfigFromEnv } = await import('../src/config.js')
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
-
-      const result = createConfigFromEnv()
-
-      expect(result).toContain('birthRepublish: true')
-
-      infoSpy.mockRestore()
-    })
+      expect(errorSpy).toHaveBeenCalledWith('Configuration validation failed:')
+      expect(errorSpy.mock.calls.some((call) => String(call[0]).includes('mqtt.qos'))).toBe(true)
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    } finally {
+      exitSpy.mockRestore()
+      errorSpy.mockRestore()
+      vi.unstubAllEnvs()
+    }
   })
 })

@@ -74,13 +74,15 @@ const configSchema = z.object({
         })
       }
     }),
-  homeAssistant: z.object({
-    autoDiscovery: z.boolean().default(true),
-    revertStateOnRejection: z.boolean().default(false),
-    statusTopic: z.string().min(1, 'must be a non-empty MQTT topic string').default('homeassistant/status'),
-    birthPayload: z.string().default('online'),
-    birthRepublish: z.boolean().default(true),
-  }),
+  homeAssistant: z
+    .object({
+      autoDiscovery: z.boolean().default(true),
+      revertStateOnRejection: z.boolean().default(false),
+      statusTopic: z.string().min(1, 'must be a non-empty MQTT topic string').default('homeassistant/status'),
+      birthPayload: z.string().default('online'),
+      birthRepublish: z.boolean().default(true),
+    })
+    .prefault({}),
   logging: z
     .object({
       logLevel: z.enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -90,18 +92,9 @@ const configSchema = z.object({
       skipCacheLogging: z.boolean().default(true),
       showTimestamp: z.boolean().default(true),
     })
-    .optional()
-    .transform(
-      (val) =>
-        val ?? {
-          logLevel: 'info' as const,
-          showChanges: true,
-          ignoredKeys: [] as string[],
-          showVersionNumber: true,
-          skipCacheLogging: true,
-          showTimestamp: true,
-        },
-    ),
+    // prefault({}): an absent section parses as {} so the field defaults above apply —
+    // the defaults live in exactly one place.
+    .prefault({}),
   versionCheck: z
     .object({
       checkInterval: z
@@ -122,271 +115,198 @@ const configSchema = z.object({
         .max(604800, 'should not exceed 604800 seconds (7 days)')
         .default(3600),
     })
-    .optional()
-    .transform((val) => val ?? { checkInterval: 3600, updateChannel: undefined, notifyGracePeriod: 3600 }),
+    .prefault({}),
   healthCheck: z
     .object({
       enabled: z.boolean().default(true),
       filePath: z.string().default('/tmp/e2m-health'),
       unHealthyRestartMinutes: z.number().int().min(10).max(1440).default(45),
     })
-    .optional()
-    .transform((val) => val ?? { enabled: true, filePath: '/tmp/e2m-health', unHealthyRestartMinutes: 45 }),
+    .prefault({}),
   telemetryEnabled: z.boolean().default(true),
 })
 
-type AppConfig = z.infer<typeof configSchema>
+export type AppConfig = z.infer<typeof configSchema>
 
-// envSchema handles coercion only — constraints and defaults are in configSchema.
-// Empty-string numeric env vars (e.g. `MQTT_QOS=` in a compose file) mean "unset":
-// without the preprocess, z.coerce.number() would coerce '' → 0.
-const envNumber = z.preprocess((val) => (val === '' ? undefined : val), z.coerce.number().optional())
+// ── Env-var mode ─────────────────────────────────────────────────────────────
+// One table drives the env schema, the env → config mapping and the error labels.
+// Coercion only — constraints and defaults stay in configSchema.
+type EnvKind = 'required' | 'string' | 'number' | 'bool' | 'list'
+const ENV_FIELDS: ReadonlyArray<{ env: string; path: string; kind: EnvKind }> = [
+  { env: 'MQTT_URL', path: 'mqtt.url', kind: 'required' },
+  { env: 'MQTT_USERNAME', path: 'mqtt.username', kind: 'required' },
+  { env: 'MQTT_PASSWORD', path: 'mqtt.password', kind: 'required' },
+  { env: 'MQTT_CLIENT_ID', path: 'mqtt.clientId', kind: 'string' },
+  { env: 'MQTT_TOPIC_PREFIX', path: 'mqtt.topicPrefix', kind: 'string' },
+  { env: 'MQTT_RETAIN', path: 'mqtt.retain', kind: 'bool' },
+  { env: 'MQTT_QOS', path: 'mqtt.qos', kind: 'number' },
+  { env: 'ELECTROLUX_API_KEY', path: 'electrolux.apiKey', kind: 'required' },
+  { env: 'ELECTROLUX_USERNAME', path: 'electrolux.username', kind: 'required' },
+  { env: 'ELECTROLUX_PASSWORD', path: 'electrolux.password', kind: 'required' },
+  { env: 'ELECTROLUX_COUNTRY_CODE', path: 'electrolux.countryCode', kind: 'required' },
+  { env: 'ELECTROLUX_REFRESH_INTERVAL', path: 'electrolux.refreshInterval', kind: 'number' },
+  { env: 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL', path: 'electrolux.applianceDiscoveryInterval', kind: 'number' },
+  { env: 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY', path: 'electrolux.renewTokenBeforeExpiry', kind: 'number' },
+  { env: 'ELECTROLUX_COMMAND_STATE_DELAY_SECONDS', path: 'electrolux.commandStateDelaySeconds', kind: 'number' },
+  {
+    env: 'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
+    path: 'electrolux.applianceRemovalGracePeriodMinutes',
+    kind: 'number',
+  },
+  { env: 'ELECTROLUX_API_TIMEOUT_SECONDS', path: 'electrolux.apiTimeoutSeconds', kind: 'number' },
+  { env: 'HOME_ASSISTANT_AUTO_DISCOVERY', path: 'homeAssistant.autoDiscovery', kind: 'bool' },
+  { env: 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION', path: 'homeAssistant.revertStateOnRejection', kind: 'bool' },
+  { env: 'HA_STATUS_TOPIC', path: 'homeAssistant.statusTopic', kind: 'string' },
+  { env: 'HA_BIRTH_PAYLOAD', path: 'homeAssistant.birthPayload', kind: 'string' },
+  { env: 'HA_BIRTH_REPUBLISH', path: 'homeAssistant.birthRepublish', kind: 'bool' },
+  { env: 'LOG_LEVEL', path: 'logging.logLevel', kind: 'string' },
+  { env: 'LOGGING_SHOW_CHANGES', path: 'logging.showChanges', kind: 'bool' },
+  { env: 'LOGGING_IGNORED_KEYS', path: 'logging.ignoredKeys', kind: 'list' },
+  { env: 'LOGGING_SHOW_VERSION_NUMBER', path: 'logging.showVersionNumber', kind: 'bool' },
+  { env: 'LOGGING_SKIP_CACHE_LOGGING', path: 'logging.skipCacheLogging', kind: 'bool' },
+  { env: 'LOGGING_SHOW_TIMESTAMP', path: 'logging.showTimestamp', kind: 'bool' },
+  { env: 'VERSION_CHECK_INTERVAL', path: 'versionCheck.checkInterval', kind: 'number' },
+  { env: 'VERSION_CHECK_NTFY_WEBHOOK_URL', path: 'versionCheck.ntfyWebhookUrl', kind: 'string' },
+  { env: 'VERSION_CHECK_UPDATE_CHANNEL', path: 'versionCheck.updateChannel', kind: 'string' },
+  { env: 'VERSION_CHECK_NOTIFY_GRACE_PERIOD', path: 'versionCheck.notifyGracePeriod', kind: 'number' },
+  { env: 'HEALTH_CHECK_ENABLED', path: 'healthCheck.enabled', kind: 'bool' },
+  { env: 'HEALTH_CHECK_FILE_PATH', path: 'healthCheck.filePath', kind: 'string' },
+  { env: 'HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES', path: 'healthCheck.unHealthyRestartMinutes', kind: 'number' },
+  { env: 'E2M_TELEMETRY_ENABLED', path: 'telemetryEnabled', kind: 'bool' },
+]
 
-const envSchema = z.object({
-  MQTT_URL: z.string(),
-  MQTT_USERNAME: z.string(),
-  MQTT_PASSWORD: z.string(),
-  ELECTROLUX_API_KEY: z.string(),
-  ELECTROLUX_USERNAME: z.string(),
-  ELECTROLUX_PASSWORD: z.string(),
-  ELECTROLUX_COUNTRY_CODE: z.string(),
-  MQTT_CLIENT_ID: z.string().optional(),
-  MQTT_TOPIC_PREFIX: z.string().optional(),
-  MQTT_RETAIN: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  MQTT_QOS: envNumber,
-  ELECTROLUX_REFRESH_INTERVAL: envNumber,
-  ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL: envNumber,
-  ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY: envNumber,
-  ELECTROLUX_COMMAND_STATE_DELAY_SECONDS: envNumber,
-  ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES: envNumber,
-  ELECTROLUX_API_TIMEOUT_SECONDS: envNumber,
-  HOME_ASSISTANT_AUTO_DISCOVERY: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  HOME_ASSISTANT_REVERT_STATE_ON_REJECTION: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  HA_STATUS_TOPIC: z.string().optional(),
-  HA_BIRTH_PAYLOAD: z.string().optional(),
-  HA_BIRTH_REPUBLISH: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  LOG_LEVEL: z.string().optional(),
-  LOGGING_SHOW_CHANGES: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  LOGGING_IGNORED_KEYS: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.split(',').map((k) => k.trim()) : undefined)),
-  LOGGING_SHOW_VERSION_NUMBER: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  LOGGING_SKIP_CACHE_LOGGING: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  LOGGING_SHOW_TIMESTAMP: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  VERSION_CHECK_INTERVAL: envNumber,
-  VERSION_CHECK_NTFY_WEBHOOK_URL: z.string().optional(),
-  VERSION_CHECK_UPDATE_CHANNEL: z.string().optional(),
-  VERSION_CHECK_NOTIFY_GRACE_PERIOD: envNumber,
-  HEALTH_CHECK_ENABLED: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-  HEALTH_CHECK_FILE_PATH: z.string().optional(),
-  HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES: envNumber,
-  E2M_TELEMETRY_ENABLED: z
-    .string()
-    .optional()
-    .transform((val) => (val ? val.toLowerCase() === 'true' : undefined)),
-})
+// An empty value (e.g. `MQTT_QOS=` in a compose file) means "unset" for every optional
+// kind; without this, z.coerce.number() would turn '' into 0.
+const emptyIsUnset = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((val) => (val === '' ? undefined : val), schema.optional())
 
-// Maps configSchema YAML paths to env var names for error reporting
-const configPathToEnvVar: Record<string, string> = {
-  'mqtt.url': 'MQTT_URL',
-  'mqtt.username': 'MQTT_USERNAME',
-  'mqtt.password': 'MQTT_PASSWORD',
-  'mqtt.clientId': 'MQTT_CLIENT_ID',
-  'mqtt.topicPrefix': 'MQTT_TOPIC_PREFIX',
-  'mqtt.retain': 'MQTT_RETAIN',
-  'mqtt.qos': 'MQTT_QOS',
-  'electrolux.apiKey': 'ELECTROLUX_API_KEY',
-  'electrolux.username': 'ELECTROLUX_USERNAME',
-  'electrolux.password': 'ELECTROLUX_PASSWORD',
-  'electrolux.countryCode': 'ELECTROLUX_COUNTRY_CODE',
-  'electrolux.refreshInterval': 'ELECTROLUX_REFRESH_INTERVAL',
-  'electrolux.applianceDiscoveryInterval': 'ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL',
-  'electrolux.renewTokenBeforeExpiry': 'ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY',
-  'electrolux.commandStateDelaySeconds': 'ELECTROLUX_COMMAND_STATE_DELAY_SECONDS',
-  'electrolux.applianceRemovalGracePeriodMinutes': 'ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES',
-  'electrolux.apiTimeoutSeconds': 'ELECTROLUX_API_TIMEOUT_SECONDS',
-  'homeAssistant.autoDiscovery': 'HOME_ASSISTANT_AUTO_DISCOVERY',
-  'homeAssistant.revertStateOnRejection': 'HOME_ASSISTANT_REVERT_STATE_ON_REJECTION',
-  'homeAssistant.statusTopic': 'HA_STATUS_TOPIC',
-  'homeAssistant.birthPayload': 'HA_BIRTH_PAYLOAD',
-  'homeAssistant.birthRepublish': 'HA_BIRTH_REPUBLISH',
-  'logging.logLevel': 'LOG_LEVEL',
-  'logging.showChanges': 'LOGGING_SHOW_CHANGES',
-  'logging.ignoredKeys': 'LOGGING_IGNORED_KEYS',
-  'logging.showVersionNumber': 'LOGGING_SHOW_VERSION_NUMBER',
-  'logging.skipCacheLogging': 'LOGGING_SKIP_CACHE_LOGGING',
-  'logging.showTimestamp': 'LOGGING_SHOW_TIMESTAMP',
-  'versionCheck.checkInterval': 'VERSION_CHECK_INTERVAL',
-  'versionCheck.ntfyWebhookUrl': 'VERSION_CHECK_NTFY_WEBHOOK_URL',
-  'versionCheck.updateChannel': 'VERSION_CHECK_UPDATE_CHANNEL',
-  'versionCheck.notifyGracePeriod': 'VERSION_CHECK_NOTIFY_GRACE_PERIOD',
-  'healthCheck.enabled': 'HEALTH_CHECK_ENABLED',
-  'healthCheck.filePath': 'HEALTH_CHECK_FILE_PATH',
-  'healthCheck.unHealthyRestartMinutes': 'HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES',
-  telemetryEnabled: 'E2M_TELEMETRY_ENABLED',
+const ENV_KIND_SCHEMAS: Record<EnvKind, z.ZodType> = {
+  required: z.string(),
+  string: z.string().optional(),
+  number: emptyIsUnset(z.coerce.number()),
+  // true/1/yes/on/y/enabled · false/0/no/off/n/disabled (case-insensitive); anything else is an error
+  bool: emptyIsUnset(z.stringbool()),
+  list: emptyIsUnset(z.string().transform((val) => val.split(',').map((k) => k.trim()))),
 }
 
-function handleValidationError(error: unknown, useEnvVarNames: boolean): never | undefined {
-  if (!(error instanceof z.ZodError)) throw error
-  const label = useEnvVarNames ? 'Environment variable validation failed:' : 'Configuration validation failed:'
-  console.error(label)
-  for (const issue of error.issues) {
+const envSchema = z.object(Object.fromEntries(ENV_FIELDS.map((f) => [f.env, ENV_KIND_SCHEMAS[f.kind]])))
+
+const pathToEnvVar = new Map(ENV_FIELDS.map((f) => [f.path, f.env]))
+
+/** Validation failure, already formatted for the user (env-var or config-file field names). */
+export class ConfigError extends Error {
+  constructor(
+    readonly heading: string,
+    readonly details: readonly string[],
+  ) {
+    super(`${heading}\n${details.map((d) => `  - ${d}`).join('\n')}`)
+    this.name = 'ConfigError'
+  }
+}
+
+function toConfigError(error: z.ZodError, useEnvVarNames: boolean): ConfigError {
+  const heading = useEnvVarNames ? 'Environment variable validation failed:' : 'Configuration validation failed:'
+  const details = error.issues.map((issue) => {
     const configPath = issue.path.join('.')
-    const fieldLabel = useEnvVarNames ? (configPathToEnvVar[configPath] ?? configPath) : configPath
-    console.error(`  - ${fieldLabel}: ${issue.message}`)
-  }
-  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
-    process.exit(1)
-  }
-  return undefined
+    const label = useEnvVarNames ? (pathToEnvVar.get(configPath) ?? configPath) : configPath
+    return `${label}: ${issue.message}`
+  })
+  return new ConfigError(heading, details)
 }
 
-// Remove undefined values so configSchema defaults apply
-function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) {
-      result[key] = value
+/**
+ * Docker-secrets convention: `<NAME>_FILE=/run/secrets/x` supplies NAME from that file
+ * (one trailing newline stripped). Setting both NAME and NAME_FILE is an error.
+ */
+function resolveFileEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const resolved: NodeJS.ProcessEnv = { ...env }
+  const problems: string[] = []
+  for (const { env: name } of ENV_FIELDS) {
+    const filePath = env[`${name}_FILE`]
+    if (!filePath) continue
+    if (env[name]) {
+      problems.push(`${name}: set either ${name} or ${name}_FILE, not both`)
+      continue
+    }
+    try {
+      resolved[name] = fs.readFileSync(filePath, 'utf8').replace(/\r?\n$/, '')
+    } catch (error) {
+      problems.push(`${name}_FILE: cannot read ${filePath} (${String(error)})`)
     }
   }
-  return result
+  if (problems.length > 0) throw new ConfigError('Environment variable validation failed:', problems)
+  return resolved
 }
 
-// Determine which config file to use based on environment
-const getConfigFilename = (): string => {
-  if (process.env.CONFIG_FILE_OVERRIDE) {
-    return process.env.CONFIG_FILE_OVERRIDE
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+function setPath(target: Record<string, unknown>, dottedPath: string, value: unknown): void {
+  const keys = dottedPath.split('.')
+  const last = keys.pop()
+  if (last === undefined) return
+  let node = target
+  for (const key of keys) {
+    const child = node[key]
+    if (isRecord(child)) {
+      node = child
+    } else {
+      const created: Record<string, unknown> = {}
+      node[key] = created
+      node = created
+    }
   }
-  if (process.env.E2E_TEST === 'true') {
-    return 'config.yml'
-  }
-  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
-    return 'tests/config.yml'
-  }
-  return 'config.yml'
+  node[last] = value
 }
 
-const configFilename = getConfigFilename()
-const configPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../${configFilename}`)
+/** Build and validate the config from environment variables (env-var mode). Throws ConfigError. */
+export function configFromEnv(env: NodeJS.ProcessEnv): AppConfig {
+  const parsedEnv = envSchema.safeParse(resolveFileEnv(env))
+  if (!parsedEnv.success) throw toConfigError(parsedEnv.error, true)
 
-function buildConfigFromEnv(envConfig: z.infer<typeof envSchema>) {
-  return {
-    mqtt: stripUndefined({
-      url: envConfig.MQTT_URL,
-      clientId: envConfig.MQTT_CLIENT_ID,
-      username: envConfig.MQTT_USERNAME,
-      password: envConfig.MQTT_PASSWORD,
-      topicPrefix: envConfig.MQTT_TOPIC_PREFIX,
-      retain: envConfig.MQTT_RETAIN,
-      qos: envConfig.MQTT_QOS,
-    }),
-    electrolux: stripUndefined({
-      apiKey: envConfig.ELECTROLUX_API_KEY,
-      username: envConfig.ELECTROLUX_USERNAME,
-      password: envConfig.ELECTROLUX_PASSWORD,
-      countryCode: envConfig.ELECTROLUX_COUNTRY_CODE,
-      refreshInterval: envConfig.ELECTROLUX_REFRESH_INTERVAL,
-      applianceDiscoveryInterval: envConfig.ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL,
-      renewTokenBeforeExpiry: envConfig.ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY,
-      commandStateDelaySeconds: envConfig.ELECTROLUX_COMMAND_STATE_DELAY_SECONDS,
-      applianceRemovalGracePeriodMinutes: envConfig.ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES,
-      apiTimeoutSeconds: envConfig.ELECTROLUX_API_TIMEOUT_SECONDS,
-    }),
-    homeAssistant: stripUndefined({
-      autoDiscovery: envConfig.HOME_ASSISTANT_AUTO_DISCOVERY,
-      revertStateOnRejection: envConfig.HOME_ASSISTANT_REVERT_STATE_ON_REJECTION,
-      statusTopic: envConfig.HA_STATUS_TOPIC,
-      birthPayload: envConfig.HA_BIRTH_PAYLOAD,
-      birthRepublish: envConfig.HA_BIRTH_REPUBLISH,
-    }),
-    logging: stripUndefined({
-      logLevel: envConfig.LOG_LEVEL,
-      showChanges: envConfig.LOGGING_SHOW_CHANGES,
-      ignoredKeys: envConfig.LOGGING_IGNORED_KEYS,
-      showVersionNumber: envConfig.LOGGING_SHOW_VERSION_NUMBER,
-      skipCacheLogging: envConfig.LOGGING_SKIP_CACHE_LOGGING,
-      showTimestamp: envConfig.LOGGING_SHOW_TIMESTAMP,
-    }),
-    versionCheck: stripUndefined({
-      checkInterval: envConfig.VERSION_CHECK_INTERVAL,
-      ntfyWebhookUrl: envConfig.VERSION_CHECK_NTFY_WEBHOOK_URL,
-      updateChannel: envConfig.VERSION_CHECK_UPDATE_CHANNEL,
-      notifyGracePeriod: envConfig.VERSION_CHECK_NOTIFY_GRACE_PERIOD,
-    }),
-    healthCheck: stripUndefined({
-      enabled: envConfig.HEALTH_CHECK_ENABLED,
-      filePath: envConfig.HEALTH_CHECK_FILE_PATH,
-      unHealthyRestartMinutes: envConfig.HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES,
-    }),
-    ...(envConfig.E2M_TELEMETRY_ENABLED === undefined ? {} : { telemetryEnabled: envConfig.E2M_TELEMETRY_ENABLED }),
+  // Unset values are skipped so configSchema defaults apply.
+  const raw: Record<string, unknown> = {}
+  for (const { env: name, path: configPath } of ENV_FIELDS) {
+    const value = parsedEnv.data[name]
+    if (value !== undefined) setPath(raw, configPath, value)
   }
+  const parsed = configSchema.safeParse(raw)
+  if (!parsed.success) throw toConfigError(parsed.error, true)
+  return parsed.data
 }
 
-export function createConfigFromEnv(): string | undefined {
+/** Parse and validate a YAML config file's contents (file mode). Throws ConfigError. */
+export function parseConfigFile(text: string): AppConfig {
+  const parsed = configSchema.safeParse(yaml.parse(text))
+  if (!parsed.success) throw toConfigError(parsed.error, false)
+  return parsed.data
+}
+
+/**
+ * Load the config: `config.yml` next to the package root (or CONFIG_FILE_OVERRIDE,
+ * relative to it) when it exists, otherwise environment variables — never mixed.
+ */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const filename = env.CONFIG_FILE_OVERRIDE || 'config.yml'
+  const configPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', filename)
+  if (fs.existsSync(configPath)) {
+    return parseConfigFile(fs.readFileSync(configPath, 'utf8'))
+  }
   console.info('Config file not found. Loading config from environment variables.')
-
-  let envConfig: z.infer<typeof envSchema>
-  try {
-    envConfig = envSchema.parse(process.env)
-  } catch (error) {
-    return handleValidationError(error, true)
-  }
-
-  let validatedConfig: AppConfig
-  try {
-    validatedConfig = configSchema.parse(buildConfigFromEnv(envConfig))
-  } catch (error) {
-    return handleValidationError(error, true)
-  }
-
-  return yaml.stringify(validatedConfig)
+  return configFromEnv(env)
 }
 
-const file = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : createConfigFromEnv()
-
-if (!file) {
-  console.error('No config file found and could not generate from environment variables.')
-  process.exit(1)
+function loadConfigOrExit(): AppConfig {
+  try {
+    return loadConfig()
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error
+    console.error(error.heading)
+    for (const detail of error.details) console.error(`  - ${detail}`)
+    process.exit(1)
+  }
 }
 
-const rawConfig = yaml.parse(file)
-
-// Validate configuration with Zod
-const config: AppConfig = (() => {
-  try {
-    return configSchema.parse(rawConfig)
-  } catch (error) {
-    handleValidationError(error, false)
-    throw error
-  }
-})()
+const config: AppConfig = loadConfigOrExit()
 
 export default config

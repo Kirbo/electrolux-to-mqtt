@@ -12,6 +12,9 @@ export default defineConfig({
     environment: 'node',
     env: {
       VITEST: 'true',
+      // src/config.ts reads config.yml (or env vars) like production; unit tests point it at
+      // the fixture, E2E runs (`pnpm test:e2e`) at the real gitignored config.yml.
+      CONFIG_FILE_OVERRIDE: process.env.E2E_TEST === 'true' ? 'config.yml' : 'tests/config.yml',
       LOG_LEVEL: process.env.LOG_LEVEL ?? 'silent',
     },
     setupFiles: ['./vitest.setup.ts'],

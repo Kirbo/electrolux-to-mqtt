@@ -68,6 +68,9 @@ Example [config.yml](./config.example.yml) file is included in the repository an
   <summary>All environment variables</summary>
 
 > For detailed descriptions and reasoning behind each option, see the comments in [`config.example.yml`](./config.example.yml).
+>
+> - **Booleans** accept `true`/`1`/`yes`/`on` and `false`/`0`/`no`/`off` (any case); any other value is a startup error. An empty value means "unset" (the default applies).
+> - **Docker secrets:** every variable can instead be read from a file by appending `_FILE`, e.g. `MQTT_PASSWORD_FILE=/run/secrets/mqtt_password` (one trailing newline is stripped). Setting both `NAME` and `NAME_FILE` is an error.
 
 | Variable                                              | Description                                                              | Default                 | Required |
 | ----------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------- | -------- |

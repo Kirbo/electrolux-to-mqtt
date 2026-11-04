@@ -52,6 +52,7 @@ electrolux:
   # want faster failure detection and don't need the upstream error reason. Default: 25, Min: 1, Max: 120.
   apiTimeoutSeconds: 25
 
+# (Optional section — every field has a default)
 homeAssistant:
   # (Optional) Automatically discover the device in Home Assistant. Default: true
   autoDiscovery: true
