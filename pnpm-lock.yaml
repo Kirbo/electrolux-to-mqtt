@@ -179,9 +179,6 @@ importers:
       pino-pretty:
         specifier: ^13.2.0
         version: 13.2.0
-      tiny-lru:
-        specifier: ^13.1.1
-        version: 13.1.1
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -1095,10 +1092,6 @@ packages:
     resolution: {integrity: sha512-Stg6edJXC/6/xqGwSXwFokrUhChJ18amEjpKH89WrQQ0oVFDF+pUUcTpiwWhFUrE89Vf16FBOlwhaw+lescxMQ==}
     engines: {node: '>=20'}
 
-  tiny-lru@13.1.1:
-    resolution: {integrity: sha512-5yPLGQspKXPoVMbUj+o/JWV3FJA1WdQAtU7CWvHb+B+RSInhzGs+W2H6FOt3Z0uNnf2DC8BJExJa7AWPW1bzFw==}
-    engines: {node: '>=14'}
-
   tinybench@6.2.3:
     resolution: {integrity: sha512-Al01C2JIBnO2CXCAPbpAl6sUiOZHeThGtHYNTa51JRw9PyWOCdr+9Ong05R4qg/Sk3+H645E8ov1h2c58ityNw==}
     engines: {node: '>=20.0.0'}
@@ -1941,8 +1934,6 @@ snapshots:
   thread-stream@4.2.1:
     dependencies:
       real-require: 1.0.0
-
-  tiny-lru@13.1.1: {}
 
   tinybench@6.2.3: {}
 

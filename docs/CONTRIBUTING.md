@@ -140,7 +140,7 @@ src/
 │   ├── homeassistant.ts # Home Assistant MQTT types
 │   └── normalized.ts    # Normalized state types
 ├── backoff.ts           # Exponential backoff with jitter
-├── cache.ts             # LRU caching for state comparison (normalized state only)
+├── cache.ts             # Last published state (normalized only) + discovery config, for diffing
 ├── config.ts            # Configuration management
 ├── electrolux-api.ts    # Electrolux REST API client (typed, validated)
 ├── electrolux-auth.ts   # Login + token refresh with retries

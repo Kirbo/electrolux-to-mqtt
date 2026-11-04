@@ -1,4 +1,3 @@
-import { LRU } from 'tiny-lru'
 import { isNormalizedState } from './appliances/normalizers.js'
 import { canonicalStringify } from './canonical-stringify.js'
 import config from './config.js'
@@ -8,21 +7,18 @@ import type { NormalizedState } from './types/normalized.js'
 const logger = createLogger('cache')
 const skipCacheLogging = config.logging.skipCacheLogging
 
-const maxItems = 1000
-const defaultTtl = 1000 * 60 * 60 * 24 // 24 hours
-const defaultResetTtl = true
-
 type CacheKeys = {
   state: string
   autoDiscovery: string
 }
 
+/**
+ * Canonical-JSON store for each appliance's last published state and discovery config.
+ * A plain Map: it holds two entries per appliance and cleanupAppliance deletes them, so
+ * it needs neither a size limit nor a TTL.
+ */
 export class Cache {
-  private readonly lru: LRU<string>
-
-  constructor(max = maxItems, ttl = defaultTtl, resetTtl = defaultResetTtl) {
-    this.lru = new LRU<string>(max, ttl, resetTtl)
-  }
+  private readonly store = new Map<string, string>()
 
   /**
    * Returns the cache key object for an appliance.
@@ -42,13 +38,11 @@ export class Cache {
    * Returns true if the stored canonical form of the value matches the
    * incoming value — i.e. the value has not changed since last stored.
    *
-   * Uses the LRU as the single store: if the key was evicted, `lru.get`
-   * returns `undefined` and we treat that as a MISS, preventing stale
-   * hashStore entries from causing false positives.
+   * A key that was never stored (or was deleted) is a MISS.
    */
   matchByValue(key: string, value: unknown): boolean {
     const incoming = canonicalStringify(value)
-    const stored = this.lru.get(key)
+    const stored = this.store.get(key)
     if (stored !== undefined && stored === incoming) {
       if (!skipCacheLogging) {
         logger.debug(`Key "${key}" value has not changed.`)
@@ -56,7 +50,7 @@ export class Cache {
       return true
     }
 
-    this.lru.set(key, incoming)
+    this.store.set(key, incoming)
     if (!skipCacheLogging) {
       logger.debug(`Set "${key}" value:`, value)
     }
@@ -65,7 +59,7 @@ export class Cache {
 
   /** The appliance's last published (normalized) state, or null. */
   getState(applianceId: string): NormalizedState | null {
-    const stored = this.lru.get(this.cacheKey(applianceId).state)
+    const stored = this.store.get(this.cacheKey(applianceId).state)
     if (stored === undefined) return null
     const value: unknown = JSON.parse(stored)
     return isNormalizedState(value) ? value : null
@@ -74,7 +68,7 @@ export class Cache {
   /** Only normalized state is cached — every republish path can send it to MQTT as-is. */
   setState(applianceId: string, state: NormalizedState): this {
     const key = this.cacheKey(applianceId).state
-    this.lru.set(key, canonicalStringify(state))
+    this.store.set(key, canonicalStringify(state))
     if (!skipCacheLogging) {
       logger.debug(`Set "${key}" value:`, state)
     }
@@ -82,7 +76,7 @@ export class Cache {
   }
 
   delete(key: string): this {
-    this.lru.delete(key)
+    this.store.delete(key)
     return this
   }
 }

@@ -125,22 +125,22 @@ describe('Cache', () => {
     })
   })
 
-  describe('LRU eviction — hashStore drift (NIT fix)', () => {
-    it('should return MISS when LRU has evicted the key, even with the same value', () => {
-      // max=2: only 2 entries fit. After filling 3 keys the first key is evicted.
-      const cache = new Cache(2)
-      const value = { temp: 21 }
+  describe('lifetime', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
 
-      // Prime key-A
-      cache.matchByValue('key-A', value) // MISS — stores key-A
+    it('keeps entries until they are deleted — no TTL or size eviction', () => {
+      vi.useFakeTimers()
+      const cache = new Cache()
+      cache.setState('appliance-1', state())
+      cache.matchByValue('discovery', { modes: ['cool'] })
+      for (let i = 0; i < 2000; i++) cache.matchByValue(`filler-${i}`, i)
 
-      // Fill the LRU to capacity — key-A gets evicted on the third insert
-      cache.matchByValue('key-B', { temp: 22 })
-      cache.matchByValue('key-C', { temp: 23 })
+      vi.advanceTimersByTime(25 * 60 * 60 * 1000) // past the old 24 h TTL
 
-      // key-A is no longer in the LRU. matchByValue must return false (MISS),
-      // not true — even though the value is unchanged.
-      expect(cache.matchByValue('key-A', value)).toBe(false)
+      expect(cache.getState('appliance-1')).toEqual(state())
+      expect(cache.matchByValue('discovery', { modes: ['cool'] })).toBe(true)
     })
   })
 
