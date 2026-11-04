@@ -1,67 +1,14 @@
-import mqtt, { type IClientPublishOptions } from 'mqtt'
-import config from './config.js'
+import mqtt from 'mqtt'
+import type { AppConfig } from './config.js'
 import createLogger from './logger.js'
 
 type QoS = 0 | 1 | 2
+type MessageHandler = (topic: string, message: Buffer) => void
 
 const logger = createLogger('mqtt')
 
-const retain = config.mqtt.retain
-// configSchema enforces int().min(0).max(2) — cast is safe after schema validation.
-const qos = config.mqtt.qos as QoS
-
-const defaultOptions: IClientPublishOptions = {
-  retain,
-  qos,
-}
-
-const client = mqtt.connect(config.mqtt.url, {
-  clientId: `${config.mqtt.clientId}-electrolux`,
-  username: config.mqtt.username,
-  password: config.mqtt.password,
-  clean: true,
-})
-
-// Exact-topic router: topic -> handler(topic, payload)
-const topicHandlers = new Map<string, (topic: string, message: Buffer) => void>()
-
-// Fan-out callbacks fired on every 'connect' event (initial connect + reconnects).
-// Registered via IMqtt.onReconnect(); see Orchestrator for the republish-on-reconnect use case.
-const reconnectCallbacks: Array<() => void> = []
-
-client
-  .on('connect', () => {
-    logger.info(`Connected to MQTT broker: ${config.mqtt.url}`)
-    for (const cb of reconnectCallbacks) {
-      cb()
-    }
-  })
-  .on('error', (error) => {
-    logger.error('MQTT connection error:', error)
-  })
-  .on('reconnect', () => {
-    logger.info('Reconnecting to MQTT broker...')
-  })
-  .on('close', () => {
-    logger.info('MQTT connection closed')
-  })
-  .on('offline', () => {
-    logger.warn('MQTT client is offline')
-  })
-  .on('end', () => {
-    logger.info('MQTT client has ended')
-  })
-  .on('message', (incomingTopic, message) => {
-    const handler = topicHandlers.get(incomingTopic)
-    if (!handler) return
-
-    logger.debug('Received message on topic:', incomingTopic, 'Message:', message.toString())
-    try {
-      handler(incomingTopic, message)
-    } catch (e) {
-      logger.error('Handler error for topic', incomingTopic, e)
-    }
-  })
+// configSchema enforces int().min(0).max(2) — narrow without a cast.
+const toQoS = (value: number): QoS => (value === 0 || value === 1 ? value : 2)
 
 export interface IMqtt {
   client: mqtt.MqttClient
@@ -70,10 +17,10 @@ export interface IMqtt {
   publish(topicSuffix: string, message: string, options?: mqtt.IClientPublishOptions): void
   publishInfo(message: string, options?: mqtt.IClientPublishOptions): void
   autoDiscovery(applianceId: string, message: string, options?: mqtt.IClientPublishOptions): void
-  subscribe(topicSuffix: string, callback: (topic: string, message: Buffer) => void): Promise<void>
+  subscribe(topicSuffix: string, callback: MessageHandler): Promise<void>
   unsubscribe(topicSuffix: string): void
   /** Subscribe to an absolute topic (no prefix added). */
-  subscribeAbsolute(topic: string, callback: (topic: string, message: Buffer) => void): Promise<void>
+  subscribeAbsolute(topic: string, callback: MessageHandler): Promise<void>
   /** Unsubscribe from an absolute topic (no prefix added). */
   unsubscribeAbsolute(topic: string): void
   /** Ends the client; resolves once in-flight messages are flushed and it has closed. */
@@ -84,12 +31,61 @@ export interface IMqtt {
 }
 
 class Mqtt implements IMqtt {
-  public client: mqtt.MqttClient
-  public topicPrefix: string
+  public readonly client: mqtt.MqttClient
+  public readonly topicPrefix: string
+  private readonly defaultOptions: mqtt.IClientPublishOptions
+  // Exact-topic router: topic -> handler(topic, payload)
+  private readonly topicHandlers = new Map<string, MessageHandler>()
+  // Fan-out callbacks fired on every 'connect' event (initial connect + reconnects).
+  private readonly reconnectCallbacks: Array<() => void> = []
 
-  constructor() {
-    this.client = client
-    this.topicPrefix = `${config.mqtt.topicPrefix}appliances`
+  /** Connects immediately; nothing connects at import time. */
+  constructor(settings: AppConfig['mqtt']) {
+    this.topicPrefix = `${settings.topicPrefix}appliances`
+    this.defaultOptions = { retain: settings.retain, qos: toQoS(settings.qos) }
+    this.client = mqtt.connect(settings.url, {
+      clientId: `${settings.clientId}-electrolux`,
+      username: settings.username,
+      password: settings.password,
+      clean: true,
+    })
+    this.registerEventHandlers(settings.url)
+  }
+
+  private registerEventHandlers(url: string): void {
+    this.client
+      .on('connect', () => {
+        logger.info(`Connected to MQTT broker: ${url}`)
+        for (const cb of this.reconnectCallbacks) {
+          cb()
+        }
+      })
+      .on('error', (error) => {
+        logger.error('MQTT connection error:', error)
+      })
+      .on('reconnect', () => {
+        logger.info('Reconnecting to MQTT broker...')
+      })
+      .on('close', () => {
+        logger.info('MQTT connection closed')
+      })
+      .on('offline', () => {
+        logger.warn('MQTT client is offline')
+      })
+      .on('end', () => {
+        logger.info('MQTT client has ended')
+      })
+      .on('message', (incomingTopic, message) => {
+        const handler = this.topicHandlers.get(incomingTopic)
+        if (!handler) return
+
+        logger.debug('Received message on topic:', incomingTopic, 'Message:', message.toString())
+        try {
+          handler(incomingTopic, message)
+        } catch (e) {
+          logger.error('Handler error for topic', incomingTopic, e)
+        }
+      })
   }
 
   private _publish(topic: string, message: string, options?: mqtt.IClientPublishOptions) {
@@ -106,7 +102,7 @@ class Mqtt implements IMqtt {
       logger.debug('Publishing to topic:', topic, 'Message:', message)
     }
     const publishOptions = {
-      ...defaultOptions,
+      ...this.defaultOptions,
       ...options,
     }
     this.client.publish(topic, message, publishOptions, (error) => {
@@ -155,7 +151,7 @@ class Mqtt implements IMqtt {
     })
   }
 
-  public subscribe(topicSuffix: string, callback: (topic: string, message: Buffer) => void): Promise<void> {
+  public subscribe(topicSuffix: string, callback: MessageHandler): Promise<void> {
     const topic = `${this.topicPrefix}/${topicSuffix}`
     logger.debug('Subscribing to topic:', topic)
 
@@ -168,7 +164,7 @@ class Mqtt implements IMqtt {
         }
 
         logger.info(`Subscribed to topic "${topic}" successfully`)
-        topicHandlers.set(topic, callback)
+        this.topicHandlers.set(topic, callback)
         resolve()
       })
     })
@@ -187,11 +183,11 @@ class Mqtt implements IMqtt {
       // Delete after broker confirms (or errors) to preserve the handler
       // for any commands that arrive during the in-flight unsubscribe window.
       // Mirrors the subscribe pattern that adds the handler inside the callback.
-      topicHandlers.delete(topic)
+      this.topicHandlers.delete(topic)
     })
   }
 
-  public subscribeAbsolute(topic: string, callback: (topic: string, message: Buffer) => void): Promise<void> {
+  public subscribeAbsolute(topic: string, callback: MessageHandler): Promise<void> {
     logger.debug('Subscribing to absolute topic:', topic)
 
     return new Promise((resolve, reject) => {
@@ -203,7 +199,7 @@ class Mqtt implements IMqtt {
         }
 
         logger.info(`Subscribed to absolute topic "${topic}" successfully`)
-        topicHandlers.set(topic, callback)
+        this.topicHandlers.set(topic, callback)
         resolve()
       })
     })
@@ -218,7 +214,7 @@ class Mqtt implements IMqtt {
       } else {
         logger.info(`Unsubscribed from absolute topic "${topic}" successfully`)
       }
-      topicHandlers.delete(topic)
+      this.topicHandlers.delete(topic)
     })
   }
 
@@ -236,7 +232,7 @@ class Mqtt implements IMqtt {
   }
 
   public onReconnect(callback: () => void): void {
-    reconnectCallbacks.push(callback)
+    this.reconnectCallbacks.push(callback)
   }
 }
 

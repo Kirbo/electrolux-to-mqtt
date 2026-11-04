@@ -42,20 +42,16 @@ vi.mock('mqtt', () => {
   }
 })
 
-// Mock config
-vi.mock('#/config.js', () => ({
-  default: {
-    mqtt: {
-      url: 'mqtt://test-broker:1883',
-      clientId: 'test-client',
-      username: 'test-user',
-      password: 'test-pass',
-      topicPrefix: 'test_',
-      retain: false,
-      qos: 2,
-    },
-  },
-}))
+// The Mqtt class takes its settings explicitly (no config import).
+const MQTT_SETTINGS = {
+  url: 'mqtt://test-broker:1883',
+  clientId: 'test-client',
+  username: 'test-user',
+  password: 'test-pass',
+  topicPrefix: 'test_',
+  retain: false,
+  qos: 2,
+}
 
 // Mock logger — captures logger spies so tests can assert on them
 vi.mock('#/logger.js', () => ({
@@ -90,7 +86,29 @@ describe('Mqtt', () => {
     // Dynamically import the actual module after mocks are set up
     const module = await import('#/mqtt.js')
     Mqtt = module.default
-    mqttInstance = new Mqtt()
+    mqttInstance = new Mqtt(MQTT_SETTINGS)
+  })
+
+  describe('connection lifecycle', () => {
+    it('does not connect when the module is merely imported', async () => {
+      vi.resetModules()
+      const mqttLib = await import('mqtt')
+      vi.mocked(mqttLib.default.connect).mockClear()
+      await import('#/mqtt.js')
+
+      expect(mqttLib.default.connect).not.toHaveBeenCalled()
+    })
+
+    it('connects with the settings passed to the constructor', async () => {
+      const mqttLib = await import('mqtt')
+      vi.mocked(mqttLib.default.connect).mockClear()
+      new Mqtt({ ...MQTT_SETTINGS, url: 'mqtts://other:8883', clientId: 'abc' })
+
+      expect(mqttLib.default.connect).toHaveBeenCalledWith(
+        'mqtts://other:8883',
+        expect.objectContaining({ clientId: 'abc-electrolux', username: 'test-user', password: 'test-pass' }),
+      )
+    })
   })
 
   describe('constructor', () => {

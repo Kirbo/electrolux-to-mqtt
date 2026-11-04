@@ -30,17 +30,21 @@ vi.mock('mqtt', () => ({
   },
 }))
 
-// Mock config
-vi.mock('#/config.js', () => ({
-  default: {
-    mqtt: {
-      url: 'mqtt://test-broker:1883',
-      username: 'test-user',
-      password: 'test-pass',
-      topicPrefix: 'test_',
-    },
-  },
-}))
+const MQTT_SETTINGS = {
+  url: 'mqtt://test-broker:1883',
+  clientId: 'test-client',
+  username: 'test-user',
+  password: 'test-pass',
+  topicPrefix: 'test_',
+  retain: false,
+  qos: 2,
+}
+
+/** Constructing a client is what registers its event handlers. */
+const createClient = async () => {
+  const Mqtt = (await import('#/mqtt.js')).default
+  return new Mqtt(MQTT_SETTINGS)
+}
 
 // Mock logger
 vi.mock('#/logger.js', () => ({
@@ -54,8 +58,7 @@ vi.mock('#/logger.js', () => ({
 
 describe('MQTT Module Event Handlers', () => {
   it('should execute connect event handler', async () => {
-    // Import the module to trigger event handler registration
-    await import('#/mqtt.js')
+    await createClient()
 
     const connectHandler = eventHandlers.get('connect')
     expect(connectHandler).toBeDefined()
@@ -65,7 +68,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should execute error event handler', async () => {
-    await import('#/mqtt.js')
+    await createClient()
 
     const errorHandler = eventHandlers.get('error')
     expect(errorHandler).toBeDefined()
@@ -74,7 +77,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should execute reconnect event handler', async () => {
-    await import('#/mqtt.js')
+    await createClient()
 
     const reconnectHandler = eventHandlers.get('reconnect')
     expect(reconnectHandler).toBeDefined()
@@ -83,7 +86,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should execute close event handler', async () => {
-    await import('#/mqtt.js')
+    await createClient()
 
     const closeHandler = eventHandlers.get('close')
     expect(closeHandler).toBeDefined()
@@ -92,7 +95,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should execute offline event handler', async () => {
-    await import('#/mqtt.js')
+    await createClient()
 
     const offlineHandler = eventHandlers.get('offline')
     expect(offlineHandler).toBeDefined()
@@ -101,7 +104,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should execute end event handler', async () => {
-    await import('#/mqtt.js')
+    await createClient()
 
     const endHandler = eventHandlers.get('end')
     expect(endHandler).toBeDefined()
@@ -110,8 +113,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should execute message event handler with subscribed topic', async () => {
-    const Mqtt = (await import('#/mqtt.js')).default
-    const mqttInstance = new Mqtt()
+    const mqttInstance = await createClient()
 
     const messageHandler = eventHandlers.get('message')
     expect(messageHandler).toBeDefined()
@@ -129,7 +131,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should handle message event without subscribed topic', async () => {
-    await import('#/mqtt.js')
+    await createClient()
 
     const messageHandler = eventHandlers.get('message')
     expect(messageHandler).toBeDefined()
@@ -139,8 +141,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should catch errors in message topic handler', async () => {
-    const Mqtt = (await import('#/mqtt.js')).default
-    const mqttInstance = new Mqtt()
+    const mqttInstance = await createClient()
 
     const messageHandler = eventHandlers.get('message')
     expect(messageHandler).toBeDefined()
@@ -158,8 +159,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should handle publish error callback', async () => {
-    const Mqtt = (await import('#/mqtt.js')).default
-    const mqttInstance = new Mqtt()
+    const mqttInstance = await createClient()
 
     // Mock publish to call callback with error
     mockClient.publish = vi.fn((_topic, _message, _options, callback) => {
@@ -173,8 +173,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should reject promise on subscribe error callback', async () => {
-    const Mqtt = (await import('#/mqtt.js')).default
-    const mqttInstance = new Mqtt()
+    const mqttInstance = await createClient()
 
     // Mock subscribe to call callback with error
     mockClient.subscribe = vi.fn((_topic, callback) => {
@@ -188,8 +187,7 @@ describe('MQTT Module Event Handlers', () => {
   })
 
   it('should handle unsubscribe error callback', async () => {
-    const Mqtt = (await import('#/mqtt.js')).default
-    const mqttInstance = new Mqtt()
+    const mqttInstance = await createClient()
 
     // Mock unsubscribe to call callback with error
     mockClient.unsubscribe = vi.fn((_topic, callback) => {

@@ -11,7 +11,7 @@ import { startVersionChecker } from './version-checker.js'
 const currentVersion = packageJson.version
 const logger = createLogger('app')
 logger.info(`Starting Electrolux to MQTT (version: ${currentVersion})`)
-const mqtt = new Mqtt()
+const mqtt = new Mqtt(config.mqtt)
 const client = new ElectroluxClient(mqtt)
 
 // Stable per-install Aptabase session id, derived from the Electrolux username. Constant
@@ -154,7 +154,8 @@ export const main = async () => {
   )
 }
 
-if (process.env.VITEST !== 'true') {
+// Run only as the entry module (`node dist/index.js`, `tsx src/index.ts`), never on import.
+if (import.meta.main) {
   try {
     await main()
   } catch (err: unknown) {

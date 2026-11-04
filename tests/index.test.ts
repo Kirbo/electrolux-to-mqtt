@@ -161,6 +161,15 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       expect(MockMqttCtor).toHaveBeenCalledTimes(1)
     })
 
+    it('should construct Mqtt with the mqtt section of the config', () => {
+      expect(MockMqttCtor).toHaveBeenCalledWith(expect.objectContaining({ url: 'mqtt://test-broker:1883', qos: 2 }))
+    })
+
+    it('should not start main() when imported rather than run as the entry module', () => {
+      // import.meta.main is false under Vitest — main() must not have logged in or initialized
+      expect(mockClientInstance.initialize).not.toHaveBeenCalled()
+    })
+
     it('should construct ElectroluxClient exactly once', () => {
       expect(MockElectroluxClientCtor).toHaveBeenCalledTimes(1)
     })
