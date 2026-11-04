@@ -1,7 +1,9 @@
 import { LRU } from 'tiny-lru'
+import { isNormalizedState } from './appliances/normalizers.js'
 import { canonicalStringify } from './canonical-stringify.js'
 import config from './config.js'
 import createLogger from './logger.js'
+import type { NormalizedState } from './types/normalized.js'
 
 const logger = createLogger('cache')
 const skipCacheLogging = config.logging.skipCacheLogging
@@ -61,24 +63,22 @@ export class Cache {
     return false
   }
 
-  get(key: string): unknown {
-    const value = this.lru.get(key)
-    if (value === undefined) {
-      return undefined
-    }
-    return JSON.parse(value) as unknown
+  /** The appliance's last published (normalized) state, or null. */
+  getState(applianceId: string): NormalizedState | null {
+    const stored = this.lru.get(this.cacheKey(applianceId).state)
+    if (stored === undefined) return null
+    const value: unknown = JSON.parse(stored)
+    return isNormalizedState(value) ? value : null
   }
 
-  set(key: string, value: unknown): this {
-    this.lru.set(key, canonicalStringify(value))
+  /** Only normalized state is cached — every republish path can send it to MQTT as-is. */
+  setState(applianceId: string, state: NormalizedState): this {
+    const key = this.cacheKey(applianceId).state
+    this.lru.set(key, canonicalStringify(state))
     if (!skipCacheLogging) {
-      logger.debug(`Set "${key}" value:`, value)
+      logger.debug(`Set "${key}" value:`, state)
     }
     return this
-  }
-
-  has(key: string): boolean {
-    return this.lru.has(key)
   }
 
   delete(key: string): this {

@@ -139,14 +139,18 @@ src/
 ├── types/               # TypeScript type definitions
 │   ├── homeassistant.ts # Home Assistant MQTT types
 │   └── normalized.ts    # Normalized state types
-├── cache.ts             # LRU caching for state comparison
+├── backoff.ts           # Exponential backoff with jitter
+├── cache.ts             # LRU caching for state comparison (normalized state only)
 ├── config.ts            # Configuration management
-├── electrolux.ts        # Electrolux API client
+├── electrolux-api.ts    # Electrolux REST API client (typed, validated)
+├── electrolux-auth.ts   # Login + token refresh with retries
 ├── health.ts            # Health check file writer
+├── http.ts              # fetch wrapper: timeouts, HttpError
 ├── index.ts             # Main application entry point
 ├── logger.ts            # Logging utilities
 ├── mqtt.ts              # MQTT client wrapper
 ├── orchestrator.ts      # Application lifecycle orchestration
+├── state-sync.ts        # Poll → diff → publish, commands with feedback
 ├── types.d.ts           # Electrolux API type definitions
 └── version-checker.ts   # Update checker and telemetry
 

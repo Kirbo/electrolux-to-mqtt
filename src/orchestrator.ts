@@ -1,11 +1,12 @@
 import type { BaseAppliance } from './appliances/base.js'
 import { createAppliance } from './appliances/factory.js'
-import { parseMqttCommand, resolveCachedNormalizedState } from './appliances/normalizers.js'
+import { parseMqttCommand } from './appliances/normalizers.js'
 import { cache } from './cache.js'
-import type { ElectroluxClient } from './electrolux.js'
+import type { ElectroluxApi } from './electrolux-api.js'
 import { writeHealthFile } from './health.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
+import type { StateSync } from './state-sync.js'
 import type { ApplianceStub } from './types.js'
 
 const logger = createLogger('app')
@@ -22,8 +23,14 @@ export interface OrchestratorConfig {
   haBirthPayload: string
 }
 
+/** The ElectroluxApi calls discovery needs. */
+export type DiscoveryApi = Pick<ElectroluxApi, 'getAppliances' | 'getApplianceInfo'>
+/** The StateSync calls polling and commands need. */
+export type ApplianceSync = Pick<StateSync, 'pollState' | 'sendCommand' | 'removeAppliance'>
+
 export class Orchestrator implements AsyncDisposable {
-  private readonly client: ElectroluxClient
+  private readonly api: DiscoveryApi
+  private readonly sync: ApplianceSync
   private readonly mqtt: IMqtt
   private readonly config: OrchestratorConfig
   private readonly activeTimeouts = new Set<NodeJS.Timeout>()
@@ -36,8 +43,9 @@ export class Orchestrator implements AsyncDisposable {
   private _birthRegistered = false
   public isShuttingDown = false
 
-  constructor(client: ElectroluxClient, mqtt: IMqtt, config: OrchestratorConfig) {
-    this.client = client
+  constructor(api: DiscoveryApi, sync: ApplianceSync, mqtt: IMqtt, config: OrchestratorConfig) {
+    this.api = api
+    this.sync = sync
     this.mqtt = mqtt
     this.config = config
   }
@@ -79,9 +87,8 @@ export class Orchestrator implements AsyncDisposable {
 
     this.mqtt.onReconnect(() => {
       logger.info('MQTT connected — republishing cached state for all appliances')
-      for (const [applianceId, appliance] of this.applianceInstances) {
-        const stateKey = cache.cacheKey(applianceId).state
-        const normalizedState = resolveCachedNormalizedState(cache.get(stateKey), appliance)
+      for (const applianceId of this.applianceInstances.keys()) {
+        const normalizedState = cache.getState(applianceId)
         if (normalizedState === null) {
           logger.debug(`No cached state for appliance ${applianceId} — skipping reconnect republish`)
           continue
@@ -109,8 +116,7 @@ export class Orchestrator implements AsyncDisposable {
         this.mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), { retain: true, qos: 2 })
       }
 
-      const stateKey = cache.cacheKey(applianceId).state
-      const normalizedState = resolveCachedNormalizedState(cache.get(stateKey), appliance)
+      const normalizedState = cache.getState(applianceId)
       if (normalizedState === null) {
         logger.debug(`No cached state for appliance ${applianceId} — skipping state republish`)
         continue
@@ -198,8 +204,8 @@ export class Orchestrator implements AsyncDisposable {
       return Promise.resolve()
     }
     this.pollsInFlight.add(applianceId)
-    return this.client
-      .getApplianceState(appliance, applianceDiscoveryCallback)
+    return this.sync
+      .pollState(appliance, applianceDiscoveryCallback)
       .then((state) => {
         this.trackApiResult(state, Date.now())
         this.writeHealthStatus()
@@ -243,7 +249,7 @@ export class Orchestrator implements AsyncDisposable {
     const { applianceId } = applianceStub
 
     try {
-      const applianceInfo = await this.client.getApplianceInfo(applianceId)
+      const applianceInfo = await this.api.getApplianceInfo(applianceId)
       if (!applianceInfo) {
         logger.error('Failed to get appliance info for applianceId:', applianceId)
         return
@@ -311,7 +317,7 @@ export class Orchestrator implements AsyncDisposable {
           logger.info('Received command on topic:', topic, 'Message:', command)
           const applianceInstance = this.applianceInstances.get(applianceId)
           if (applianceInstance) {
-            this.client.sendApplianceCommand(applianceInstance, command).catch((err: unknown) => {
+            this.sync.sendCommand(applianceInstance, command).catch((err: unknown) => {
               logger.error(`Failed to send command to appliance ${applianceId}:`, err)
             })
           } else {
@@ -354,9 +360,9 @@ export class Orchestrator implements AsyncDisposable {
     // Unsubscribe from MQTT commands
     this.mqtt.unsubscribe(`${applianceId}/command`)
 
-    // Remove from instances map and clean up client tracking data
+    // Remove from instances map and forget its command/mode tracking
     this.applianceInstances.delete(applianceId)
-    this.client.removeAppliance(applianceId)
+    this.sync.removeAppliance(applianceId)
 
     // Optionally publish offline status
     if (this.config.autoDiscovery) {
@@ -412,7 +418,7 @@ export class Orchestrator implements AsyncDisposable {
    */
   public async discoverAppliances() {
     try {
-      const appliances = await this.client.getAppliances()
+      const appliances = await this.api.getAppliances()
 
       if (!appliances) {
         // API call failed (network error, DNS failure, etc.) — skip discovery.
@@ -459,7 +465,7 @@ export class Orchestrator implements AsyncDisposable {
 
   /**
    * Graceful shutdown: disposes orchestrator-owned resources — clears all
-   * pending startup timeouts, appliance polling intervals, client state, and
+   * pending startup timeouts, appliance polling intervals, and the
    * MQTT connection. External resources (version checker, discovery interval)
    * are owned by the caller (src/index.ts) and must be disposed there.
    * Resolves once the MQTT client has flushed and closed.
@@ -481,9 +487,6 @@ export class Orchestrator implements AsyncDisposable {
       clearInterval(interval)
     }
     this.applianceStateIntervals.clear()
-
-    // Cleanup client timeouts
-    this.client.cleanup()
 
     // Unsubscribe from HA birth topic
     if (this._birthRegistered) {

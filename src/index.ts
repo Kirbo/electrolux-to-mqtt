@@ -1,10 +1,14 @@
 import packageJson from '../package.json' with { type: 'json' }
+import { computeBackoffDelay } from './backoff.js'
+import { cache } from './cache.js'
 import config from './config.js'
 import { disposableInterval, disposableTimeout } from './disposable.js'
-import { computeBackoffDelay, ElectroluxClient } from './electrolux.js'
+import { ElectroluxApi } from './electrolux-api.js'
+import { ElectroluxAuth } from './electrolux-auth.js'
 import createLogger from './logger.js'
 import Mqtt from './mqtt.js'
 import { Orchestrator } from './orchestrator.js'
+import { StateSync } from './state-sync.js'
 import { deriveTelemetrySessionId, summarizeAppliances } from './telemetry.js'
 import { startVersionChecker } from './version-checker.js'
 
@@ -12,16 +16,37 @@ const currentVersion = packageJson.version
 const logger = createLogger('app')
 logger.info(`Starting Electrolux to MQTT (version: ${currentVersion})`)
 const mqtt = new Mqtt(config.mqtt)
-const client = new ElectroluxClient(mqtt)
+const { electrolux } = config
+const apiTimeoutMs = electrolux.apiTimeoutSeconds * 1000
+const auth = new ElectroluxAuth({
+  apiKey: electrolux.apiKey,
+  username: electrolux.username,
+  password: electrolux.password,
+  countryCode: electrolux.countryCode,
+  renewTokenBeforeExpiryMs: electrolux.renewTokenBeforeExpiry * 60_000,
+  timeoutMs: apiTimeoutMs,
+})
+const api = new ElectroluxApi(auth, {
+  apiKey: electrolux.apiKey,
+  timeoutMs: apiTimeoutMs,
+  refreshIntervalSeconds: electrolux.refreshInterval,
+  discoveryIntervalSeconds: electrolux.applianceDiscoveryInterval,
+})
+const sync = new StateSync(api, mqtt, cache, {
+  commandStateDelayMs: electrolux.commandStateDelaySeconds * 1000,
+  showChanges: config.logging.showChanges,
+  ignoredKeys: config.logging.ignoredKeys,
+  revertStateOnRejection: config.homeAssistant.revertStateOnRejection,
+})
 
 // Stable per-install Aptabase session id, derived from the Electrolux username. Constant
 // across restarts so the badge can count distinct installs over a rolling window.
 const telemetrySessionId = deriveTelemetrySessionId(config.electrolux.username)
 
-const refreshInterval = client.refreshInterval * 1000
-const applianceDiscoveryInterval = config.electrolux.applianceDiscoveryInterval * 1000
+const refreshInterval = electrolux.refreshInterval * 1000
+const applianceDiscoveryInterval = electrolux.applianceDiscoveryInterval * 1000
 
-const orchestrator = new Orchestrator(client, mqtt, {
+const orchestrator = new Orchestrator(api, sync, mqtt, {
   refreshInterval,
   applianceDiscoveryInterval,
   autoDiscovery: config.homeAssistant.autoDiscovery,
@@ -47,6 +72,7 @@ const shutdown = async () => {
   discoveryIntervalDisposable?.[Symbol.dispose]()
   discoveryIntervalDisposable = null
   if (stopVersionChecker) stopVersionChecker()
+  auth.cleanup()
   let timeout: NodeJS.Timeout | undefined
   const timedOut = new Promise<void>((resolve) => {
     timeout = setTimeout(() => {
@@ -69,15 +95,6 @@ const onSignal = () => {
 process.on('SIGTERM', onSignal)
 process.on('SIGINT', onSignal)
 
-// Wait for client login — login() has its own exponential backoff retry
-const waitForLogin = async () => {
-  if (client.isLoggedIn) return
-  if (!client.isLoggingIn) {
-    await client.login()
-  }
-  await client.waitForLogin()
-}
-
 // Retries of main() (API failure / zero appliances) back off exponentially from
 // refreshInterval up to this cap, instead of hammering the API at a fixed rate.
 const MAIN_RETRY_MAX_DELAY_MS = 30 * 60_000
@@ -98,12 +115,11 @@ const scheduleMainRetry = (reason: string) => {
 export const main = async () => {
   logger.info(`Appliance refresh interval set to: ${refreshInterval / 1000} seconds`)
 
-  // Initialize the client
-  client.initialize()
-  await waitForLogin()
+  // Log in first (retries with backoff until it succeeds), so the first API calls don't each wait on it
+  await auth.getAccessToken()
 
   // Initial appliance discovery
-  const appliances = await client.getAppliances()
+  const appliances = await api.getAppliances()
 
   if (!appliances) {
     // API call failed (network error, DNS failure, etc.)

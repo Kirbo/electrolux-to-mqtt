@@ -1,17 +1,53 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Cache } from '#/cache.js'
+import type { NormalizedState } from '#/types/normalized.js'
 
 describe('Cache', () => {
-  it('should store and retrieve values', () => {
+  const state = (overrides: Record<string, unknown> = {}) =>
+    ({
+      applianceId: 'appliance-1',
+      mode: 'cool',
+      applianceState: 'on',
+      targetTemperatureC: 22,
+      ...overrides,
+    }) as NormalizedState
+
+  it('round-trips a normalized state per appliance', () => {
     const cache = new Cache()
-    cache.set('test-key', { name: 'value' })
-    const retrieved = cache.get('test-key')
-    expect(retrieved).toEqual({ name: 'value' })
+    cache.setState('appliance-1', state())
+
+    expect(cache.getState('appliance-1')).toEqual(state())
+    expect(cache.getState('appliance-2')).toBeNull()
   })
 
-  it('should return undefined for non-existent keys', () => {
+  it('returns a copy, not the stored object', () => {
     const cache = new Cache()
-    expect(cache.get('non-existent')).toBeUndefined()
+    const original = state()
+    cache.setState('appliance-1', original)
+    original.targetTemperatureC = 30
+
+    expect(cache.getState('appliance-1')?.targetTemperatureC).toBe(22)
+  })
+
+  it('does not return a non-normalized value stored under the state key', () => {
+    const cache = new Cache()
+    // e.g. a raw API shape written through matchByValue — never a valid state
+    cache.matchByValue(cache.cacheKey('appliance-1').state, { applianceId: 'appliance-1', properties: {} })
+
+    expect(cache.getState('appliance-1')).toBeNull()
+  })
+
+  it('forgets a state once its key is deleted', () => {
+    const cache = new Cache()
+    cache.setState('appliance-1', state())
+
+    cache.delete(cache.cacheKey('appliance-1').state)
+    expect(cache.getState('appliance-1')).toBeNull()
+  })
+
+  it('returns the cache instance from setState and delete for chaining', () => {
+    const cache = new Cache()
+    expect(cache.setState('a', state()).setState('b', state()).delete('a')).toBe(cache)
   })
 
   it('should detect when value has not changed', () => {
@@ -40,77 +76,6 @@ describe('Cache', () => {
 
     expect(keys.state).toBe('appliance-123:state')
     expect(keys.autoDiscovery).toBe('appliance-123:auto-discovery')
-  })
-
-  it('should clear values', () => {
-    const cache = new Cache()
-    cache.set('key', { val: 'value' })
-    expect(cache.get('key')).toEqual({ val: 'value' })
-
-    cache.delete('key')
-    expect(cache.get('key')).toBeUndefined()
-  })
-
-  it('should check if key exists', () => {
-    const cache = new Cache()
-    expect(cache.has('key')).toBe(false)
-
-    cache.set('key', { test: 'value' })
-    expect(cache.has('key')).toBe(true)
-
-    cache.delete('key')
-    expect(cache.has('key')).toBe(false)
-  })
-
-  it('should return parsed JSON from get', () => {
-    const cache = new Cache()
-    cache.set('test-key', { data: 'value' })
-    const result = cache.get('test-key')
-    expect(typeof result).toBe('object')
-    expect(result).toEqual({ data: 'value' })
-  })
-
-  it('should handle number values', () => {
-    const cache = new Cache()
-    cache.set('count-key', { count: 42 })
-    expect(cache.get('count-key')).toEqual({ count: 42 })
-  })
-
-  it('should handle array values', () => {
-    const cache = new Cache()
-    cache.set('array-key', [1, 2, 3])
-    expect(cache.get('array-key')).toEqual([1, 2, 3])
-  })
-
-  it('should handle nested objects', () => {
-    const cache = new Cache()
-    const nested = { nested: { deep: { value: 'test' } } }
-    cache.set('nested-key', nested)
-    expect(cache.get('nested-key')).toEqual(nested)
-  })
-
-  it('should return cache instance for chaining', () => {
-    const cache = new Cache()
-    const result = cache.set('key1', { val: 'value1' })
-    expect(result).toBe(cache)
-
-    // Should allow chaining
-    cache.set('key2', { val: 'value2' }).set('key3', { val: 'value3' })
-    expect(cache.has('key2')).toBe(true)
-    expect(cache.has('key3')).toBe(true)
-  })
-
-  it('should round-trip string values through set, matchByValue, and get', () => {
-    const cache = new Cache()
-
-    // First matchByValue call: value is new, returns false (and stores it)
-    expect(cache.matchByValue('str-key', 'hello')).toBe(false)
-
-    // Second call with same string: should match (returns true)
-    expect(cache.matchByValue('str-key', 'hello')).toBe(true)
-
-    // get() should return the original string
-    expect(cache.get('str-key')).toBe('hello')
   })
 
   it('should handle value comparison with different types', () => {
@@ -147,26 +112,6 @@ describe('Cache', () => {
       cache.matchByValue('key', { temp: 22 })
 
       expect(cache.matchByValue('key', { temp: 23 })).toBe(false)
-    })
-
-    it('should preserve get() round-trip after matchByValue', () => {
-      const cache = new Cache()
-      const value = { mode: 'heat', targetTemperatureC: 24 }
-
-      cache.matchByValue('key', value)
-
-      expect(cache.get('key')).toEqual(value)
-    })
-
-    it('should preserve get() round-trip after explicit set()', () => {
-      const cache = new Cache()
-      const value = { fans: ['auto', 'high'], swing: 'on' }
-
-      cache.set('key', value)
-
-      expect(cache.get('key')).toEqual(value)
-      // matchByValue after set should HIT
-      expect(cache.matchByValue('key', value)).toBe(true)
     })
 
     it('should clear hash entry on delete', () => {
@@ -258,11 +203,12 @@ describe('Cache', () => {
 
       const { cache } = await import('#/cache.js')
 
-      cache.set('test-key', { name: 'value' })
-      expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('Set "test-key"'), expect.anything())
+      cache.setState('appliance-1', { applianceId: 'appliance-1', mode: 'cool' } as NormalizedState)
+      expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('Set "appliance-1:state"'), expect.anything())
 
-      // matchByValue with matching value should log
+      // matchByValue logs both the store and the unchanged hit
       loggerDebugSpy.mockClear()
+      cache.matchByValue('test-key', { name: 'value' })
       cache.matchByValue('test-key', { name: 'value' })
       expect(loggerDebugSpy).toHaveBeenCalledWith(expect.stringContaining('has not changed'))
     })

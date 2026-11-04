@@ -32,11 +32,12 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createAppliance } from '#/appliances/factory.js'
-import { ElectroluxClient } from '#/electrolux.js'
+import config from '#/config.js'
+import { ElectroluxApi } from '#/electrolux-api.js'
+import { ElectroluxAuth } from '#/electrolux-auth.js'
 import createLogger from '#/logger.js'
-import type { IMqtt } from '#/mqtt.js'
 import type { ApplianceInfo, ApplianceStub } from '#/types.js'
 
 const log = createLogger('e2e')
@@ -73,41 +74,37 @@ function snapshotModelDir(info: ApplianceInfo): string {
 const isE2EEnabled = process.env.E2E_TEST === 'true'
 
 describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
-  let client: ElectroluxClient
+  const { electrolux } = config
+  const auth = new ElectroluxAuth({
+    apiKey: electrolux.apiKey,
+    username: electrolux.username,
+    password: electrolux.password,
+    countryCode: electrolux.countryCode,
+    renewTokenBeforeExpiryMs: electrolux.renewTokenBeforeExpiry * 60_000,
+    timeoutMs: electrolux.apiTimeoutSeconds * 1000,
+  })
+  const api = new ElectroluxApi(auth, {
+    apiKey: electrolux.apiKey,
+    timeoutMs: electrolux.apiTimeoutSeconds * 1000,
+    refreshIntervalSeconds: electrolux.refreshInterval,
+    discoveryIntervalSeconds: electrolux.applianceDiscoveryInterval,
+  })
   let appliances: ApplianceStub[] | null | undefined = null
   const applianceInfoMap = new Map<string, ApplianceInfo>()
 
-  // Mock MQTT client that doesn't actually publish
-  const mockMqtt = {
-    client: null,
-    topicPrefix: 'test/',
-    publish: () => {},
-    subscribe: () => Promise.resolve(),
-    isConnected: () => true,
-    connect: async () => {},
-    disconnect: async () => {},
-    generateAutoDiscoveryConfig: () => {},
-    resolveApplianceTopic: (applianceId: string) => `test/${applianceId}`,
-    unsubscribe: () => {},
-    publishInfo: () => {},
-    autoDiscovery: () => {},
-  } as unknown as IMqtt
-
   beforeAll(async () => {
-    client = new ElectroluxClient(mockMqtt)
-    client.initialize()
-
-    const loginSuccess = await client.login()
-    if (!loginSuccess) {
-      throw new Error('Failed to login to Electrolux API. Check credentials in config.yml')
-    }
-
+    // Retries with backoff until it succeeds; the 30 s hook timeout fails a bad login.
+    await auth.getAccessToken()
     log.info('Successfully authenticated with Electrolux API')
   }, 30000)
 
+  afterAll(() => {
+    auth.cleanup()
+  })
+
   describe('API Structure Validation', () => {
     it('should fetch appliances list', async () => {
-      appliances = await client.getAppliances()
+      appliances = await api.getAppliances()
 
       expect(appliances).toBeDefined()
       expect(Array.isArray(appliances)).toBe(true)
@@ -137,7 +134,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
       }
 
       for (const stub of appliances) {
-        const info = await client.getApplianceInfo(stub.applianceId)
+        const info = await api.getApplianceInfo(stub.applianceId)
         expect(info).toBeDefined()
 
         if (info) {
@@ -170,21 +167,21 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
         if (!info) continue
 
         const appliance = createAppliance(stub, info)
-        const state = await client.getApplianceState(appliance)
+        const state = await api.getApplianceState(stub.applianceId)
 
         expect(state).toBeDefined()
 
-        // No command is sent in this test, so the raw Appliance shape is returned
-        // (the NormalizedState arm of the union only occurs inside the post-command window).
-        if (state && 'properties' in state) {
+        if (state) {
           expect(state).toHaveProperty('applianceId')
           expect(state).toHaveProperty('connectionState')
           expect(state).toHaveProperty('status')
           expect(state.properties).toHaveProperty('reported')
 
-          const reported = state.properties.reported
+          // The live response must normalize into what the bridge publishes.
+          const normalized = appliance.normalizeState(state)
+          expect(normalized.applianceId).toBe(stub.applianceId)
           log.info(
-            `${stub.applianceName}: state=${reported.applianceState}, mode=${reported.mode}, temp=${reported.targetTemperatureC}°C`,
+            `${stub.applianceName}: state=${normalized.applianceState}, mode=${normalized.mode}, temp=${normalized.targetTemperatureC}°C`,
           )
         }
       }
@@ -214,8 +211,7 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
         writeSnapshot(path.join(modelPath, 'appliance-info.json'), info)
 
-        const appliance = createAppliance(stub, info)
-        const state = await client.getApplianceState(appliance)
+        const state = await api.getApplianceState(stub.applianceId)
         if (state) {
           writeSnapshot(path.join(modelPath, 'appliance-state.json'), state)
         }
@@ -263,9 +259,9 @@ describe.skipIf(!isE2EEnabled)('Electrolux API - E2E Tests', () => {
 
   describe('Token Management', () => {
     it('should handle token refresh', async () => {
-      await client.ensureValidToken()
+      await expect(auth.getAccessToken()).resolves.toMatch(/^ey/)
 
-      expect(client.isLoggedIn).toBe(true)
+      expect(auth.isLoggedIn).toBe(true)
       log.info('Token validation successful')
     })
   })

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { BaseAppliance } from '#/appliances/base.js'
 import {
   denormalizeClimateMode,
   denormalizeFanSpeed,
@@ -20,9 +19,7 @@ import {
   normalizeTemperatureUnit,
   normalizeUpgradeState,
   parseMqttCommand,
-  resolveCachedNormalizedState,
 } from '#/appliances/normalizers.js'
-import type { NormalizedState } from '#/types/normalized.js'
 import type { Appliance } from '#/types.js'
 
 describe('normalizers', () => {
@@ -537,28 +534,6 @@ describe('normalizers', () => {
     // post-command immediate-feedback path.
     it('accepts a normalized state whose deviceId was dropped by the cache round-trip', () => {
       expect(isNormalizedState({ applianceId: 'a', mode: 'cool' })).toBe(true)
-    })
-  })
-
-  describe('resolveCachedNormalizedState', () => {
-    const normalizedSentinel = { applianceId: 'a', deviceId: 'd', mode: 'cool' } as unknown as NormalizedState
-    // Stub appliance: only normalizeState is exercised by the resolver.
-    const stubAppliance = { normalizeState: () => normalizedSentinel } as unknown as BaseAppliance
-
-    it('normalizes a raw cached appliance via the appliance (the poll-path cache shape)', () => {
-      const raw = { applianceId: 'a', properties: { reported: {} } }
-      expect(resolveCachedNormalizedState(raw, stubAppliance)).toBe(normalizedSentinel)
-    })
-
-    it('passes an already-normalized cached state through unchanged (the command-feedback cache shape)', () => {
-      const normalized = { applianceId: 'a', deviceId: 'd', mode: 'heat' } as unknown as NormalizedState
-      expect(resolveCachedNormalizedState(normalized, stubAppliance)).toBe(normalized)
-    })
-
-    it('returns null for an empty or unrecognized cache value', () => {
-      expect(resolveCachedNormalizedState(undefined, stubAppliance)).toBeNull()
-      expect(resolveCachedNormalizedState(null, stubAppliance)).toBeNull()
-      expect(resolveCachedNormalizedState({ random: true }, stubAppliance)).toBeNull()
     })
   })
 })

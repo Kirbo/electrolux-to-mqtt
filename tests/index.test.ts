@@ -36,9 +36,16 @@ vi.mock('#/config.js', () => ({
       applianceDiscoveryInterval: 300,
       renewTokenBeforeExpiry: 60,
       commandStateDelaySeconds: 30,
+      applianceRemovalGracePeriodMinutes: 30,
+      apiTimeoutSeconds: 25,
+    },
+    logging: {
+      showChanges: true,
+      ignoredKeys: [],
     },
     homeAssistant: {
       autoDiscovery: true,
+      revertStateOnRejection: false,
     },
     healthCheck: {
       enabled: false,
@@ -48,14 +55,12 @@ vi.mock('#/config.js', () => ({
 }))
 
 // Shared mutable mock instances — reassigned in beforeEach after resetModules
-let mockClientInstance: {
-  refreshInterval: number
-  isLoggingIn: boolean
-  isLoggedIn: boolean
-  login: ReturnType<typeof vi.fn>
-  initialize: ReturnType<typeof vi.fn>
-  waitForLogin: ReturnType<typeof vi.fn>
+let mockApiInstance: {
   getAppliances: ReturnType<typeof vi.fn>
+}
+
+let mockAuthInstance: {
+  getAccessToken: ReturnType<typeof vi.fn>
   cleanup: ReturnType<typeof vi.fn>
 }
 
@@ -94,24 +99,42 @@ vi.mock('#/mqtt.js', () => ({
   default: MockMqttCtor,
 }))
 
-const MockElectroluxClientCtor = vi.fn(function (this: typeof mockClientInstance) {
-  this.refreshInterval = 30
-  this.isLoggingIn = false
-  this.isLoggedIn = false
-  this.login = vi.fn().mockResolvedValue(true)
-  this.initialize = vi.fn()
-  this.waitForLogin = vi.fn().mockResolvedValue(undefined)
+const MockElectroluxApiCtor = vi.fn(function (this: typeof mockApiInstance) {
   this.getAppliances = vi.fn().mockResolvedValue([])
+  mockApiInstance = this
+})
+
+const MockElectroluxAuthCtor = vi.fn(function (this: typeof mockAuthInstance) {
+  this.getAccessToken = vi.fn().mockResolvedValue('access-token')
   this.cleanup = vi.fn()
-  mockClientInstance = this
+  mockAuthInstance = this
+})
+
+const MockStateSyncCtor = vi.fn(function (this: Record<string, unknown>) {
+  this.pollState = vi.fn()
 })
 
 const mockComputeBackoffDelay = vi.fn((retryCount: number, baseMs: number, maxMs: number) =>
   Math.min(baseMs * 2 ** retryCount, maxMs),
 )
 
-vi.mock('#/electrolux.js', () => ({
-  ElectroluxClient: MockElectroluxClientCtor,
+vi.mock('#/electrolux-api.js', () => ({
+  ElectroluxApi: MockElectroluxApiCtor,
+}))
+
+vi.mock('#/electrolux-auth.js', () => ({
+  ElectroluxAuth: MockElectroluxAuthCtor,
+}))
+
+vi.mock('#/state-sync.js', () => ({
+  StateSync: MockStateSyncCtor,
+}))
+
+vi.mock('#/cache.js', () => ({
+  cache: { name: 'shared-cache' },
+}))
+
+vi.mock('#/backoff.js', () => ({
   computeBackoffDelay: mockComputeBackoffDelay,
 }))
 
@@ -166,22 +189,47 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     })
 
     it('should not start main() when imported rather than run as the entry module', () => {
-      // import.meta.main is false under Vitest — main() must not have logged in or initialized
-      expect(mockClientInstance.initialize).not.toHaveBeenCalled()
+      // import.meta.main is false under Vitest — main() must not have logged in
+      expect(mockAuthInstance.getAccessToken).not.toHaveBeenCalled()
     })
 
-    it('should construct ElectroluxClient exactly once', () => {
-      expect(MockElectroluxClientCtor).toHaveBeenCalledTimes(1)
+    it('should build auth, API and state sync from the config', () => {
+      expect(MockElectroluxAuthCtor).toHaveBeenCalledWith({
+        apiKey: 'test-api-key',
+        username: 'test@example.com',
+        password: 'test-pass',
+        countryCode: 'US',
+        renewTokenBeforeExpiryMs: 60 * 60_000,
+        timeoutMs: 25_000,
+      })
+      expect(MockElectroluxApiCtor).toHaveBeenCalledWith(mockAuthInstance, {
+        apiKey: 'test-api-key',
+        timeoutMs: 25_000,
+        refreshIntervalSeconds: 30,
+        discoveryIntervalSeconds: 300,
+      })
+      const mqttInstance = MockMqttCtor.mock.results[0]?.value as unknown
+      expect(MockStateSyncCtor).toHaveBeenCalledWith(
+        mockApiInstance,
+        mqttInstance,
+        { name: 'shared-cache' },
+        {
+          commandStateDelayMs: 30_000,
+          showChanges: true,
+          ignoredKeys: [],
+          revertStateOnRejection: false,
+        },
+      )
     })
 
     it('should construct Orchestrator exactly once', () => {
       expect(MockOrchestratorCtor).toHaveBeenCalledTimes(1)
     })
 
-    it('should construct Orchestrator with the ElectroluxClient instance and Mqtt instance', () => {
+    it('should construct Orchestrator with the API, the state sync and the Mqtt instance', () => {
       const mqttInstance = MockMqttCtor.mock.results[0]?.value as unknown
-      const clientInstance = MockElectroluxClientCtor.mock.results[0]?.value as unknown
-      expect(MockOrchestratorCtor).toHaveBeenCalledWith(clientInstance, mqttInstance, expect.any(Object))
+      const syncInstance = MockStateSyncCtor.mock.instances[0] as unknown
+      expect(MockOrchestratorCtor).toHaveBeenCalledWith(mockApiInstance, syncInstance, mqttInstance, expect.any(Object))
     })
 
     it('should register a SIGTERM handler', () => {
@@ -222,6 +270,17 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
   })
 
   describe('shutdown waits for the MQTT disconnect', () => {
+    it('should stop pending login/refresh retries on SIGTERM', async () => {
+      const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+      try {
+        registeredHandlers.get('SIGTERM')?.()
+        await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalled())
+        expect(mockAuthInstance.cleanup).toHaveBeenCalledTimes(1)
+      } finally {
+        processExitSpy.mockRestore()
+      }
+    })
+
     it('should exit only after orchestrator.shutdown() has resolved', async () => {
       let finishShutdown: (() => void) | undefined
       mockOrchestratorInstance.shutdown.mockImplementation(
@@ -265,12 +324,12 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     it('should log error and schedule retry when getAppliances returns null (API failure)', async () => {
       vi.useFakeTimers()
 
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
 
       await indexModule.main()
 
       // getAppliances called exactly once during this pass
-      expect(mockClientInstance.getAppliances).toHaveBeenCalledTimes(1)
+      expect(mockApiInstance.getAppliances).toHaveBeenCalledTimes(1)
       // retry setTimeout is now pending (isShuttingDown=false)
       expect(vi.getTimerCount()).toBe(1)
 
@@ -280,33 +339,19 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     it('should log error and schedule retry when getAppliances returns empty array', async () => {
       vi.useFakeTimers()
 
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([])
 
       await indexModule.main()
 
-      expect(mockClientInstance.getAppliances).toHaveBeenCalledTimes(1)
+      expect(mockApiInstance.getAppliances).toHaveBeenCalledTimes(1)
       expect(vi.getTimerCount()).toBe(1)
 
       vi.useRealTimers()
     })
 
-    it('should skip client.login and waitForLogin when client is already logged in', async () => {
-      mockClientInstance.isLoggedIn = true
-      mockClientInstance.isLoggingIn = false
-      const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
-      vi.useFakeTimers()
-
-      await indexModule.main()
-
-      vi.useRealTimers()
-      expect(mockClientInstance.login).not.toHaveBeenCalled()
-      expect(mockClientInstance.waitForLogin).not.toHaveBeenCalled()
-    })
-
     it('should back off exponentially across consecutive failed retries and reset on success', async () => {
       vi.useFakeTimers()
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
 
       await indexModule.main()
       expect(mockComputeBackoffDelay).toHaveBeenLastCalledWith(0, 30_000, expect.any(Number))
@@ -319,11 +364,11 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
       // Next retry succeeds — the counter must reset
       const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
       await vi.runOnlyPendingTimersAsync()
 
       // A later failure starts from the base delay again
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
       await indexModule.main()
       expect(mockComputeBackoffDelay).toHaveBeenLastCalledWith(0, 30_000, expect.any(Number))
 
@@ -332,7 +377,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
     it('should initialize appliances and start discovery when appliances are found', async () => {
       const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
 
       vi.useFakeTimers()
 
@@ -347,7 +392,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     it('should start initializing every appliance without waiting for the previous one', async () => {
       const first = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
       const second = { applianceId: 'appliance-2', applianceName: 'Test AC 2', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([first, second])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([first, second])
       // Initialization never settles — a sequential loop would stall on the first appliance
       mockOrchestratorInstance.initializeAppliance = vi.fn().mockReturnValue(new Promise(() => {}))
 
@@ -360,7 +405,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
     it('should start version checker when appliances are found', async () => {
       const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
 
       vi.useFakeTimers()
 
@@ -371,36 +416,25 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
       vi.useRealTimers()
     })
 
-    it('should call client.initialize and waitForLogin before fetching appliances', async () => {
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([])
+    it('should log in before fetching appliances', async () => {
+      const order: string[] = []
+      mockAuthInstance.getAccessToken.mockImplementation(async () => {
+        order.push('login')
+        return 'token'
+      })
+      mockApiInstance.getAppliances = vi.fn(async () => {
+        order.push('getAppliances')
+        return []
+      })
 
       await indexModule.main()
 
-      expect(mockClientInstance.initialize).toHaveBeenCalledTimes(1)
-      expect(mockClientInstance.waitForLogin).toHaveBeenCalledTimes(1)
-    })
-
-    it('should call client.login when isLoggingIn is false before waitForLogin', async () => {
-      mockClientInstance.isLoggingIn = false
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([])
-
-      await indexModule.main()
-
-      expect(mockClientInstance.login).toHaveBeenCalledTimes(1)
-    })
-
-    it('should skip client.login when client is already logging in', async () => {
-      mockClientInstance.isLoggingIn = true
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([])
-
-      await indexModule.main()
-
-      expect(mockClientInstance.login).not.toHaveBeenCalled()
+      expect(order.slice(0, 2)).toEqual(['login', 'getAppliances'])
     })
 
     it('should fire discoverAppliances on discovery interval tick', async () => {
       const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
       mockOrchestratorInstance.isShuttingDown = false
 
       vi.useFakeTimers()
@@ -417,7 +451,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
 
     it('should clear discovery interval when orchestrator is shutting down on tick', async () => {
       const fakeAppliance = { applianceId: 'appliance-1', applianceName: 'Test AC', applianceType: 'AC' }
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([fakeAppliance])
       // Mark shutting down so the interval callback clears itself
       mockOrchestratorInstance.isShuttingDown = true
 
@@ -438,7 +472,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     it('should log error from the retry catch when null-appliances main() retry throws', async () => {
       // First call: null appliances → schedules a setTimeout retry
       // On the retry, main() calls getAppliances again — this time it throws
-      mockClientInstance.getAppliances = vi
+      mockApiInstance.getAppliances = vi
         .fn()
         .mockResolvedValueOnce(undefined) // first call: null → schedules retry
         .mockRejectedValueOnce(new Error('Retry failed')) // second call inside retry throws
@@ -460,7 +494,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     })
 
     it('should log error from the retry catch when empty-appliances main() retry throws', async () => {
-      mockClientInstance.getAppliances = vi
+      mockApiInstance.getAppliances = vi
         .fn()
         .mockResolvedValueOnce([]) // first call: empty → schedules retry
         .mockRejectedValueOnce(new Error('Retry failed')) // second call inside retry throws
@@ -483,7 +517,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
   describe('shutdown with pending restartTimeout', () => {
     it('should clear restartTimeout when shutdown fires while a null-appliances restart is pending', async () => {
       // Call main() with null appliances — this schedules a restartTimeout
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue(undefined)
 
       vi.useFakeTimers()
 
@@ -507,7 +541,7 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     })
 
     it('should clear restartTimeout when shutdown fires during empty-appliances restart pending', async () => {
-      mockClientInstance.getAppliances = vi.fn().mockResolvedValue([])
+      mockApiInstance.getAppliances = vi.fn().mockResolvedValue([])
 
       vi.useFakeTimers()
 

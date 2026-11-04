@@ -13,7 +13,6 @@ import type {
   UpgradeState,
 } from '#/types/normalized.js'
 import type { Appliance } from '#/types.js'
-import type { BaseAppliance } from './base.js'
 
 /**
  * Utility functions for normalizing Electrolux API data to standard format
@@ -363,8 +362,8 @@ export function normalizeClimateAppliance(rawState: Appliance): NormalizedState 
 
 /**
  * Type guard for a raw Electrolux appliance state (pre-normalization): identity
- * fields at the top level with reported state nested under `properties`. This is
- * what the poll path stores in the state cache.
+ * fields at the top level with reported state nested under `properties` — the
+ * `/state` response, validated before it is normalized.
  */
 export function isAppliance(value: unknown): value is Appliance {
   return (
@@ -372,15 +371,14 @@ export function isAppliance(value: unknown): value is Appliance {
     value !== null &&
     'applianceId' in value &&
     'properties' in value &&
-    typeof (value as Record<string, unknown>).properties === 'object'
+    typeof value.properties === 'object'
   )
 }
 
 /**
  * Type guard for an already-normalized appliance state: flat, lowercase, no
- * `properties` key. This is what the bridge publishes to MQTT and what Home
- * Assistant's discovery templates parse. The command-feedback path caches this
- * shape directly.
+ * `properties` key. This is what the bridge publishes to MQTT, what Home
+ * Assistant's discovery templates parse, and the only shape the state cache holds.
  */
 export function isNormalizedState(value: unknown): value is NormalizedState {
   return (
@@ -394,25 +392,4 @@ export function isNormalizedState(value: unknown): value is NormalizedState {
     // from Appliance and ApplianceStub.
     !('properties' in value)
   )
-}
-
-/**
- * Resolve a value read from the state cache into a normalized state ready to
- * publish to MQTT. The cache holds a raw {@link Appliance} after a poll
- * (`publishStateIfChanged`) but an already-normalized state after command
- * feedback (`publishCommandFeedback`); normalize the former and pass the latter
- * through. Returns null when the value is neither (e.g. an empty cache).
- *
- * Publishing the raw shape verbatim would break HA's discovery templates (they
- * read flat, lowercase fields like `connectionState: 'connected'`), so every
- * cache→MQTT republish path must go through this resolver.
- */
-export function resolveCachedNormalizedState(cached: unknown, appliance: BaseAppliance): NormalizedState | null {
-  if (isAppliance(cached)) {
-    return appliance.normalizeState(cached)
-  }
-  if (isNormalizedState(cached)) {
-    return cached
-  }
-  return null
 }
