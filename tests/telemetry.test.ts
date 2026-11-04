@@ -63,24 +63,32 @@ describe('getOsInfo', () => {
 })
 
 describe('deriveTelemetrySessionId', () => {
+  const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
   it('returns a GUID-shaped string (Aptabase drops non-GUID sessionIds)', () => {
-    expect(deriveTelemetrySessionId('user@example.com')).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    expect(deriveTelemetrySessionId('user@example.com', 'api-key-1')).toMatch(GUID)
+  })
+
+  it('is deterministic — the same install always yields the same id', () => {
+    expect(deriveTelemetrySessionId('user@example.com', 'api-key-1')).toBe(
+      deriveTelemetrySessionId('user@example.com', 'api-key-1'),
     )
   })
 
-  it('is deterministic — same username always yields the same id', () => {
-    expect(deriveTelemetrySessionId('user@example.com')).toBe(deriveTelemetrySessionId('user@example.com'))
-  })
-
   it('yields different ids for different usernames', () => {
-    expect(deriveTelemetrySessionId('a@example.com')).not.toBe(deriveTelemetrySessionId('b@example.com'))
+    expect(deriveTelemetrySessionId('a@example.com', 'k')).not.toBe(deriveTelemetrySessionId('b@example.com', 'k'))
   })
 
-  it('matches the backend legacy mapping (first 16 bytes of sha256(username) as 8-4-4-4-12)', () => {
-    // sha256('user@example.com') = b4c9a289323b21a01c3e940f150eb9b8… — keep in sync with
-    // telemetry-backend userHashToSessionId so legacy and direct paths share one id per install.
-    expect(deriveTelemetrySessionId('user@example.com')).toBe('b4c9a289-323b-21a0-1c3e-940f150eb9b8')
+  it('cannot be confirmed from the email address alone — it is keyed by the private API key', () => {
+    const id = deriveTelemetrySessionId('user@example.com', 'api-key-1')
+    expect(deriveTelemetrySessionId('user@example.com', 'api-key-2')).not.toBe(id)
+    // not the old unkeyed sha256(username) id
+    expect(id).not.toBe('b4c9a289-323b-21a0-1c3e-940f150eb9b8')
+  })
+
+  it('is HMAC-SHA256(key = API key, message = username), first 16 bytes as 8-4-4-4-12', () => {
+    // printf 'user@example.com' | openssl dgst -sha256 -hmac 'api-key-1'
+    expect(deriveTelemetrySessionId('user@example.com', 'api-key-1')).toBe('06609531-1d24-aaca-e8c2-2c0b76147d74')
   })
 })
 

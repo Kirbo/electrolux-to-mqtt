@@ -7,15 +7,15 @@ import type { BaseAppliance } from './appliances/base.js'
  *
  * The telemetry badge counts distinct installs over a rolling window, which needs an id
  * that is stable per install — Aptabase's own `user_id` rotates with a daily salt, so it
- * can't be counted across midnight. We hash the Electrolux username (sha256) and format
- * the first 16 bytes as `8-4-4-4-12`. Properties:
- *   - stable across restarts and across the legacy→direct upgrade (legacy bridges hashed
- *     the same username, so the backend maps their userHash to the *same* sessionId);
+ * can't be counted across midnight. The id is HMAC-SHA256 of the Electrolux username,
+ * keyed with the install's private Electrolux API key, first 16 bytes as `8-4-4-4-12`:
+ *   - stable across restarts (same account + key);
  *   - GUID-shaped, which Aptabase requires (it silently drops non-GUID sessionIds);
- *   - anonymous — a one-way hash, not reversible to the account.
+ *   - pseudonymous: a plain hash of the email could be confirmed by anyone who knows the
+ *     address; keyed by the API key, which never leaves the install, it cannot.
  */
-export function deriveTelemetrySessionId(username: string): string {
-  const h = crypto.createHash('sha256').update(username).digest('hex').slice(0, 32)
+export function deriveTelemetrySessionId(username: string, apiKey: string): string {
+  const h = crypto.createHmac('sha256', apiKey).update(username).digest('hex').slice(0, 32)
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
 }
 

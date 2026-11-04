@@ -69,8 +69,9 @@ in `clickhouse.ts`), **not** Aptabase's `user_id`:
 
 - **`session_id`, not `user_id`** — Aptabase's `user_id` is a daily hash of `app_id + client IP
   + User-Agent` that **rotates at UTC midnight**, so it can't be counted across the boundary.
-  `session_id` is a stable per-install id (derived from `sha256(electrolux username)`, identical
-  on the bridge's direct path and on the legacy forwarder), so it survives midnight and restarts.
+  `session_id` is a stable per-install id (bridges ≥ the keyed-id release send HMAC-SHA256 of the
+  Electrolux username keyed with the install's API key; the legacy forwarder maps old bridges'
+  `sha256(username)`), so it survives midnight and restarts.
 - **Rolling 26h, not `toStartOfDay`** — a fixed-width trailing window keeps the count steady around
   the clock instead of resetting at midnight and ramping up. 26h = the version-checker's 24h max
   poll interval + 2h slack, so every install that pinged at least once is always inside it. The

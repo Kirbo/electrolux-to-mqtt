@@ -39,9 +39,9 @@ const sync = new StateSync(api, mqtt, cache, {
   revertStateOnRejection: config.homeAssistant.revertStateOnRejection,
 })
 
-// Stable per-install Aptabase session id, derived from the Electrolux username. Constant
+// Stable per-install Aptabase session id (keyed hash of the Electrolux account). Constant
 // across restarts so the badge can count distinct installs over a rolling window.
-const telemetrySessionId = deriveTelemetrySessionId(config.electrolux.username)
+const telemetrySessionId = deriveTelemetrySessionId(electrolux.username, electrolux.apiKey)
 
 const refreshInterval = electrolux.refreshInterval * 1000
 const applianceDiscoveryInterval = electrolux.applianceDiscoveryInterval * 1000

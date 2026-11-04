@@ -15,7 +15,7 @@
 - [HA birth republish](project_ha_birth_republish.md) — HA restart recovery via birth-message republish (not retain); accepted bridge-down edge; don't flip `mqtt.retain` to "fix" it
 - [Aptabase telemetry migration](project_aptabase_telemetry.md) — bridge sends telemetry straight to self-hosted Aptabase; `telemetry-backend/` writes badge SVGs to a disk volume (nginx serves them statically), keeps only `/telemetry` JSON + release-redirect tags in memory, forwards legacy `/telemetry` POSTs; deployed and live
 - [Aptabase ingest gotchas](aptabase_sessionid_guid.md) — drops non-GUID sessionId (200, no row); user_id = hash(app_id+IP+UA) so shared-IP installs collapse → forwarder maps userHash→UUID sessionId + per-install User-Agent
-- [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = sha256(username); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
+- [Steady user count design](project_steady_user_count.md) — badge counts distinct session_id over rolling 26h; stable sessionId = HMAC(apiKey, username) (was sha256(username) until 2026-11-04); telemetry pings every 15min decoupled from checkInterval; shrink window to ~1h once legacy gone
 - [Explicit Resource Management patterns](feedback_using_keyword.md) — `using` scope vs long-lived timers; `activeIntervals` dedup; tsconfig lib field
 - [Audit heuristics and anti-patterns](audit_heuristics.md) — grep patterns, false-positives, defect-density spots, doc/code sync gaps to watch
 - [Corepack pin for Node 26](dep_corepack_node26.md) — Node 25+ bundles no Corepack; COREPACK_VERSION (versions.env) installed via npm in images/CI; bump by hand, pnpm outdated never shows it
