@@ -442,7 +442,7 @@ describe('Comfort600Appliance', () => {
 
   describe('Auto-Discovery Configuration', () => {
     it('should generate valid Home Assistant config', () => {
-      const config = appliance.generateAutoDiscoveryConfig('test_prefix')
+      const config = appliance.generateAutoDiscoveryConfig('test_prefix', 'test_prefix/status')
 
       expect(config.object_id).toContain('Electrolux')
       expect(config.object_id).toContain('COMFORT600')
@@ -454,13 +454,28 @@ describe('Comfort600Appliance', () => {
     })
 
     it('should include temperature_state_topic', () => {
-      const config = appliance.generateAutoDiscoveryConfig('test_prefix')
+      const config = appliance.generateAutoDiscoveryConfig('test_prefix', 'test_prefix/status')
       expect(config.temperature_state_topic).toBeDefined()
       expect(config.temperature_state_template).toBeDefined()
     })
 
+    it('should be available only while both the bridge and the appliance are online', () => {
+      const config = appliance.generateAutoDiscoveryConfig('test_prefix', 'test_prefix/status')
+
+      expect(config.availability_mode).toBe('all')
+      expect(config.availability).toEqual([
+        { topic: 'test_prefix/status', payload_available: 'online', payload_not_available: 'offline' },
+        {
+          topic: `test_prefix/${appliance.getApplianceId()}/state`,
+          value_template: '{{ value_json.connectionState }}',
+          payload_available: 'connected',
+          payload_not_available: 'disconnected',
+        },
+      ])
+    })
+
     it('should use correct topic prefix', () => {
-      const config = appliance.generateAutoDiscoveryConfig('custom_prefix')
+      const config = appliance.generateAutoDiscoveryConfig('custom_prefix', 'custom_prefix/status')
       expect(config.mode_state_topic).toContain('custom_prefix')
       expect(config.mode_command_topic).toContain('custom_prefix')
     })

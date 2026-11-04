@@ -7,6 +7,13 @@ export type HAClimateMode = 'auto' | 'cool' | 'dry' | 'fan_only' | 'heat' | 'off
 export type HAFanMode = 'auto' | 'high' | 'medium' | 'low'
 export type HASwingMode = 'on' | 'off'
 
+export interface HAAvailability {
+  topic: string
+  value_template?: string
+  payload_available: string
+  payload_not_available: string
+}
+
 export interface HAClimateDiscoveryConfig {
   name: string
   object_id: string
@@ -17,10 +24,8 @@ export interface HAClimateDiscoveryConfig {
     model: string
     name: string
   }
-  availability_topic: string
-  availability_template: string
-  payload_available: string
-  payload_not_available: string
+  availability: HAAvailability[]
+  availability_mode: 'all' | 'any' | 'latest'
   json_attributes_topic: string
   modes: HAClimateMode[]
   mode_state_topic: string

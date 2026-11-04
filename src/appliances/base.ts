@@ -104,8 +104,10 @@ export abstract class BaseAppliance {
   /**
    * Generate Home Assistant MQTT auto-discovery configuration
    * This creates the configuration message that Home Assistant uses to auto-discover the device
+   * @param availabilityTopic - the bridge status topic (IMqtt.availabilityTopic); entities are
+   *   available only while both the bridge and the appliance report online
    */
-  abstract generateAutoDiscoveryConfig(topicPrefix: string): HAClimateDiscoveryConfig
+  abstract generateAutoDiscoveryConfig(topicPrefix: string, availabilityTopic: string): HAClimateDiscoveryConfig
 
   /**
    * Get supported climate modes for this appliance

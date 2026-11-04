@@ -39,6 +39,10 @@ When Home Assistant auto-discovery is enabled (default), the bridge publishes di
 { "verticalSwing": "on" }
 ```
 
+### Bridge availability
+
+`{topic_prefix}appliances/status` (retained) is `online` while the bridge is connected to the broker and `offline` when it stops — published on a graceful shutdown, and by the broker itself (MQTT last will) if the bridge crashes or loses its connection. Discovered entities list it as an availability topic next to each appliance's own `connectionState` (`availability_mode: all`), so they show **unavailable** whenever either the bridge or the appliance is down, instead of freezing on the last known state.
+
 ### Version info
 
 The application will create a new topic under `{topic_prefix}appliances/info`, which by default will be `electrolux_appliances/info`.

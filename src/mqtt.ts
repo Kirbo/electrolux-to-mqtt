@@ -10,9 +10,15 @@ const logger = createLogger('mqtt')
 // configSchema enforces int().min(0).max(2) — narrow without a cast.
 const toQoS = (value: number): QoS => (value === 0 || value === 1 ? value : 2)
 
+const ONLINE = 'online'
+const OFFLINE = 'offline'
+const AVAILABILITY_PUBLISH_OPTIONS: mqtt.IClientPublishOptions = { retain: true, qos: 1 }
+
 export interface IMqtt {
   client: mqtt.MqttClient
   topicPrefix: string
+  /** Retained bridge status: "online" while connected, "offline" via last will or graceful disconnect. */
+  availabilityTopic: string
   resolveApplianceTopic(applianceId: string): string
   publish(topicSuffix: string, message: string, options?: mqtt.IClientPublishOptions): void
   publishInfo(message: string, options?: mqtt.IClientPublishOptions): void
@@ -33,6 +39,7 @@ export interface IMqtt {
 class Mqtt implements IMqtt {
   public readonly client: mqtt.MqttClient
   public readonly topicPrefix: string
+  public readonly availabilityTopic: string
   private readonly defaultOptions: mqtt.IClientPublishOptions
   // Exact-topic router: topic -> handler(topic, payload)
   private readonly topicHandlers = new Map<string, MessageHandler>()
@@ -42,12 +49,16 @@ class Mqtt implements IMqtt {
   /** Connects immediately; nothing connects at import time. */
   constructor(settings: AppConfig['mqtt']) {
     this.topicPrefix = `${settings.topicPrefix}appliances`
+    this.availabilityTopic = `${this.topicPrefix}/status`
     this.defaultOptions = { retain: settings.retain, qos: toQoS(settings.qos) }
     this.client = mqtt.connect(settings.url, {
       clientId: `${settings.clientId}-electrolux`,
       username: settings.username,
       password: settings.password,
       clean: true,
+      // The broker publishes this if the bridge vanishes (crash, network loss), so HA
+      // marks every entity unavailable instead of showing the last state forever.
+      will: { topic: this.availabilityTopic, payload: OFFLINE, retain: true, qos: 1 },
     })
     this.registerEventHandlers(settings.url)
   }
@@ -56,6 +67,7 @@ class Mqtt implements IMqtt {
     this.client
       .on('connect', () => {
         logger.info(`Connected to MQTT broker: ${url}`)
+        this._publish(this.availabilityTopic, ONLINE, AVAILABILITY_PUBLISH_OPTIONS)
         for (const cb of this.reconnectCallbacks) {
           cb()
         }
@@ -133,7 +145,7 @@ class Mqtt implements IMqtt {
       if (typeof parsed === 'object' && parsed !== null) {
         const topics = parsed as Record<string, unknown>
         logger.debug(`Auto-discovery config topics:`, {
-          availability_topic: topics.availability_topic,
+          availability: topics.availability,
           mode_state_topic: topics.mode_state_topic,
           mode_command_topic: topics.mode_command_topic,
           temperature_state_topic: topics.current_temperature_topic,
@@ -219,6 +231,8 @@ class Mqtt implements IMqtt {
   }
 
   public disconnect(): Promise<void> {
+    // A clean disconnect does not trigger the last will, so announce it ourselves.
+    this._publish(this.availabilityTopic, OFFLINE, AVAILABILITY_PUBLISH_OPTIONS)
     return new Promise((resolve) => {
       this.client.end(false, {}, () => {
         logger.info('Disconnected from MQTT broker')

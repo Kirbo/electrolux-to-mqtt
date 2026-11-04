@@ -102,7 +102,10 @@ export class Orchestrator implements AsyncDisposable {
   private republishAll(): void {
     for (const [applianceId, appliance] of this.applianceInstances) {
       if (this.config.autoDiscovery) {
-        const discoveryConfig = appliance.generateAutoDiscoveryConfig(this.mqtt.topicPrefix)
+        const discoveryConfig = appliance.generateAutoDiscoveryConfig(
+          this.mqtt.topicPrefix,
+          this.mqtt.availabilityTopic,
+        )
         this.mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), { retain: true, qos: 2 })
       }
 
@@ -258,7 +261,10 @@ export class Orchestrator implements AsyncDisposable {
       if (this.config.autoDiscovery) {
         // Generate and publish auto-discovery config using the appliance-specific logic
         logger.debug(`Using topicPrefix for auto-discovery: "${this.mqtt.topicPrefix}"`)
-        const discoveryConfig = appliance.generateAutoDiscoveryConfig(this.mqtt.topicPrefix)
+        const discoveryConfig = appliance.generateAutoDiscoveryConfig(
+          this.mqtt.topicPrefix,
+          this.mqtt.availabilityTopic,
+        )
         logger.debug('Generated auto-discovery config:', discoveryConfig)
         this.mqtt.autoDiscovery(applianceId, JSON.stringify(discoveryConfig), {
           retain: true,
@@ -268,7 +274,10 @@ export class Orchestrator implements AsyncDisposable {
         applianceDiscoveryCallback = () => {
           const capabilitiesHash = appliance.getCapabilitiesHash()
           const cacheKey = cache.cacheKey(applianceId, capabilitiesHash).autoDiscovery
-          const autoDiscoveryConfig = appliance.generateAutoDiscoveryConfig(this.mqtt.topicPrefix)
+          const autoDiscoveryConfig = appliance.generateAutoDiscoveryConfig(
+            this.mqtt.topicPrefix,
+            this.mqtt.availabilityTopic,
+          )
 
           if (cache.matchByValue(cacheKey, autoDiscoveryConfig)) {
             return

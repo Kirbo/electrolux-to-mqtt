@@ -85,6 +85,7 @@ function createMockMqtt(): IMqtt {
   return {
     client: {} as IMqtt['client'],
     topicPrefix: 'test_appliances',
+    availabilityTopic: 'test_appliances/status',
     resolveApplianceTopic: vi.fn((id: string) => `test_appliances/${id}`),
     publish: vi.fn(),
     publishInfo: vi.fn(),
@@ -150,6 +151,13 @@ describe('Orchestrator', () => {
       expect(mqtt.autoDiscovery).toHaveBeenCalledWith('appliance-1', expect.any(String), { retain: true, qos: 2 })
       expect(mqtt.subscribe).toHaveBeenCalledWith('appliance-1/command', expect.any(Function))
       expect(orchestrator.getApplianceInstances().has('appliance-1')).toBe(true)
+    })
+
+    it('should build discovery with the bridge availability topic', async () => {
+      await orchestrator.initializeAppliance(mockStub)
+
+      const appliance = orchestrator.getApplianceInstances().get('appliance-1')
+      expect(appliance?.generateAutoDiscoveryConfig).toHaveBeenCalledWith('test_appliances', 'test_appliances/status')
     })
 
     it('should handle failed appliance info fetch', async () => {

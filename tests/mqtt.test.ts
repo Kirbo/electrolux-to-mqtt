@@ -99,6 +99,55 @@ describe('Mqtt', () => {
       expect(mqttLib.default.connect).not.toHaveBeenCalled()
     })
 
+    it('registers a retained last-will "offline" on the bridge status topic', async () => {
+      const mqttLib = await import('mqtt')
+      vi.mocked(mqttLib.default.connect).mockClear()
+      const instance = new Mqtt(MQTT_SETTINGS)
+
+      expect(instance.availabilityTopic).toBe('test_appliances/status')
+      expect(mqttLib.default.connect).toHaveBeenCalledWith(
+        'mqtt://test-broker:1883',
+        expect.objectContaining({
+          will: { topic: 'test_appliances/status', payload: 'offline', retain: true, qos: 1 },
+        }),
+      )
+    })
+
+    it('publishes a retained "online" on every connect, before the reconnect callbacks run', () => {
+      const order: string[] = []
+      mqttInstance.onReconnect(() => order.push('callback'))
+      vi.mocked(mockClient.publish).mockImplementation((topic, message, _opts, cb) => {
+        order.push(`${String(topic)}=${String(message)}`)
+        if (typeof cb === 'function') cb(null)
+      })
+
+      mockClient.emit('connect')
+
+      expect(order).toEqual(['test_appliances/status=online', 'callback'])
+      expect(mockClient.publish).toHaveBeenCalledWith(
+        'test_appliances/status',
+        'online',
+        expect.objectContaining({ retain: true, qos: 1 }),
+        expect.any(Function),
+      )
+    })
+
+    it('publishes a retained "offline" before a graceful disconnect (the will only fires on a lost connection)', async () => {
+      const order: string[] = []
+      vi.mocked(mockClient.publish).mockImplementation((topic, message, _opts, cb) => {
+        order.push(`${String(topic)}=${String(message)}`)
+        if (typeof cb === 'function') cb(null)
+      })
+      vi.mocked(mockClient.end).mockImplementation((_force, _opts, cb) => {
+        order.push('end')
+        if (typeof cb === 'function') cb()
+      })
+
+      await mqttInstance.disconnect()
+
+      expect(order).toEqual(['test_appliances/status=offline', 'end'])
+    })
+
     it('connects with the settings passed to the constructor', async () => {
       const mqttLib = await import('mqtt')
       vi.mocked(mqttLib.default.connect).mockClear()

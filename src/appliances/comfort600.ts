@@ -316,7 +316,7 @@ export class Comfort600Appliance extends BaseAppliance {
     return { valid: true }
   }
 
-  public generateAutoDiscoveryConfig(topicPrefix: string): HAClimateDiscoveryConfig {
+  public generateAutoDiscoveryConfig(topicPrefix: string, availabilityTopic: string): HAClimateDiscoveryConfig {
     const info = this.applianceInfo.applianceInfo
     const tempRange = this.getTemperatureRange()
     // Ensure topicPrefix ends with /
@@ -334,10 +334,16 @@ export class Comfort600Appliance extends BaseAppliance {
         model: info.model,
         name: this.applianceName,
       },
-      availability_topic: stateTopic,
-      availability_template: '{{ value_json.connectionState }}',
-      payload_available: 'connected',
-      payload_not_available: 'disconnected',
+      availability: [
+        { topic: availabilityTopic, payload_available: 'online', payload_not_available: 'offline' },
+        {
+          topic: stateTopic,
+          value_template: '{{ value_json.connectionState }}',
+          payload_available: 'connected',
+          payload_not_available: 'disconnected',
+        },
+      ],
+      availability_mode: 'all',
       json_attributes_topic: stateTopic,
       modes: this.getSupportedModes(),
       mode_state_topic: stateTopic,
