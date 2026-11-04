@@ -175,11 +175,17 @@ export const main = async () => {
   )
 }
 
-// Run only as the entry module (`node dist/index.js`, `tsx src/index.ts`), never on import.
-if (import.meta.main) {
+/** Run the bridge, logging (not throwing) a fatal error. The image's entry points call this. */
+export const start = async (): Promise<void> => {
   try {
     await main()
   } catch (err: unknown) {
     logger.error('Fatal error in main:', err)
   }
+}
+
+// Run only as the entry module (`node src/index.ts`), never on import — the legacy
+// `dist/index.js` shim (docker/compat/legacy-dist/) imports this module and calls start() itself.
+if (import.meta.main) {
+  await start()
 }

@@ -76,6 +76,9 @@ RUN npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION:?CORE
 
 # The TypeScript source runs as-is (CHANGELOG optional — absent in local builds)
 COPY src ./src
+# Legacy entry points (dist/index.js, dist/health.js) for containers recreated from an
+# older container config that still runs `node dist/index.js` — see docker/compat/.
+COPY docker/compat/legacy-dist ./dist
 COPY --from=builder /app/CHANGELOG.m[d] ./
 
 

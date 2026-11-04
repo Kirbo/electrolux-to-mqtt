@@ -51,6 +51,7 @@ default:
     - if: "$CI_COMMIT_TAG == null"
       changes:
         - docker/Dockerfile
+        - docker/compat/**/*
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml
@@ -75,6 +76,7 @@ default:
         - vitest.config.ts
         - vitest.setup.ts
         - docker/Dockerfile
+        - docker/compat/**/*
         # every node job bootstraps pnpm through it
         - scripts/bootstrap-pnpm.sh
       when: on_success
@@ -98,6 +100,7 @@ default:
         - vitest.config.ts
         - vitest.setup.ts
         - docker/Dockerfile
+        - docker/compat/**/*
         # keep in step with .rules_node_changes: the node jobs need `install dependencies`
         - scripts/bootstrap-pnpm.sh
       when: on_success

@@ -12,6 +12,7 @@ initialise variables:
         - biome.jsonc
         - versions.env
         - docker/Dockerfile
+        - docker/compat/**/*
         - package.json
         - pnpm-lock.yaml
         - pnpm-workspace.yaml

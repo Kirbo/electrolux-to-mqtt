@@ -163,6 +163,7 @@ sonarcloud-check:
     - if: "$CI_COMMIT_TAG == null && $CI_COMMIT_BRANCH == \"main\""
       changes:
         - docker/Dockerfile
+        - docker/compat/**/*
         - package.json
         - pnpm-lock.yaml
         - src/**/*
@@ -277,6 +278,7 @@ docker build test:
         - .dockerignore
         - .npmrc
         - docker/Dockerfile
+        - docker/compat/**/*
         - docker/Dockerfile.local
         - telemetry-backend/Dockerfile
         - scripts/docker-build-test.sh

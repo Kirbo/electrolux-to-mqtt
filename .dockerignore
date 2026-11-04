@@ -18,6 +18,8 @@
 
 # ── Application source ───────────────────────────────────────────────────────
 !src
+# Legacy dist/ entry shims copied into the prod image as /app/dist (docker/compat/legacy-dist/).
+!docker/compat
 !telemetry-backend
 
 # ── Manifests and build config ───────────────────────────────────────────────

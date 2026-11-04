@@ -339,6 +339,24 @@ describe('src/index.ts — module-level wiring smoke tests (M8)', () => {
     })
   })
 
+  describe('start() — the entry point (also used by the dist/index.js compatibility shim)', () => {
+    it('runs main()', async () => {
+      await indexModule.start()
+      expect(mockAuthInstance.getAccessToken).toHaveBeenCalledTimes(1)
+      expect(mockApiInstance.getAppliances).toHaveBeenCalledTimes(1)
+    })
+
+    it('logs a fatal error from main() instead of rejecting', async () => {
+      mockAuthInstance.getAccessToken.mockRejectedValueOnce(new Error('boom'))
+
+      await expect(indexModule.start()).resolves.toBeUndefined()
+
+      const createLoggerMod = await import('#/logger.ts')
+      const logger = vi.mocked(createLoggerMod.default).mock.results[0]?.value as { error: ReturnType<typeof vi.fn> }
+      expect(logger.error).toHaveBeenCalledWith('Fatal error in main:', expect.any(Error))
+    })
+  })
+
   describe('main() function', () => {
     it('should log error and schedule retry when getAppliances returns null (API failure)', async () => {
       vi.useFakeTimers()

@@ -100,6 +100,39 @@ build_prod() {
   fi
   BUILT_TAGS+=("${tag}")
   smoke "${tag}" "Environment variable validation failed"
+  # Containers recreated by Portainer/Watchtower-style updaters keep the OLD container's
+  # Cmd and Healthcheck (docker/compat/legacy-dist/index.js) — every one a published image
+  # ever had must keep working on this image.
+  echo "  legacy entry (node dist/index.js):"
+  smoke "${tag}" "Environment variable validation failed" node dist/index.js
+  legacy_healthchecks "${tag}"
+}
+
+# The two HEALTHCHECK commands published images ran that import app code (the other
+# historical forms read /tmp/e2m-health directly). Health checks are ENABLED and a fresh
+# health file is written first, so each command must import ./dist/health.js and report
+# healthy (exit 0); a missing module lands in the command's catch and exits 1.
+legacy_healthchecks() {
+  local tag="$1" cmd status
+  local -a env_args=(-e MQTT_URL=mqtt://127.0.0.1:1 -e MQTT_USERNAME=u -e MQTT_PASSWORD=p
+    -e ELECTROLUX_API_KEY=k -e ELECTROLUX_USERNAME=e -e ELECTROLUX_PASSWORD=p
+    -e ELECTROLUX_COUNTRY_CODE=FI -e HEALTH_CHECK_ENABLED=true)
+  local fresh="require('fs').writeFileSync('/tmp/e2m-health',String(Math.floor(Date.now()/1000)));"
+  local -a commands=(
+    "if(process.env.HEALTH_CHECK_ENABLED!=='true')process.exit(0);import('./dist/health.js').then(m=>{process.exit(m.isHealthy(60)?0:1)}).catch(()=>process.exit(1))"
+    "import('./dist/health.js').then(m=>{if(!m.healthCheckEnabled)process.exit(0);process.exit(m.isHealthy(60)?0:1)}).catch(()=>process.exit(1))"
+  )
+  for cmd in "${commands[@]}"; do
+    status=0
+    docker run --rm --network none "${env_args[@]}" "${tag}" node -e "${fresh}${cmd}" >/dev/null 2>&1 || status=$?
+    if [[ "${status}" -ne 0 ]]; then
+      echo "  FAIL: a legacy HEALTHCHECK command exits ${status} (expected 0 with a fresh health file):"
+      echo "    ${cmd}"
+      FAILED=1
+      return
+    fi
+  done
+  echo "  OK: legacy HEALTHCHECK commands (./dist/health.js) still pass"
 }
 
 build_local() {
