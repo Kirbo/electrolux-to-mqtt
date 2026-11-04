@@ -1,3 +1,8 @@
+---
+name: merge-request
+description: Create or update the single open next → main merge request (title + description) to match the commits on next
+---
+
 # Merge request — sync the `next` → `main` MR
 
 You run this yourself, in-loop, at the current session model. No subagent spawning.
