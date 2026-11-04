@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 98905752-6fe7-4789-adc0-1ffdffd4ca26
-  modified: 2026-08-17T16:32:01.729Z
+  modified: 2026-11-04T05:00:00.000Z
 ---
 
 ## Effective grep patterns
@@ -37,7 +37,7 @@ metadata:
   - Docker HEALTHCHECK imports `healthCheckEnabled` from dist/health.js (honors YAML config); `CHANGELOG.m[d]` COPY glob makes the CI-artifact file optional for local builds.
   - Compose `3001:3001` binding kept on all interfaces DELIBERATELY (NPM-in-container can't reach host 127.0.0.1 — see compose comment); flagging it needs a topology decision from the user first.
 
-- `logger.ts` passes object args to pino as **fields** (2026-11-02, user choice: colored keys on their own lines); objects with pino-owned keys (`name`, `level`, `time`, `msg`, `err`, …), clashing keys, arrays/Maps go under `data`, `data2`, …, and extra Errors are flattened by `serializeError` — intentional, not a finding. A raw `AxiosError` would still print `config.headers` via pino's err serializer (as `util.inspect` did); safe only because `handleApiRequest`/`formatAxiosError` stringify axios errors first — re-check if a new call site logs a raw axios error.
+- `logger.ts` passes object args to pino as **fields** (2026-11-02, user choice: colored keys on their own lines); objects with pino-owned keys (`name`, `level`, `time`, `msg`, `err`, …), clashing keys, arrays/Maps go under `data`, `data2`, …, and extra Errors are flattened by `serializeError` (incl. a non-enumerable `cause`, recursively, cycles → `'[Circular]'`, since 2026-11-04) — intentional, not a finding. A raw `AxiosError` would still print `config.headers` via pino's err serializer (as `util.inspect` did); safe only because `handleApiRequest`/`formatAxiosError` stringify axios errors first — re-check if a new call site logs a raw axios error.
 
 ## Tooling-config migrations (verify activation, not just acceptance)
 
@@ -131,6 +131,18 @@ When a job's logic is extracted to `scripts/*.sh`, add that script to the job's 
 Recurred 2026-11-02 in two new shapes — check both:
 - **Scripts run from shared templates/anchors** (`before_script` of `.docker_build_base`, `*ssh_deploy`, `ci/secrets.sh` → `ci/install-fnox.sh`, `scripts/bootstrap-pnpm.sh` in every node job) are invisible when you only scan each job's own `script:`. Detection: `grep -rn 'sh \(ci\|scripts\)/\|\. ci/' .gitlab-ci.yml .gitlab/ci/` and confirm each path is in some NON-release job's `changes:` (`docker build test` now covers `ci/**/*` + `.gitlab-ci.yml`).
 - **Paired rule sets must stay identical**: `.rules_node_changes` and `.rules_node_changes_or_schedule` (the latter gates `install dependencies`, which the node jobs `need`). A path in only one of them makes GitLab refuse the pipeline ("needs job does not exist"). Diff the two `changes:` lists with a YAML load, not by eye.
+
+## A fix in one script has twins — grep them
+
+A hardening fix landed in a local script is often missing from its CI/deploy twin doing the same job. 2026-11-04: `scripts/secrets-env.sh` was made atomic (temp + `mv`) in 3aca466, but the deploy job's `.deploy_backend_env` (`.gitlab/ci/04_release.yml`) still piped `fnox export` into a truncating `cat > .env` on the server — a failed export would empty the prod `.env`. Detection after any "atomic / refuse without key / fail-first" fix: `grep -rnE "> *[^ ]*\.env|cat >" .gitlab-ci.yml .gitlab/ci/ scripts/ ci/` and check each writer of the same file.
+
+## Mechanism migrations leave doc stragglers that grep by NAME misses
+
+After SOPS→fnox, a grep for `sops|SOPS|.env.enc` came back clean, yet `.claude/CLAUDE.md` still said `pnpm sonar` "reads `.env`" and `docs/SONARQUBE.md` said "configure `SONAR_TOKEN` environment variable" (and claimed `pnpm sonar` runs the tests, which `scripts/sonar.sh` never did). Stragglers describe the old mechanism's BEHAVIOR, not its name. Detection: for each script whose plumbing changed, grep docs for the script/command name and re-read every sentence describing what it reads or does: `grep -rn "pnpm sonar\|<script>" .claude/CLAUDE.md docs/ README.md`.
+
+## `sha256sum -c` passes on a malformed checksum line
+
+GNU `sha256sum -c` only WARNS ("1 line is improperly formatted"), skips the line and exits 0 if the remaining lines match — a truncated/typo'd pin silently installs an unverified download. `--strict` fixes it on GNU but busybox lacks it, so `ci/install-fnox.sh` validates each pin as `[0-9a-f]{64}` first (added 2026-11-04). Detection: `grep -rn "sha256sum -c\|shasum -a 256 -c" ci/ scripts/ .gitlab/ docker/` and confirm the pin format is checked (or `--strict` on a GNU-only path). Test with a deliberately short pin, not only a wrong one.
 
 ## `config.yml` is gitignored — do not infer absence from git tooling
 

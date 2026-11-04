@@ -62,18 +62,19 @@ pnpm test:e2e
 ### Running SonarQube Locally
 
 ```bash
-# Run tests and then SonarQube scan
+# Generate coverage first, then scan
+pnpm test
 pnpm sonar
 ```
 
-This will:
-1. Execute all tests with coverage
-2. Generate coverage reports in `coverage/` directory
-3. Upload results to SonarQube Cloud
+`pnpm sonar` runs `scripts/sonar.sh` under `fnox exec -P sonar`, which:
+1. Skips with a notice on any branch other than `main` (the free tier analyses only `main`)
+2. Runs `sonar-scanner`, uploading the source and the existing `coverage/lcov.info`
+3. Prints the new issues and opens the new-code summary; exits non-zero on findings
 
 **Prerequisites**:
 - Install `sonar-scanner-cli` (available via Homebrew on macOS)
-- Configure `SONAR_TOKEN` environment variable with your SonarQube Cloud token
+- `SONAR_TOKEN` and `SONAR_HOST_URL` come from the fnox `sonar` profile — run `pnpm secrets:setup` once on a maintainer machine (see [`SECRETS.md`](SECRETS.md))
 
 ## CI/CD Pipeline
 
@@ -90,7 +91,7 @@ The `test` job in GitLab CI:
 
 The `sonarcloud-check` job:
 - Depends on `test` job artifacts (gets coverage data)
-- Runs `sonar-scanner` to upload code and coverage
+- Runs `sonar-scanner` under `fnox exec -P sonar`, with the token decrypted by the `ci/sonar` environment's age identity (see [`SECRETS.md`](SECRETS.md))
 - Uses cached `.sonar/cache` for faster subsequent runs
 - Only runs when relevant files change
 

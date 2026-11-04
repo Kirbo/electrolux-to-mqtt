@@ -14,7 +14,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm test` | Vitest + coverage (all suites under `tests/`) |
 | `pnpm test:e2e` | `tests/e2e/*.test.ts` with `E2E_TEST=true`. Override ntfy topic via `E2M_NTFY_TOPIC` |
-| `pnpm sonar` | SonarQube scanner (reads `.env`) |
+| `pnpm sonar` | SonarQube scanner under `fnox exec -P sonar` (token from fnox, see `docs/SECRETS.md`). Skips on any branch but `main` (free tier) |
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
 | `pnpm docker:test [prod\|local\|backend\|all]` | Build each image + smoke-run it offline; catches files missing from the build context. Substitutes a stock base when `dhi.io` is unreachable (CI has the entitlement, so it tests the real hardened image) |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
