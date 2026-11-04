@@ -1,6 +1,6 @@
-import axios from 'axios'
 import config from './config.js'
 import { disposableInterval } from './disposable.js'
+import { describeError, httpRequest } from './http.js'
 import createLogger from './logger.js'
 import type { IMqtt } from './mqtt.js'
 import { getOsInfo } from './telemetry.js'
@@ -26,60 +26,33 @@ let hasNotifiedVersion: string | null = null
 // Track last published MQTT info payload to avoid redundant publishes
 let lastPublishedInfo: string | null = null
 
-type GitLabCommit = {
-  id: string
-  short_id: string
-  created_at: string
-  title: string
-  author_name: string
-  web_url: string
-}
+// Only the fields the version check reads; validated at runtime, not cast.
+type GitLabRelease = { tag_name: string; released_at: string; description?: string | null }
+type GitLabTag = { name: string; commit: { created_at: string }; release?: { description?: string | null } | null }
 
-type GitLabTag = {
-  name: string
-  message: string
-  target: string
-  commit: GitLabCommit
-  release: {
-    tag_name: string
-    description: string
-  } | null
-  protected: boolean
-  created_at: string | null
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 
-type GitLabRelease = {
-  name: string
-  tag_name: string
-  description: string
-  created_at: string
-  released_at: string
-  upcoming_release: boolean
-  author: {
-    id: number
-    username: string
-    name: string
-    state: string
-    avatar_url: string
-    web_url: string
-  }
-  commit: GitLabCommit
-  commit_path: string
-  tag_path: string
-  assets: {
-    count: number
-    sources: Array<{ format: string; url: string }>
-    links: Array<unknown>
-  }
-  _links: {
-    self: string
-    closed_issues_url: string
-    closed_merge_requests_url: string
-    merged_merge_requests_url: string
-    opened_issues_url: string
-    opened_merge_requests_url: string
-  }
-}
+const isOptionalText = (value: unknown): boolean => value === undefined || value === null || typeof value === 'string'
+
+const isGitLabRelease = (value: unknown): value is GitLabRelease =>
+  isRecord(value) &&
+  typeof value.tag_name === 'string' &&
+  typeof value.released_at === 'string' &&
+  isOptionalText(value.description)
+
+const isGitLabTag = (value: unknown): value is GitLabTag =>
+  isRecord(value) &&
+  typeof value.name === 'string' &&
+  isRecord(value.commit) &&
+  typeof value.commit.created_at === 'string' &&
+  (value.release === undefined ||
+    value.release === null ||
+    (isRecord(value.release) && isOptionalText(value.release.description)))
+
+const isGitLabReleaseList = (value: unknown): value is GitLabRelease[] =>
+  Array.isArray(value) && value.every(isGitLabRelease)
+const isGitLabTagList = (value: unknown): value is GitLabTag[] => Array.isArray(value) && value.every(isGitLabTag)
 
 /**
  * Format a duration in seconds as a human-readable string in minutes or hours.
@@ -241,34 +214,24 @@ async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVer
     // per_page=100: GitLab defaults to 20/page — a burst of pre-releases must not
     // push the newest stable release off the first page.
     const releasesUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/releases?per_page=100`
-    const releasesResponse = await axios.get<GitLabRelease[]>(releasesUrl, {
-      timeout: 10000,
-      headers: { Accept: 'application/json' },
-    })
-
-    if (releasesResponse.data.length > 0) {
-      const result = pickLatestFromReleases(releasesResponse.data, channel)
+    const releases = (
+      await httpRequest({ url: releasesUrl, timeoutMs: 10000, headers: { Accept: 'application/json' } })
+    ).data
+    if (isGitLabReleaseList(releases) && releases.length > 0) {
+      const result = pickLatestFromReleases(releases, channel)
       if (result) return result
     }
 
     // Fallback to tags if no eligible releases found
     const tagsUrl = `${GITLAB_API}/projects/${encodeURIComponent(GITLAB_REPO)}/repository/tags?per_page=100`
-    const tagsResponse = await axios.get<GitLabTag[]>(tagsUrl, {
-      timeout: 10000,
-      headers: { Accept: 'application/json' },
-    })
-
-    if (tagsResponse.data.length > 0) {
-      return pickLatestFromTags(tagsResponse.data, channel)
+    const tags = (await httpRequest({ url: tagsUrl, timeoutMs: 10000, headers: { Accept: 'application/json' } })).data
+    if (isGitLabTagList(tags) && tags.length > 0) {
+      return pickLatestFromTags(tags, channel)
     }
 
     return null
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      logger.debug(`Failed to fetch version info: ${error.message}`)
-    } else {
-      logger.debug('Failed to fetch version info:', error)
-    }
+    logger.debug(`Failed to fetch version info: ${describeError(error)}`)
     return null
   }
 }
@@ -286,21 +249,18 @@ async function sendNtfyNotification(
   try {
     const message = `A newer version of Electrolux-to-MQTT is found. Latest version ${latestVersion}, you're running version ${currentVersion}`
 
-    await axios.post(webhookUrl, message, {
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'text/plain',
-      },
+    await httpRequest({
+      method: 'POST',
+      url: webhookUrl,
+      body: message,
+      timeoutMs: 10000,
+      headers: { 'Content-Type': 'text/plain' },
     })
 
     logger.debug(`Sent ntfy notification for version ${latestVersion}`)
     return true
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      logger.debug(`Failed to send ntfy notification: ${error.message}`)
-    } else {
-      logger.debug('Failed to send ntfy notification:', error)
-    }
+    logger.debug(`Failed to send ntfy notification: ${describeError(error)}`)
     return false
   }
 }
@@ -338,18 +298,18 @@ async function sendTelemetry(context: TelemetryContext, version: string, channel
       },
     }
 
-    await axios.post(APTABASE_EVENTS_URL, [event], {
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json',
-        'App-Key': APTABASE_APP_KEY,
-      },
+    await httpRequest({
+      method: 'POST',
+      url: APTABASE_EVENTS_URL,
+      body: [event],
+      timeoutMs: 10000,
+      headers: { 'Content-Type': 'application/json', 'App-Key': APTABASE_APP_KEY },
     })
 
     logger.debug('Telemetry sent successfully')
   } catch (error) {
     // Silently fail - telemetry is not critical
-    logger.debug('Failed to send telemetry:', error instanceof Error ? error.message : error)
+    logger.debug(`Failed to send telemetry: ${describeError(error)}`)
   }
 }
 

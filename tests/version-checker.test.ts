@@ -1,5 +1,5 @@
-import axios from 'axios'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
+import { HttpError, type HttpRequest, httpRequest } from '#/http.js'
 import type { IMqtt } from '#/mqtt.js'
 import { formatDuration } from '#/version-checker.js'
 
@@ -13,7 +13,12 @@ const loggerSpies = vi.hoisted(() => ({
 }))
 
 // Mock dependencies before importing the module
-vi.mock('axios')
+// httpRequest is mocked; the adapter in beforeEach routes each call to an
+// (url, body, options)-shaped GET/POST spy so assertions read like the request.
+vi.mock('#/http.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/http.js')>()),
+  httpRequest: vi.fn(),
+}))
 vi.mock('#/logger.js', () => ({
   default: () => loggerSpies,
 }))
@@ -90,21 +95,24 @@ describe('formatDuration', () => {
 
 describe('version-checker', () => {
   let startVersionChecker: typeof import('#/version-checker.js')['startVersionChecker']
-  let mockAxiosGet: ReturnType<typeof vi.fn>
-  let mockAxiosPost: ReturnType<typeof vi.fn>
+  let mockHttpGet: Mock<(url: string, options: unknown) => Promise<unknown>>
+  let mockHttpPost: Mock<(url: string, body: unknown, options: unknown) => Promise<unknown>>
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.useFakeTimers()
 
-    // Setup axios mocks
-    mockAxiosGet = vi.fn()
-    mockAxiosPost = vi.fn()
-    // biome-ignore lint/suspicious/noExplicitAny: supressed for the test
-    vi.mocked(axios.get).mockImplementation(mockAxiosGet as any)
-    // biome-ignore lint/suspicious/noExplicitAny: supressed for the test
-    vi.mocked(axios.post).mockImplementation(mockAxiosPost as any)
-    vi.mocked(axios.isAxiosError).mockReturnValue(false)
+    mockHttpGet = vi.fn<(url: string, options: unknown) => Promise<unknown>>()
+    mockHttpPost = vi.fn<(url: string, body: unknown, options: unknown) => Promise<unknown>>()
+    vi.mocked(httpRequest).mockImplementation(async (request: HttpRequest) => {
+      const options = { timeout: request.timeoutMs, headers: request.headers }
+      const response: unknown =
+        request.method === 'POST'
+          ? await mockHttpPost(request.url, request.body, options)
+          : await mockHttpGet(request.url, options)
+      const data = typeof response === 'object' && response !== null && 'data' in response ? response.data : undefined
+      return { status: 200, headers: new Headers(), data }
+    })
 
     // Dynamically import the module to ensure mocks are applied
     const module = await import('#/version-checker.js')
@@ -118,7 +126,7 @@ describe('version-checker', () => {
 
   describe('startVersionChecker', () => {
     it('should start version checker and check immediately', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           {
             tag_name: 'v1.6.4',
@@ -126,7 +134,7 @@ describe('version-checker', () => {
           },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
@@ -134,7 +142,7 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       // Should fetch latest version from GitLab
-      expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining('/releases'),
         expect.objectContaining({
           timeout: 10000,
@@ -142,7 +150,7 @@ describe('version-checker', () => {
       )
 
       // Should send telemetry to Aptabase
-      expect(mockAxiosPost).toHaveBeenCalledWith(
+      expect(mockHttpPost).toHaveBeenCalledWith(
         'https://aptabase.devaus.eu/api/v0/events',
         expect.arrayContaining([
           expect.objectContaining({
@@ -159,8 +167,8 @@ describe('version-checker', () => {
     })
 
     it('should log update channel and check interval at INFO level on startup', () => {
-      mockAxiosGet.mockResolvedValue({ data: [] })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpGet.mockResolvedValue({ data: [] })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       // v1.6.3 is a stable version → channel is derived as 'stable'
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
@@ -172,8 +180,8 @@ describe('version-checker', () => {
     })
 
     it('should return a function that stops the version checker', () => {
-      mockAxiosGet.mockResolvedValue({ data: [] })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpGet.mockResolvedValue({ data: [] })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
@@ -182,37 +190,37 @@ describe('version-checker', () => {
     })
 
     it('should check for updates at configured interval', async () => {
-      mockAxiosGet.mockResolvedValue({
+      mockHttpGet.mockResolvedValue({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       // Initial check
       await vi.advanceTimersByTimeAsync(0)
-      const initialCalls = mockAxiosGet.mock.calls.length
+      const initialCalls = mockHttpGet.mock.calls.length
 
       // Advance time by 1 hour (3600 seconds)
       await vi.advanceTimersByTimeAsync(3600 * 1000)
 
       // Should have made another check
-      expect(mockAxiosGet).toHaveBeenCalledTimes(initialCalls + 1)
+      expect(mockHttpGet).toHaveBeenCalledTimes(initialCalls + 1)
 
       stopChecker()
     })
 
     it('should skip check for development version', async () => {
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('development', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should not fetch version
-      expect(mockAxiosGet).not.toHaveBeenCalled()
+      expect(mockHttpGet).not.toHaveBeenCalled()
       // Should not send telemetry for development version
-      expect(mockAxiosPost).not.toHaveBeenCalled()
+      expect(mockHttpPost).not.toHaveBeenCalled()
 
       stopChecker()
     })
@@ -242,11 +250,11 @@ describe('version-checker', () => {
       moduleForCmp = await import('#/version-checker.js')
       mockPublishInfoCmp = vi.fn()
       mockMqttCmp = { publishInfo: mockPublishInfoCmp } as unknown as IMqtt
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
     })
 
     const runCheck = async (current: string, latestTag: string) => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: latestTag, released_at: '2026-01-28T12:00:00Z' }],
       })
       const stopChecker = moduleForCmp.startVersionChecker(current, makeTelemetryCtx(), mockMqttCmp)
@@ -308,11 +316,11 @@ describe('version-checker', () => {
       moduleWithBetaRcToStable = await import('#/version-checker.js')
       mockPublishInfoBeta = vi.fn()
       mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
     })
 
     it('running 1.17.0-rc.7 on beta channel + latest release is v1.17.0 → fires update-available', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           { tag_name: 'v1.17.0', released_at: '2026-04-21T12:00:00Z' },
           { tag_name: 'v1.17.0-rc.7', released_at: '2026-04-15T12:00:00Z' },
@@ -330,7 +338,7 @@ describe('version-checker', () => {
 
   describe('version comparison', () => {
     it('should detect when a newer version is available', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           {
             tag_name: 'v1.6.4',
@@ -338,20 +346,20 @@ describe('version-checker', () => {
           },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have fetched releases
-      expect(mockAxiosGet).toHaveBeenCalledWith(expect.stringContaining('/releases'), expect.any(Object))
+      expect(mockHttpGet).toHaveBeenCalledWith(expect.stringContaining('/releases'), expect.any(Object))
 
       stopChecker()
     })
 
     it('should not notify when running the latest version', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           {
             tag_name: 'v1.6.3',
@@ -359,20 +367,20 @@ describe('version-checker', () => {
           },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have checked version but not sent ntfy notification
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
 
       stopChecker()
     })
 
     it('should handle version strings with and without "v" prefix', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           {
             tag_name: '1.6.4',
@@ -380,14 +388,14 @@ describe('version-checker', () => {
           },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should compare correctly even with different formats
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
 
       stopChecker()
     })
@@ -395,7 +403,7 @@ describe('version-checker', () => {
 
   describe('GitLab API integration', () => {
     it('should fetch from releases endpoint first', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           {
             tag_name: 'v1.6.4',
@@ -403,13 +411,13 @@ describe('version-checker', () => {
           },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect(mockHttpGet).toHaveBeenCalledWith(
         'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases?per_page=100',
         expect.any(Object),
       )
@@ -418,7 +426,7 @@ describe('version-checker', () => {
     })
 
     it('should fallback to tags endpoint if releases are empty', async () => {
-      mockAxiosGet
+      mockHttpGet
         .mockResolvedValueOnce({ data: [] }) // Empty releases
         .mockResolvedValueOnce({
           // Tags response
@@ -429,15 +437,15 @@ describe('version-checker', () => {
             },
           ],
         })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have called both releases and tags endpoints
-      expect(mockAxiosGet).toHaveBeenCalledWith(expect.stringContaining('/releases'), expect.any(Object))
-      expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect(mockHttpGet).toHaveBeenCalledWith(expect.stringContaining('/releases'), expect.any(Object))
+      expect(mockHttpGet).toHaveBeenCalledWith(
         'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/repository/tags?per_page=100',
         expect.any(Object),
       )
@@ -446,7 +454,7 @@ describe('version-checker', () => {
     })
 
     it('should sort releases by released_at date', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           {
             tag_name: 'v1.6.2',
@@ -462,20 +470,20 @@ describe('version-checker', () => {
           },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have detected v1.6.4 as the latest
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
 
       stopChecker()
     })
 
     it('should sort tags by commit created_at date when falling back to tags', async () => {
-      mockAxiosGet
+      mockHttpGet
         .mockResolvedValueOnce({ data: [] }) // Empty releases
         .mockResolvedValueOnce({
           // Tags in wrong order
@@ -494,7 +502,7 @@ describe('version-checker', () => {
             },
           ],
         })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const mockPublishInfo = vi.fn()
       const mockMqtt = { publishInfo: mockPublishInfo } as unknown as IMqtt
@@ -510,30 +518,28 @@ describe('version-checker', () => {
 
     it('should handle GitLab API errors gracefully', async () => {
       const error = new Error('Network error')
-      mockAxiosGet.mockRejectedValueOnce(error)
-      vi.mocked(axios.isAxiosError).mockReturnValue(false)
+      mockHttpGet.mockRejectedValueOnce(error)
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should not throw
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
 
       stopChecker()
     })
 
-    it('should handle axios errors', async () => {
-      const error = { message: 'Request timeout', isAxiosError: true }
-      mockAxiosGet.mockRejectedValueOnce(error)
-      vi.mocked(axios.isAxiosError).mockReturnValue(true)
+    it('should handle HTTP errors (e.g. a timeout)', async () => {
+      const error = new HttpError('The operation was aborted due to timeout', 'GET', 'https://gitlab.com/x')
+      mockHttpGet.mockRejectedValueOnce(error)
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should not throw
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
 
       stopChecker()
     })
@@ -556,7 +562,7 @@ describe('version-checker', () => {
     })
 
     it('should skip telemetry POST when telemetryEnabled is false', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
 
@@ -564,9 +570,9 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       // Version check should still run
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
       // But telemetry POST should NOT have been called at all
-      expect(mockAxiosPost).not.toHaveBeenCalled()
+      expect(mockHttpPost).not.toHaveBeenCalled()
 
       stopChecker()
     })
@@ -581,15 +587,15 @@ describe('version-checker', () => {
       }))
       const mod = await import('#/version-checker.js')
 
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = mod.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(mockAxiosPost).toHaveBeenCalledWith(
+      expect(mockHttpPost).toHaveBeenCalledWith(
         'https://aptabase.devaus.eu/api/v0/events',
         expect.arrayContaining([expect.objectContaining({ eventName: 'version_check', sessionId: 'test-session-id' })]),
         expect.objectContaining({ headers: expect.objectContaining({ 'App-Key': 'A-SH-2414786682' }) }),
@@ -601,17 +607,17 @@ describe('version-checker', () => {
 
   describe('telemetry', () => {
     it('should send telemetry event to Aptabase with correct payload', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx('test-session-abc'))
 
       await vi.advanceTimersByTimeAsync(0)
 
       // v1.6.3 is a stable version → resolved channel is 'stable'
-      expect(mockAxiosPost).toHaveBeenCalledWith(
+      expect(mockHttpPost).toHaveBeenCalledWith(
         'https://aptabase.devaus.eu/api/v0/events',
         [
           expect.objectContaining({
@@ -645,10 +651,10 @@ describe('version-checker', () => {
     })
 
     it('should handle telemetry failures silently', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockRejectedValueOnce(new Error('Telemetry server down'))
+      mockHttpPost.mockRejectedValueOnce(new Error('Telemetry server down'))
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
 
@@ -656,7 +662,7 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have attempted telemetry
-      expect(mockAxiosPost).toHaveBeenCalled()
+      expect(mockHttpPost).toHaveBeenCalled()
 
       stopChecker()
     })
@@ -664,15 +670,15 @@ describe('version-checker', () => {
 
   describe('Aptabase telemetry payload', () => {
     it('sends a one-element array to the Aptabase events URL', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx('sess-1'))
       await vi.advanceTimersByTimeAsync(0)
 
-      const [url, body] = mockAxiosPost.mock.calls[0] as [string, unknown]
+      const [url, body] = mockHttpPost.mock.calls[0] as [string, unknown, unknown]
       expect(url).toBe('https://aptabase.devaus.eu/api/v0/events')
       expect(Array.isArray(body)).toBe(true)
       expect(body).toHaveLength(1)
@@ -681,26 +687,26 @@ describe('version-checker', () => {
     })
 
     it('includes App-Key header in the request', async () => {
-      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      const [, , opts] = mockAxiosPost.mock.calls[0] as [string, unknown, { headers: Record<string, string> }]
+      const [, , opts] = mockHttpPost.mock.calls[0] as [string, unknown, { headers: Record<string, string> }]
       expect(opts.headers['App-Key']).toBe('A-SH-2414786682')
 
       stopChecker()
     })
 
     it('event has eventName "version_check" and correct sessionId', async () => {
-      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const stopChecker = startVersionChecker('2026.6.0', makeTelemetryCtx('my-session-uuid'))
       await vi.advanceTimersByTimeAsync(0)
 
-      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const [, body] = mockHttpPost.mock.calls[0] as [string, Array<Record<string, unknown>>, unknown]
       const event = body[0]
       expect(event?.eventName).toBe('version_check')
       expect(event?.sessionId).toBe('my-session-uuid')
@@ -709,13 +715,13 @@ describe('version-checker', () => {
     })
 
     it('strips leading "v" from appVersion and builds correct sdkVersion', async () => {
-      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const stopChecker = startVersionChecker('v2026.6.0', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const [, body] = mockHttpPost.mock.calls[0] as [string, Array<Record<string, unknown>>, unknown]
       const event = body[0]
       const systemProps = event?.systemProps as Record<string, unknown>
       expect(systemProps?.appVersion).toBe('2026.6.0')
@@ -725,13 +731,13 @@ describe('version-checker', () => {
     })
 
     it('systemProps has isDebug:false and mocked OS fields', async () => {
-      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const [, body] = mockHttpPost.mock.calls[0] as [string, Array<Record<string, unknown>>, unknown]
       const systemProps = (body[0] as Record<string, unknown>)?.systemProps as Record<string, unknown>
       expect(systemProps?.isDebug).toBe(false)
       expect(systemProps?.osName).toBe('Linux')
@@ -741,14 +747,14 @@ describe('version-checker', () => {
     })
 
     it('props include channel, arch, appliance_models, appliance_count', async () => {
-      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const ctx = { sessionId: 'sid', applianceSummary: () => ({ models: 'COMFORT600', count: 2 }) }
       const stopChecker = startVersionChecker('v1.6.3', ctx)
       await vi.advanceTimersByTimeAsync(0)
 
-      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const [, body] = mockHttpPost.mock.calls[0] as [string, Array<Record<string, unknown>>, unknown]
       const props = (body[0] as Record<string, unknown>)?.props as Record<string, unknown>
       expect(props?.channel).toBe('stable')
       expect(props?.arch).toBe('arm64')
@@ -767,8 +773,8 @@ describe('version-checker', () => {
           return { models: `MODEL${callCount}`, count: callCount }
         },
       }
-      mockAxiosGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const stopChecker = startVersionChecker('v1.6.3', ctx)
       await vi.advanceTimersByTimeAsync(0)
@@ -784,8 +790,8 @@ describe('version-checker', () => {
     })
 
     it('event timestamp is a valid ISO 8601 string', async () => {
-      mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: {} })
+      mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: {} })
 
       const now = new Date('2026-06-25T10:00:00.000Z')
       vi.setSystemTime(now)
@@ -793,7 +799,7 @@ describe('version-checker', () => {
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      const [, body] = mockAxiosPost.mock.calls[0] as [string, Array<Record<string, unknown>>]
+      const [, body] = mockHttpPost.mock.calls[0] as [string, Array<Record<string, unknown>>, unknown]
       const event = body[0] as Record<string, unknown>
       expect(typeof event?.timestamp).toBe('string')
       expect(new Date(event?.timestamp as string).toISOString()).toBe('2026-06-25T10:00:00.000Z')
@@ -825,20 +831,20 @@ describe('version-checker', () => {
     })
 
     it('should send ntfy notification when newer version is found', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       await vi.advanceTimersByTimeAsync(0)
 
       // Should send both telemetry and ntfy notification
-      expect(mockAxiosPost).toHaveBeenCalledTimes(2)
+      expect(mockHttpPost).toHaveBeenCalledTimes(2)
 
       // First call should be telemetry to Aptabase (v1.6.3 is stable → channel: 'stable')
-      expect(mockAxiosPost).toHaveBeenNthCalledWith(
+      expect(mockHttpPost).toHaveBeenNthCalledWith(
         1,
         'https://aptabase.devaus.eu/api/v0/events',
         expect.arrayContaining([
@@ -851,7 +857,7 @@ describe('version-checker', () => {
       )
 
       // Second call should be ntfy notification
-      expect(mockAxiosPost).toHaveBeenNthCalledWith(
+      expect(mockHttpPost).toHaveBeenNthCalledWith(
         2,
         'https://ntfy.sh/vB66ozQaRiqhTE9j',
         "A newer version of Electrolux-to-MQTT is found. Latest version v1.6.4, you're running version v1.6.3",
@@ -867,24 +873,24 @@ describe('version-checker', () => {
     })
 
     it('should only send ntfy notification once per version', async () => {
-      mockAxiosGet.mockResolvedValue({
+      mockHttpGet.mockResolvedValue({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
 
       // First check
       await vi.advanceTimersByTimeAsync(0)
 
-      const ntfyCallsAfterFirst = mockAxiosPost.mock.calls.filter(
+      const ntfyCallsAfterFirst = mockHttpPost.mock.calls.filter(
         (call) => call[0] === 'https://ntfy.sh/vB66ozQaRiqhTE9j',
       ).length
 
       // Advance time and check again
       await vi.advanceTimersByTimeAsync(3600 * 1000)
 
-      const ntfyCallsAfterSecond = mockAxiosPost.mock.calls.filter(
+      const ntfyCallsAfterSecond = mockHttpPost.mock.calls.filter(
         (call) => call[0] === 'https://ntfy.sh/vB66ozQaRiqhTE9j',
       ).length
 
@@ -896,11 +902,11 @@ describe('version-checker', () => {
 
     it('should retry the ntfy notification on the next check when the send failed', async () => {
       const ntfyUrl = 'https://ntfy.sh/vB66ozQaRiqhTE9j'
-      mockAxiosGet.mockResolvedValue({
+      mockHttpGet.mockResolvedValue({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
       let ntfyAttempts = 0
-      mockAxiosPost.mockImplementation((url: string) => {
+      mockHttpPost.mockImplementation((url: string) => {
         if (url === ntfyUrl && ntfyAttempts++ === 0) {
           return Promise.reject(new Error('ntfy server down'))
         }
@@ -911,7 +917,7 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0) // check 1 — ntfy send fails
       await vi.advanceTimersByTimeAsync(3600 * 1000) // check 2 — must retry, not mark as notified
 
-      const ntfyCalls = mockAxiosPost.mock.calls.filter((call) => call[0] === ntfyUrl).length
+      const ntfyCalls = mockHttpPost.mock.calls.filter((call) => call[0] === ntfyUrl).length
       expect(ntfyCalls).toBe(2)
 
       stopChecker()
@@ -919,10 +925,10 @@ describe('version-checker', () => {
 
     it('should reset the per-version dedup when the checker is stopped and restarted', async () => {
       const ntfyUrl = 'https://ntfy.sh/vB66ozQaRiqhTE9j'
-      mockAxiosGet.mockResolvedValue({
+      mockHttpGet.mockResolvedValue({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stop1 = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
@@ -932,48 +938,48 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
       stop2()
 
-      const ntfyCalls = mockAxiosPost.mock.calls.filter((call) => call[0] === ntfyUrl).length
+      const ntfyCalls = mockHttpPost.mock.calls.filter((call) => call[0] === ntfyUrl).length
       expect(ntfyCalls).toBe(2)
     })
 
     it('should pick the highest version, not the most recently released', async () => {
       const ntfyUrl = 'https://ntfy.sh/vB66ozQaRiqhTE9j'
       // Hotfix on the older series cut AFTER the newer release
-      mockAxiosGet.mockResolvedValue({
+      mockHttpGet.mockResolvedValue({
         data: [
           { tag_name: 'v2026.5.9', released_at: '2026-06-20T12:00:00Z' },
           { tag_name: 'v2026.6.5', released_at: '2026-06-10T12:00:00Z' },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = moduleWithNtfy.startVersionChecker('v2026.5.8', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      const ntfyCall = mockAxiosPost.mock.calls.find((call) => call[0] === ntfyUrl)
+      const ntfyCall = mockHttpPost.mock.calls.find((call) => call[0] === ntfyUrl)
       expect(ntfyCall?.[1]).toContain('v2026.6.5')
 
       stopChecker()
     })
 
     it('should request 100 entries per page from the GitLab API', async () => {
-      mockAxiosGet.mockResolvedValue({ data: [] })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpGet.mockResolvedValue({ data: [] })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
-      const releasesCall = mockAxiosGet.mock.calls.find((call) => String(call[0]).includes('/releases'))
+      const releasesCall = mockHttpGet.mock.calls.find((call) => String(call[0]).includes('/releases'))
       expect(String(releasesCall?.[0])).toContain('per_page=100')
 
       stopChecker()
     })
 
     it('should handle ntfy notification failures gracefully', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost
+      mockHttpPost
         .mockResolvedValueOnce({ data: { success: true } }) // telemetry succeeds
         .mockRejectedValueOnce(new Error('ntfy server down')) // ntfy fails
 
@@ -982,26 +988,25 @@ describe('version-checker', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have attempted both telemetry and ntfy
-      expect(mockAxiosPost).toHaveBeenCalled()
+      expect(mockHttpPost).toHaveBeenCalled()
 
       stopChecker()
     })
 
-    it('should handle ntfy notification failure with axios error', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+    it('should handle ntfy notification failure with an HTTP error', async () => {
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      const axiosError = { message: 'Connection refused', isAxiosError: true }
-      mockAxiosPost
+      const httpError = new HttpError('Request failed with status code 502', 'POST', 'https://ntfy.sh/t', 502)
+      mockHttpPost
         .mockResolvedValueOnce({ data: { success: true } }) // telemetry succeeds
-        .mockRejectedValueOnce(axiosError) // ntfy fails with axios error
-      vi.mocked(axios.isAxiosError).mockReturnValue(true)
+        .mockRejectedValueOnce(httpError) // ntfy fails
 
       const stopChecker = moduleWithNtfy.startVersionChecker('v1.6.3', makeTelemetryCtx())
       await vi.advanceTimersByTimeAsync(0)
 
       // Should have attempted ntfy notification
-      expect(mockAxiosPost).toHaveBeenCalledTimes(2)
+      expect(mockHttpPost).toHaveBeenCalledTimes(2)
 
       stopChecker()
     })
@@ -1017,10 +1022,10 @@ describe('version-checker', () => {
     })
 
     it('should publish up-to-date status when running the latest version', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1033,10 +1038,10 @@ describe('version-checker', () => {
     })
 
     it('should publish update-available status with latestVersion when a newer version is found', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1058,10 +1063,10 @@ describe('version-checker', () => {
       vi.setSystemTime(now)
       const recentRelease = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
 
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: recentRelease }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1075,10 +1080,10 @@ describe('version-checker', () => {
       vi.setSystemTime(now)
       const oldRelease = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString()
 
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: oldRelease }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1102,7 +1107,7 @@ describe('version-checker', () => {
         vi.setSystemTime(now)
         const recentRelease = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
 
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v1.6.4', released_at: recentRelease }],
         })
 
@@ -1129,7 +1134,7 @@ describe('version-checker', () => {
         vi.setSystemTime(now)
         const ninetyMinAgo = new Date(now.getTime() - 90 * 60 * 1000).toISOString()
 
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v1.6.4', released_at: ninetyMinAgo }],
         })
 
@@ -1156,7 +1161,7 @@ describe('version-checker', () => {
         vi.setSystemTime(now)
         const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString()
 
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v1.6.4', released_at: threeHoursAgo }],
         })
 
@@ -1178,17 +1183,17 @@ describe('version-checker', () => {
         JSON.stringify({ currentVersion: 'development', status: 'development' }),
       )
       // Should not have contacted GitLab or telemetry
-      expect(mockAxiosGet).not.toHaveBeenCalled()
-      expect(mockAxiosPost).not.toHaveBeenCalled()
+      expect(mockHttpGet).not.toHaveBeenCalled()
+      expect(mockHttpPost).not.toHaveBeenCalled()
 
       stopChecker()
     })
 
     it('should not call publishInfo when mqtt is not provided (backward-compatible)', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       // Call without mqtt argument
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx())
@@ -1201,11 +1206,11 @@ describe('version-checker', () => {
 
     it('should publish when status changes between periodic checks', async () => {
       // First check: up-to-date
-      mockAxiosGet
+      mockHttpGet
         .mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }] })
         // Second check (after interval): update available
         .mockResolvedValueOnce({ data: [{ tag_name: 'v1.6.4', released_at: '2026-02-01T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
@@ -1231,8 +1236,8 @@ describe('version-checker', () => {
 
     it('should not publish again when status is unchanged between periodic checks', async () => {
       // Both checks return the same up-to-date result
-      mockAxiosGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }] })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpGet.mockResolvedValue({ data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }] })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
@@ -1248,10 +1253,10 @@ describe('version-checker', () => {
 
     it('should include description in update-available payload when release provides it', async () => {
       const description = '## 1.6.4 (2026-01-28)\n\n#### Feature\n\n* some new feature\n\n'
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z', description }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1270,10 +1275,10 @@ describe('version-checker', () => {
     })
 
     it('should include description in up-to-date payload when release provides it', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.3', released_at: '2026-01-25T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1291,17 +1296,17 @@ describe('version-checker', () => {
 
     it('should handle errors in periodic version check gracefully', async () => {
       // First check succeeds
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.3', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
 
       // Second check (periodic) throws
-      mockAxiosPost.mockRejectedValueOnce(new Error('Telemetry crash'))
-      mockAxiosGet.mockRejectedValueOnce(new Error('Network down'))
+      mockHttpPost.mockRejectedValueOnce(new Error('Telemetry crash'))
+      mockHttpGet.mockRejectedValueOnce(new Error('Network down'))
 
       // Should not throw even when periodic check fails
       await vi.advanceTimersByTimeAsync(3600 * 1000)
@@ -1313,10 +1318,10 @@ describe('version-checker', () => {
     })
 
     it('should omit description from payload when release has no description', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.6.4', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1328,10 +1333,10 @@ describe('version-checker', () => {
     })
 
     it('should treat pre-release tag 1.0.0-rc.1 as lower than running version 1.6.3 (no update notification)', async () => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: 'v1.0.0-rc.1', released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1355,10 +1360,10 @@ describe('version-checker', () => {
       { tag: 'vvv1.0.0', label: 'a malformed tag like vvv1.0.0' },
       { tag: 'not-a-version', label: 'a completely non-semver tag like not-a-version' },
     ])('should handle $label without crashing', async ({ tag }) => {
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [{ tag_name: tag, released_at: '2026-01-28T12:00:00Z' }],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
 
@@ -1366,14 +1371,14 @@ describe('version-checker', () => {
       await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
 
       // Should have called the GitLab API
-      expect(mockAxiosGet).toHaveBeenCalled()
+      expect(mockHttpGet).toHaveBeenCalled()
 
       stopChecker()
     })
 
     it('should include description from tag release object when falling back to tags endpoint', async () => {
       const description = '## 1.6.4 from tag\n\n#### Feature\n\n* tag feature\n\n'
-      mockAxiosGet
+      mockHttpGet
         .mockResolvedValueOnce({ data: [] }) // Empty releases
         .mockResolvedValueOnce({
           data: [
@@ -1395,7 +1400,7 @@ describe('version-checker', () => {
             },
           ],
         })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stopChecker = startVersionChecker('v1.6.3', makeTelemetryCtx(), mockMqtt)
       await vi.advanceTimersByTimeAsync(0)
@@ -1435,7 +1440,7 @@ describe('version-checker', () => {
       })
 
       it('should skip an rc release and return null when that is the only release', async () => {
-        mockAxiosGet
+        mockHttpGet
           .mockResolvedValueOnce({
             data: [{ tag_name: 'v1.15.1-rc.1', released_at: '2026-04-01T12:00:00Z' }],
           })
@@ -1458,13 +1463,13 @@ describe('version-checker', () => {
       })
 
       it('should return stable release when both stable and rc releases are present', async () => {
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [
             { tag_name: 'v1.15.1-rc.1', released_at: '2026-04-10T12:00:00Z' },
             { tag_name: 'v1.15.0', released_at: '2026-04-01T12:00:00Z' },
           ],
         })
-        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+        mockHttpPost.mockResolvedValue({ data: { success: true } })
 
         const mockPublishInfoStable = vi.fn()
         const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
@@ -1479,7 +1484,7 @@ describe('version-checker', () => {
       })
 
       it('should skip rc tags in tags fallback', async () => {
-        mockAxiosGet
+        mockHttpGet
           .mockResolvedValueOnce({ data: [] }) // no releases
           .mockResolvedValueOnce({
             data: [
@@ -1493,7 +1498,7 @@ describe('version-checker', () => {
               },
             ],
           })
-        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+        mockHttpPost.mockResolvedValue({ data: { success: true } })
 
         const mockPublishInfoStable = vi.fn()
         const mockMqttStable = { publishInfo: mockPublishInfoStable } as unknown as IMqtt
@@ -1528,13 +1533,13 @@ describe('version-checker', () => {
       })
 
       it('should return rc release when it is the most recently created', async () => {
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [
             { tag_name: 'v1.15.1-rc.1', released_at: '2026-04-10T12:00:00Z' },
             { tag_name: 'v1.15.0', released_at: '2026-04-01T12:00:00Z' },
           ],
         })
-        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+        mockHttpPost.mockResolvedValue({ data: { success: true } })
 
         const mockPublishInfoBeta = vi.fn()
         const mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
@@ -1549,7 +1554,7 @@ describe('version-checker', () => {
       })
 
       it('should include rc tags in tags fallback', async () => {
-        mockAxiosGet
+        mockHttpGet
           .mockResolvedValueOnce({ data: [] }) // no releases
           .mockResolvedValueOnce({
             data: [
@@ -1563,7 +1568,7 @@ describe('version-checker', () => {
               },
             ],
           })
-        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+        mockHttpPost.mockResolvedValue({ data: { success: true } })
 
         const mockPublishInfoBeta = vi.fn()
         const mockMqttBeta = { publishInfo: mockPublishInfoBeta } as unknown as IMqtt
@@ -1611,7 +1616,7 @@ describe('version-checker', () => {
         { tag: 'v2026.6.0b1', current: '2026.5.0', label: 'v2026.6.0b1 (with v prefix)' },
       ])('treats $label as pre-release (stable channel skips it)', async ({ tag, current }) => {
         // stable channel must filter out the pre-release tag → no update-available published
-        mockAxiosGet
+        mockHttpGet
           .mockResolvedValueOnce({
             data: [{ tag_name: tag, released_at: '2026-04-01T12:00:00Z' }],
           })
@@ -1630,7 +1635,7 @@ describe('version-checker', () => {
       })
 
       it('treats 2026.6.0 as stable (stable channel includes it)', async () => {
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v2026.6.0', released_at: '2026-04-01T12:00:00Z' }],
         })
 
@@ -1644,7 +1649,7 @@ describe('version-checker', () => {
       })
 
       it('treats 1.18.5 as stable (stable channel includes it)', async () => {
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v1.18.5', released_at: '2026-04-01T12:00:00Z' }],
         })
 
@@ -1680,11 +1685,11 @@ describe('version-checker', () => {
         moduleCalVer = await import('#/version-checker.js')
         pubFn = vi.fn()
         mqttCalVer = { publishInfo: pubFn } as unknown as IMqtt
-        mockAxiosPost.mockResolvedValue({ data: { success: true } })
+        mockHttpPost.mockResolvedValue({ data: { success: true } })
       })
 
       const runCmp = async (current: string, latestTag: string): Promise<string | null> => {
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: latestTag, released_at: '2026-01-28T12:00:00Z' }],
         })
         const stop = moduleCalVer.startVersionChecker(current, makeTelemetryCtx(), mqttCalVer)
@@ -1747,7 +1752,7 @@ describe('version-checker', () => {
       it('stable channel: picks 2026.6.0 (most recent stable) from mixed list, skips bN and rc', async () => {
         // Dates ordered so 2026.6.0 is most recent stable. Use past dates so the
         // 1-hour new-release guard never suppresses the notification.
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [
             { tag_name: 'v2026.6.0b2', released_at: '2026-05-10T12:00:00Z' }, // latest by date but pre-release
             { tag_name: 'v2026.6.0', released_at: '2026-05-09T12:00:00Z' }, // most recent stable
@@ -1788,7 +1793,7 @@ describe('version-checker', () => {
 
       it('beta channel: picks the highest version (stable 2026.6.0 over its own beta) from mixed list', async () => {
         // Use dates well in the past so the 1-hour new-release guard never suppresses the notification.
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [
             { tag_name: 'v2026.6.0b2', released_at: '2026-05-10T12:00:00Z' },
             { tag_name: 'v2026.6.0', released_at: '2026-05-09T12:00:00Z' },
@@ -1831,7 +1836,7 @@ describe('version-checker', () => {
       it('pre-release version 2026.6.0b1 + unset channel → derives beta → sees pre-release tags', async () => {
         // beta channel: pre-release tag is NOT filtered → update-available
         const mod = await makeModule(undefined)
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v2026.6.0b2', released_at: '2026-05-01T12:00:00Z' }],
         })
         const pub = vi.fn()
@@ -1845,7 +1850,7 @@ describe('version-checker', () => {
       it('stable version 2026.6.0 + unset channel → derives stable → pre-release tags filtered', async () => {
         // stable channel: only pre-release tag available → filtered → no update-available
         const mod = await makeModule(undefined)
-        mockAxiosGet
+        mockHttpGet
           .mockResolvedValueOnce({
             data: [{ tag_name: 'v2026.6.0b2', released_at: '2026-05-01T12:00:00Z' }],
           })
@@ -1876,7 +1881,7 @@ describe('version-checker', () => {
     describe('explicit channel wins over derived (both directions)', () => {
       it('explicit stable + pre-release version 2026.6.0b1 → stays stable → filters pre-release tags', async () => {
         const mod = await makeModule('stable')
-        mockAxiosGet
+        mockHttpGet
           .mockResolvedValueOnce({
             data: [{ tag_name: 'v2026.6.0b2', released_at: '2026-05-01T12:00:00Z' }],
           })
@@ -1896,7 +1901,7 @@ describe('version-checker', () => {
         // Current running version is stable 2026.5.0. With explicit beta channel,
         // a newer pre-release tag 2026.6.0b1 should be visible as update-available.
         const mod = await makeModule('beta')
-        mockAxiosGet.mockResolvedValueOnce({
+        mockHttpGet.mockResolvedValueOnce({
           data: [{ tag_name: 'v2026.6.0b1', released_at: '2026-05-01T12:00:00Z' }],
         })
         const pub = vi.fn()
@@ -1911,7 +1916,7 @@ describe('version-checker', () => {
     describe('logging of resolved channel', () => {
       it('logs resolved channel and source (derived vs explicit) at startup', async () => {
         const mod = await makeModule(undefined)
-        mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
+        mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
         const stop = mod.startVersionChecker('2026.6.0b1', makeTelemetryCtx())
         await vi.advanceTimersByTimeAsync(0)
         stop()
@@ -1922,7 +1927,7 @@ describe('version-checker', () => {
 
       it('logs resolved channel as explicit when updateChannel is set', async () => {
         const mod = await makeModule('stable')
-        mockAxiosGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
+        mockHttpGet.mockResolvedValueOnce({ data: [{ tag_name: 'v2026.6.0', released_at: '2026-05-01T12:00:00Z' }] })
         const stop = mod.startVersionChecker('2026.6.0', makeTelemetryCtx())
         await vi.advanceTimersByTimeAsync(0)
         stop()
@@ -2022,7 +2027,7 @@ describe('version-checker', () => {
 
     describe('source label in startup log', () => {
       it('logs "image default" when channel is resolved from imageChannel', () => {
-        mockAxiosGet.mockResolvedValue({ data: [] })
+        mockHttpGet.mockResolvedValue({ data: [] })
         // Use the 4th arg to pass imageChannel
         // We re-import startVersionChecker via the same module
         let startFn: typeof import('#/version-checker.js')['startVersionChecker']
@@ -2049,7 +2054,7 @@ describe('version-checker', () => {
       })
 
       it('logs "explicit override" when channel is from config', () => {
-        mockAxiosGet.mockResolvedValue({ data: [] })
+        mockHttpGet.mockResolvedValue({ data: [] })
         let startFn: typeof import('#/version-checker.js')['startVersionChecker']
         vi.resetModules()
         vi.doMock('#/config.js', () => ({
@@ -2104,13 +2109,13 @@ describe('version-checker', () => {
     it('running 2026.6.4 (stable) + imageChannel=beta + newer beta available → update-available fires', async () => {
       // Simulate: :next image carrying promoted-stable 2026.6.4 with UPDATE_CHANNEL=beta baked in.
       // A later beta 2026.6.5b1 is available. Without the fix, this would derive 'stable' and miss it.
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' }, // beta, numerically higher
           { tag_name: 'v2026.6.4', released_at: '2026-04-01T12:00:00Z' }, // current stable
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       // Pass 'beta' as 4th arg (imageChannel baked into :next Docker image)
       const stop = moduleReg.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqttReg, 'beta')
@@ -2123,7 +2128,7 @@ describe('version-checker', () => {
 
     it('running 2026.6.4 (stable) + imageChannel=stable + newer beta available → stays up-to-date', async () => {
       // :latest image with UPDATE_CHANNEL=stable baked in; beta not shown on stable channel
-      mockAxiosGet
+      mockHttpGet
         .mockResolvedValueOnce({
           data: [
             { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' },
@@ -2131,7 +2136,7 @@ describe('version-checker', () => {
           ],
         })
         .mockResolvedValueOnce({ data: [] }) // tags fallback (beta filtered from stable releases)
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stop = moduleReg.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqttReg, 'stable')
       await vi.advanceTimersByTimeAsync(0)
@@ -2159,7 +2164,7 @@ describe('version-checker', () => {
       const pub = vi.fn()
       const mqtt = { publishInfo: pub } as unknown as IMqtt
 
-      mockAxiosGet
+      mockHttpGet
         .mockResolvedValueOnce({
           data: [
             { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' },
@@ -2167,7 +2172,7 @@ describe('version-checker', () => {
           ],
         })
         .mockResolvedValueOnce({ data: [] })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       // imageChannel=beta passed but explicit config=stable should win
       const stop = mod.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqtt, 'beta')
@@ -2181,13 +2186,13 @@ describe('version-checker', () => {
 
     it('YAML-mode: no explicit config + imageChannel=beta → beta channel honored', async () => {
       // Verifies the image default works even though E2M_IMAGE_CHANNEL never goes through config.ts
-      mockAxiosGet.mockResolvedValueOnce({
+      mockHttpGet.mockResolvedValueOnce({
         data: [
           { tag_name: 'v2026.6.5b1', released_at: '2026-05-01T12:00:00Z' },
           { tag_name: 'v2026.6.4', released_at: '2026-04-01T12:00:00Z' },
         ],
       })
-      mockAxiosPost.mockResolvedValue({ data: { success: true } })
+      mockHttpPost.mockResolvedValue({ data: { success: true } })
 
       const stop = moduleReg.startVersionChecker('2026.6.4', makeTelemetryCtx(), mqttReg, 'beta')
       await vi.advanceTimersByTimeAsync(0)
