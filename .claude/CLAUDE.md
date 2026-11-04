@@ -28,7 +28,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 
 ## Subagents
 
-Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/` work yourself, in-loop, at the session model. The detailed workflows live in skills — follow `/engineer` (TDD + per-change-type checklists) for code work, `/audit` for audits, `/maintain` for dependency work. Spin up generic sub-agents only for genuine parallel fan-out (e.g. independent searches across many files); they inherit the session model. Never delegate to offload work onto a fixed-model agent.
+Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/` work yourself, in-loop, at the session model. The detailed workflows live in skills — follow `/engineer` (TDD + per-change-type checklists) for code work, `/audit` for audits, `/maintain` for dependency work. Spin up generic sub-agents only for genuine parallel fan-out (e.g. independent searches across many files) — spawn built-in `general-purpose` lanes with `model: "sonnet"` for routine work and the session model only when a lane needs deep reasoning (global rule in `~/.claude/CLAUDE.md`). Implementation work itself stays in-loop at the session model — never offload it to a cheaper agent.
 
 ## Rules
 

@@ -8,7 +8,7 @@ This project is set up for AI-assisted development with [Claude Code](https://do
 
 Claude Code reads `.claude/CLAUDE.md` at the start of every conversation. This file contains the project's coding rules and verification steps. Task-specific checklists live in `.claude/skills/` and load on demand when a skill is invoked.
 
-**Single-agent model.** The main agent does all the work itself, in-loop, at whatever model you pick with `/model` — there are no fixed-model worker subagents. The detailed workflows live in skills (`/engineer`, `/audit`, `/maintain`, `/audit-fix`) that the agent follows in its own loop. Generic sub-agents are spun up only for genuine parallel fan-out (e.g. independent searches across many files); they inherit your session model.
+**Single-agent model.** The main agent does all the work itself, in-loop, at whatever model you pick with `/model` — there are no fixed-model worker subagents. The detailed workflows live in skills (`/engineer`, `/audit`, `/maintain`, `/audit-fix`) that the agent follows in its own loop. Generic sub-agents are spun up only for genuine parallel fan-out (e.g. independent searches across many files); routine lanes run built-in `general-purpose` on `model: "sonnet"`, the session model only when a lane needs deep reasoning. Implementation itself never leaves the main loop.
 
 ### Structure
 
