@@ -112,7 +112,7 @@ class Mqtt implements IMqtt {
       if (error) {
         logger.error('Error publishing message:', error)
       } else {
-        logger.info(`Message published to topic "${topic}" successfully`, publishOptions)
+        logger.debug(`Message published to topic "${topic}" successfully`, publishOptions)
       }
     })
   }

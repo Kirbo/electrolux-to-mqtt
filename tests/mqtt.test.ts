@@ -116,6 +116,14 @@ describe('Mqtt', () => {
   })
 
   describe('publish', () => {
+    it('should log a successful publish at debug level, not info (it fires on every state change)', () => {
+      mqttInstance.publish('device-123', JSON.stringify({ mode: 'cool' }))
+
+      const published = (call: unknown[]) => String(call[0]).includes('published to topic')
+      expect(loggerInfoSpy.mock.calls.some(published)).toBe(false)
+      expect(loggerDebugSpy.mock.calls.some(published)).toBe(true)
+    })
+
     it('should publish message to correct topic', () => {
       const message = JSON.stringify({ mode: 'cool' })
       mqttInstance.publish('device-123', message)
