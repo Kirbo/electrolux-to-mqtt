@@ -231,7 +231,7 @@ async function fetchLatestVersion(channel: 'stable' | 'beta'): Promise<LatestVer
 
     return null
   } catch (error) {
-    logger.debug(`Failed to fetch version info: ${describeError(error)}`)
+    logger.debug('Failed to fetch version info:', ...describeError(error))
     return null
   }
 }
@@ -260,7 +260,7 @@ async function sendNtfyNotification(
     logger.debug(`Sent ntfy notification for version ${latestVersion}`)
     return true
   } catch (error) {
-    logger.debug(`Failed to send ntfy notification: ${describeError(error)}`)
+    logger.debug('Failed to send ntfy notification:', ...describeError(error))
     return false
   }
 }
@@ -309,7 +309,7 @@ async function sendTelemetry(context: TelemetryContext, version: string, channel
     logger.debug('Telemetry sent successfully')
   } catch (error) {
     // Silently fail - telemetry is not critical
-    logger.debug(`Failed to send telemetry: ${describeError(error)}`)
+    logger.debug('Failed to send telemetry:', ...describeError(error))
   }
 }
 

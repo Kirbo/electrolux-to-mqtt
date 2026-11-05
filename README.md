@@ -103,6 +103,7 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 | `LOGGING_SHOW_VERSION_NUMBER`                         | Show version in log prefix                                               | `true`                  | No       |
 | `LOGGING_SKIP_CACHE_LOGGING`                          | Suppress cache debug logs                                                | `true`                  | No       |
 | `LOGGING_SHOW_TIMESTAMP`                              | Show timestamps in logs                                                  | `true`                  | No       |
+| `LOGGING_INLINE_MAX_KEYS`                             | Objects with ≤ N keys (nested too) log inline, else one key per line     | `2`                     | No       |
 | `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                  | No       |
 | `VERSION_CHECK_NOTIFY_GRACE_PERIOD`                   | Minimum age (seconds) a release must reach before you are notified (0–604800) | `3600`            | No       |
 | `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                       | No       |
@@ -176,6 +177,7 @@ docker run --rm \
   # -e LOGGING_SHOW_VERSION_NUMBER=true \
   # -e LOGGING_SKIP_CACHE_LOGGING=true \
   # -e LOGGING_SHOW_TIMESTAMP=true \
+  # -e LOGGING_INLINE_MAX_KEYS=2 \
   # -e VERSION_CHECK_INTERVAL=3600 \
   # -e VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600 \
   # -e VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j \ # Register your own at https://ntfy.sh/
@@ -257,6 +259,7 @@ services:
       # - LOGGING_SHOW_VERSION_NUMBER=true
       # - LOGGING_SKIP_CACHE_LOGGING=true
       # - LOGGING_SHOW_TIMESTAMP=true
+      # - LOGGING_INLINE_MAX_KEYS=2
       # - VERSION_CHECK_INTERVAL=3600
       # - VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/vB66ozQaRiqhTE9j # Register your own at https://ntfy.sh/

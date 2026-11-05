@@ -103,6 +103,7 @@ const expectDefaults = (config: AppConfig) => {
     showVersionNumber: true,
     skipCacheLogging: true,
     showTimestamp: true,
+    inlineMaxKeys: 2,
   })
   expect(config.versionCheck).toEqual({ checkInterval: 3600, notifyGracePeriod: 3600 })
   expect(config.versionCheck.updateChannel).toBeUndefined()
@@ -168,6 +169,8 @@ describe('configFromEnv', () => {
     ['LOGGING_SHOW_VERSION_NUMBER', 'false', (c: AppConfig) => c.logging.showVersionNumber, false],
     ['LOGGING_SKIP_CACHE_LOGGING', 'false', (c: AppConfig) => c.logging.skipCacheLogging, false],
     ['LOGGING_SHOW_TIMESTAMP', 'false', (c: AppConfig) => c.logging.showTimestamp, false],
+    ['LOGGING_INLINE_MAX_KEYS', '0', (c: AppConfig) => c.logging.inlineMaxKeys, 0],
+    ['LOGGING_INLINE_MAX_KEYS', '1000', (c: AppConfig) => c.logging.inlineMaxKeys, 1000],
     ['VERSION_CHECK_INTERVAL', '7200', (c: AppConfig) => c.versionCheck.checkInterval, 7200],
     [
       'VERSION_CHECK_NTFY_WEBHOOK_URL',
@@ -229,6 +232,9 @@ describe('configFromEnv', () => {
     ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '-1'],
     ['VERSION_CHECK_NOTIFY_GRACE_PERIOD', '604801'],
     ['LOG_LEVEL', 'verbose'],
+    ['LOGGING_INLINE_MAX_KEYS', '-1'],
+    ['LOGGING_INLINE_MAX_KEYS', '1.5'],
+    ['LOGGING_INLINE_MAX_KEYS', 'many'],
     ['HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES', '5'],
     ['HA_DISCOVERY_PREFIX', 'homeassistant/'],
     ['HA_DISCOVERY_PREFIX', '/homeassistant'],
@@ -358,6 +364,7 @@ telemetryEnabled: false
     ['homeAssistant.statusTopic', yamlWith('homeAssistant', "statusTopic: ''")],
     ['homeAssistant.discoveryPrefix', yamlWith('homeAssistant', "discoveryPrefix: ''")],
     ['logging.logLevel', yamlWith('logging', 'logLevel: verbose')],
+    ['logging.inlineMaxKeys', yamlWith('logging', 'inlineMaxKeys: -1')],
   ])('rejects an invalid %s, labelled with the config path', (label, text) => {
     const error = expectConfigError(() => parseConfigFile(text), label)
     expect(error.heading).toBe('Configuration validation failed:')

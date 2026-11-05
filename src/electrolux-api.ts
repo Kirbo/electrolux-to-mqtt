@@ -122,7 +122,7 @@ export class ElectroluxApi {
       if (error instanceof HttpError && error.status === 429) {
         this.logRateLimitAdvice()
       } else {
-        logger.error(`${label}: ${describeError(error)}`)
+        logger.error(`${label}:`, ...describeError(error))
       }
       return undefined
     }
@@ -139,7 +139,7 @@ export class ElectroluxApi {
       await this.auth.forceRefresh()
       return await this.send(method, path, isValid, label, body)
     } catch (error) {
-      logger.error(`${label} after token refresh: ${describeError(error)}`)
+      logger.error(`${label} after token refresh:`, ...describeError(error))
       return undefined
     }
   }

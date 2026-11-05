@@ -47,6 +47,7 @@ services:
       # - LOGGING_SHOW_VERSION_NUMBER=true                                    # Show version number in logs
       # - LOGGING_SKIP_CACHE_LOGGING=true                                     # Skip cache debug logs (default: true)
       # - LOGGING_SHOW_TIMESTAMP=true                                         # Show timestamp in logs (default: true)
+      # - LOGGING_INLINE_MAX_KEYS=2                                           # Objects with up to N keys log inline, larger one key per line (default: 2, 0 = never inline)
       # - VERSION_CHECK_INTERVAL=3600                                         # Version check interval in seconds (default: 3600)
       # - VERSION_CHECK_NOTIFY_GRACE_PERIOD=3600                              # Minimum release age in seconds before notification (0–604800, default: 3600)
       # - VERSION_CHECK_NTFY_WEBHOOK_URL=https://ntfy.sh/your_topic_here      # ntfy.sh webhook URL for update notifications

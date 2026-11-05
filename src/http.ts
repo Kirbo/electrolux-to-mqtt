@@ -3,7 +3,7 @@
  *
  * Every request has a timeout. A non-2xx response or a transport failure throws an
  * HttpError whose message reads like the old axios one, plus the status, method and
- * path, and a short response body when there is one.
+ * path; describeError adds a short response body when there is one.
  */
 
 const ERROR_BODY_MAX_LENGTH = 200
@@ -40,26 +40,34 @@ export class HttpError extends Error {
     this.data = data
   }
 
-  /** e.g. `Request failed with status code 404 (404 Not Found) [GET /api/v1/x] - {"error":"…"}` */
+  /** e.g. `Request failed with status code 404 (404 Not Found) [GET /api/v1/x]` */
   describe(): string {
     let text = this.message
     if (this.status !== undefined) {
       text += ` (${this.status}${this.statusText ? ` ${this.statusText}` : ''})`
     }
-    text += ` [${this.method} ${urlPath(this.url)}]`
-    if (typeof this.data === 'object' && this.data !== null) {
-      const body = JSON.stringify(this.data)
-      if (body.length < ERROR_BODY_MAX_LENGTH) text += ` - ${body}`
-    }
-    return text
+    return `${text} [${this.method} ${urlPath(this.url)}]`
+  }
+
+  /** The response body when it is a JSON object/array short enough to log, else undefined. */
+  shortBody(): object | undefined {
+    if (typeof this.data !== 'object' || this.data === null) return undefined
+    return JSON.stringify(this.data).length < ERROR_BODY_MAX_LENGTH ? this.data : undefined
   }
 }
 
-/** Human-readable one-liner for any error thrown around an HTTP call. */
-export function describeError(error: unknown): string {
-  if (error instanceof HttpError) return error.describe()
-  if (error instanceof Error) return error.message
-  return String(error)
+/**
+ * Logger arguments for any error thrown around an HTTP call: a one-line description, then a
+ * short response body as its own argument, so the logger prints it as highlighted JSON —
+ * `logger.error('Error logging in:', ...describeError(error))`.
+ */
+export function describeError(error: unknown): [string] | [string, object] {
+  if (error instanceof HttpError) {
+    const body = error.shortBody()
+    return body === undefined ? [error.describe()] : [`${error.describe()} -`, body]
+  }
+  if (error instanceof Error) return [error.message]
+  return [String(error)]
 }
 
 function urlPath(url: string): string {

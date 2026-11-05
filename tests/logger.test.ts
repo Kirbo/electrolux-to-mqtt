@@ -1,13 +1,24 @@
 import fs from 'node:fs'
+import { stripVTControlCharacters } from 'node:util'
+import { prettyFactory } from 'pino-pretty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type LevelSpy = ReturnType<typeof vi.fn>
 
 // Loads #/logger.js with pino mocked; returns the child logger's level spies.
-const loadWithPinoSpies = async (opts: { showVersionNumber?: boolean; version?: string } = {}) => {
+// inlineMaxKeys defaults to 0 (every field on its own line) so field-shape tests stay unaffected.
+const loadWithPinoSpies = async (
+  opts: { showVersionNumber?: boolean; version?: string; inlineMaxKeys?: number } = {},
+) => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.doMock('#/config.ts', () => ({
-    default: { logging: { showTimestamp: false, showVersionNumber: opts.showVersionNumber ?? false } },
+    default: {
+      logging: {
+        showTimestamp: false,
+        showVersionNumber: opts.showVersionNumber ?? false,
+        inlineMaxKeys: opts.inlineMaxKeys ?? 0,
+      },
+    },
   }))
   if (opts.version) {
     vi.doMock('../package.json', () => ({ default: { version: opts.version } }))
@@ -104,7 +115,7 @@ describe('logger', () => {
 
       await import('#/logger.ts')
 
-      expect(pinoMock).toHaveBeenCalledWith(expect.objectContaining({ level: 'warn' }))
+      expect(pinoMock.mock.calls[0]?.[0]).toMatchObject({ level: 'warn' })
       vi.unstubAllEnvs()
     })
 
@@ -335,6 +346,154 @@ describe('logger', () => {
       spies.createLogger('test').warn('Failed to write health file:', new Error('EROFS'))
 
       expect(spies.warn).toHaveBeenCalledWith({ err: expect.any(Error) }, 'v2026.11.0 :: Failed to write health file:')
+    })
+  })
+
+  // Fields with at most logging.inlineMaxKeys keys (nested keys and array items count too) are
+  // nested under `inline`, which the pretty printer renders as highlighted JSON on the message line.
+  describe('createLogger — inline fields', () => {
+    beforeEach(() => {
+      vi.resetModules()
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('should nest an object within the key limit under inline', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 2 })
+      spies.createLogger('test').info('Received command on topic:', 'a/b', 'Message:', { mode: 'off' })
+
+      expect(spies.info).toHaveBeenCalledWith({ inline: { mode: 'off' } }, 'Received command on topic: a/b Message:')
+    })
+
+    it('should inline an object with exactly the limit of keys', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 2 })
+      spies.createLogger('test').info('Message published', { retain: false, qos: 2 })
+
+      expect(spies.info).toHaveBeenCalledWith({ inline: { retain: false, qos: 2 } }, 'Message published')
+    })
+
+    it('should keep an object over the limit as top-level fields (one key per line)', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 2 })
+      spies.createLogger('test').info('State', { a: 1, b: 2, c: 3 })
+
+      expect(spies.info).toHaveBeenCalledWith({ a: 1, b: 2, c: 3 }, 'State')
+    })
+
+    it('should count nested keys and array items towards the limit', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 3 })
+      const logger = spies.createLogger('test')
+      logger.info('Nested', { a: { b: 1, c: 2 } })
+      logger.info('Array', { list: [1, 2, 3] })
+
+      expect(spies.info).toHaveBeenNthCalledWith(1, { inline: { a: { b: 1, c: 2 } } }, 'Nested')
+      expect(spies.info).toHaveBeenNthCalledWith(2, { list: [1, 2, 3] }, 'Array')
+    })
+
+    it('should never inline when the limit is 0', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 0 })
+      spies.createLogger('test').info('One', { mode: 'off' })
+
+      expect(spies.info).toHaveBeenCalledWith({ mode: 'off' }, 'One')
+    })
+
+    it('should keep an Error under err beside the inline fields', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 2 })
+      const error = new Error('boom')
+      spies.createLogger('test').error('Failed:', { id: 'x' }, error)
+
+      expect(spies.error).toHaveBeenCalledWith({ inline: { id: 'x' }, err: error }, 'Failed:')
+    })
+
+    it('should pass a lone Error as err without an empty inline object', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 2 })
+      const error = new Error('boom')
+      spies.createLogger('test').error('Failed:', error)
+
+      expect(spies.error).toHaveBeenCalledWith({ err: error }, 'Failed:')
+    })
+
+    it('should count a cyclic object without recursing forever', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 4 })
+      const looped: Record<string, unknown> = { a: 1 }
+      looped.self = looped
+      spies.createLogger('test').info('Cycle', looped)
+
+      // Spread into fields: a + self, then looped's own a + self; the cycle back adds nothing.
+      expect(spies.info).toHaveBeenCalledWith({ inline: { a: 1, self: looped } }, 'Cycle')
+    })
+
+    it('should nest an object carrying the inline key under data', async () => {
+      const spies = await loadWithPinoSpies({ inlineMaxKeys: 0 })
+      spies.createLogger('test').info('Clash', { inline: 1 })
+
+      expect(spies.info).toHaveBeenCalledWith({ data: { inline: 1 } }, 'Clash')
+    })
+  })
+
+  describe('pretty output', () => {
+    beforeEach(() => {
+      vi.resetModules()
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    const loadPretty = async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.doMock('#/config.ts', () => ({
+        default: { logging: { showTimestamp: false, showVersionNumber: false, inlineMaxKeys: 2 } },
+      }))
+      const { prettyOptions } = await import('#/logger.ts')
+      return prettyFactory(prettyOptions)
+    }
+
+    const ESC = String.fromCodePoint(0x1b)
+    const MAGENTA = `${ESC}[35m`
+    const GREEN = `${ESC}[32m`
+    const YELLOW = `${ESC}[33m`
+
+    it('should render inline fields as JSON on the message line', async () => {
+      const pretty = await loadPretty()
+      const line = pretty({ level: 50, name: 'ELECTROLUX', msg: 'Error refreshing:', inline: { message: 'invalid' } })
+
+      expect(stripVTControlCharacters(line)).toBe('ERROR (ELECTROLUX): Error refreshing: {"message":"invalid"}\n')
+    })
+
+    it('should syntax-highlight the inline JSON', async () => {
+      const pretty = await loadPretty()
+      const line = pretty({ level: 30, msg: 'x', inline: { mode: 'off', qos: 2, on: true, none: null, list: ['a'] } })
+
+      expect(line).toContain(`${MAGENTA}"mode"`)
+      expect(line).toContain(`${GREEN}"off"`)
+      expect(line).toContain(`${YELLOW}2`)
+      expect(line).toContain(`${YELLOW}true`)
+      expect(line).toContain(`${GREEN}"a"`)
+      expect(stripVTControlCharacters(line)).toContain('x {"mode":"off","qos":2,"on":true,"none":null,"list":["a"]}')
+    })
+
+    it('should print other fields one key per line below the message', async () => {
+      const pretty = await loadPretty()
+      const line = pretty({ level: 30, msg: 'State', a: 1, b: 'two' })
+
+      expect(stripVTControlCharacters(line)).toBe('INFO: State\n    a: 1\n    b: "two"\n')
+    })
+
+    it('should strip terminal control characters from the message text', async () => {
+      const pretty = await loadPretty()
+      const line = pretty({ level: 30, msg: `bad${ESC}[2Jname` })
+
+      expect(line).not.toContain(`${ESC}[2J`)
+      expect(stripVTControlCharacters(line)).toBe('INFO: bad[2Jname\n')
+    })
+
+    it('should render inline fields alone when the message is empty', async () => {
+      const pretty = await loadPretty()
+      const line = pretty({ level: 30, msg: '', inline: { key: 'value' } })
+
+      expect(stripVTControlCharacters(line)).toBe('INFO: {"key":"value"}\n')
     })
   })
 

@@ -66,9 +66,10 @@ describe('httpRequest', () => {
 
     expect(error).toBeInstanceOf(HttpError)
     expect(error).toMatchObject({ status: 404, method: 'GET', data: { error: 'nope' } })
-    expect(describeError(error)).toBe(
-      'Request failed with status code 404 (404 Not Found) [GET /api/v1/x] - {"error":"nope"}',
-    )
+    expect(describeError(error)).toEqual([
+      'Request failed with status code 404 (404 Not Found) [GET /api/v1/x] -',
+      { error: 'nope' },
+    ])
   })
 
   it('wraps a transport failure (DNS, refused, timeout) in an HttpError without a status', async () => {
@@ -82,7 +83,7 @@ describe('httpRequest', () => {
 
     expect(error).toBeInstanceOf(HttpError)
     expect(error).toMatchObject({ status: undefined, method: 'PUT' })
-    expect(describeError(error)).toBe('fetch failed: getaddrinfo ENOTFOUND api.example [PUT /c]')
+    expect(describeError(error)).toEqual(['fetch failed: getaddrinfo ENOTFOUND api.example [PUT /c]'])
   })
 
   it('aborts a request that exceeds its timeout', async () => {
@@ -96,20 +97,43 @@ describe('httpRequest', () => {
     const error = await httpRequest({ url: 'https://slow.example/', timeoutMs: 20 }).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(HttpError)
-    expect(describeError(error)).toContain('timeout')
+    expect(describeError(error)[0]).toContain('timeout')
   })
 })
 
 describe('describeError', () => {
+  it('passes a short response body as its own argument so the logger can highlight it', () => {
+    const error = new HttpError(
+      'Request failed with status code 401',
+      'POST',
+      'https://a/api/v1/token/refresh',
+      401,
+      '',
+      {
+        message: 'Refresh token is invalid.',
+      },
+    )
+    expect(describeError(error)).toEqual([
+      'Request failed with status code 401 (401) [POST /api/v1/token/refresh] -',
+      { message: 'Refresh token is invalid.' },
+    ])
+  })
+
   it('omits a large response body', () => {
     const big = { text: 'x'.repeat(300) }
-    expect(new HttpError('boom', 'GET', 'https://a/b', 500, 'Server Error', big).describe()).toBe(
+    expect(describeError(new HttpError('boom', 'GET', 'https://a/b', 500, 'Server Error', big))).toEqual([
       'boom (500 Server Error) [GET /b]',
-    )
+    ])
+  })
+
+  it('omits a non-object response body', () => {
+    expect(describeError(new HttpError('boom', 'GET', 'https://a/b', 502, 'Bad Gateway', '<html>'))).toEqual([
+      'boom (502 Bad Gateway) [GET /b]',
+    ])
   })
 
   it('falls back to the message or string form for non-HTTP errors', () => {
-    expect(describeError(new Error('plain'))).toBe('plain')
-    expect(describeError('text')).toBe('text')
+    expect(describeError(new Error('plain'))).toEqual(['plain'])
+    expect(describeError('text')).toEqual(['text'])
   })
 })

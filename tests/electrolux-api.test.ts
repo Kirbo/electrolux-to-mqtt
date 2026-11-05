@@ -94,24 +94,28 @@ describe('requests', () => {
     fetchMock.mockResolvedValueOnce(json(body))
 
     await expect(call()).resolves.toBeUndefined()
-    expect(log.error).toHaveBeenCalledWith(expect.stringContaining(label))
+    expect(log.error).toHaveBeenCalledWith(`${label}:`, expect.any(String))
   })
 
   it('logs and returns undefined on a transport failure', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'))
 
     await expect(api.getApplianceState('a-1')).resolves.toBeUndefined()
-    expect(log.error).toHaveBeenCalledWith(expect.stringMatching(/^Error getting appliance state: fetch failed/))
+    expect(log.error).toHaveBeenCalledWith('Error getting appliance state:', expect.stringMatching(/^fetch failed/))
   })
 
   it('logs the status and path of an HTTP error', async () => {
     fetchMock.mockResolvedValueOnce(json({ error: 'boom' }, 500))
 
     await expect(api.sendCommand('a-1', {})).resolves.toBeUndefined()
+    // The response body is its own argument so the logger prints it as highlighted JSON.
     expect(log.error).toHaveBeenCalledWith(
-      expect.stringContaining('Error sending command: Request failed with status code 500 (500'),
+      'Error sending command:',
+      expect.stringMatching(
+        /^Request failed with status code 500 \(500.*\) \[PUT \/api\/v1\/appliances\/a-1\/command\] -$/,
+      ),
+      { error: 'boom' },
     )
-    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('[PUT /api/v1/appliances/a-1/command]'))
   })
 
   it('returns undefined and logs when the token cannot be obtained (shutting down)', async () => {
@@ -119,7 +123,7 @@ describe('requests', () => {
 
     await expect(api.getAppliances()).resolves.toBeUndefined()
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Authentication stopped'))
+    expect(log.error).toHaveBeenCalledWith('Error getting appliances:', 'Authentication stopped')
   })
 })
 
@@ -136,11 +140,16 @@ describe('403 — forced token refresh', () => {
   })
 
   it('gives up after the retry also fails', async () => {
-    fetchMock.mockResolvedValue(json({ error: 'forbidden' }, 403))
+    // A fresh Response per call: a shared one has its body consumed by the first read.
+    fetchMock.mockImplementation(() => Promise.resolve(json({ error: 'forbidden' }, 403)))
 
     await expect(api.getApplianceInfo('a-1')).resolves.toBeUndefined()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Error getting appliance info after token refresh'))
+    expect(log.error).toHaveBeenCalledWith(
+      'Error getting appliance info after token refresh:',
+      expect.stringContaining('status code 403'),
+      { error: 'forbidden' },
+    )
   })
 
   it('does not force a refresh while not logged in', async () => {

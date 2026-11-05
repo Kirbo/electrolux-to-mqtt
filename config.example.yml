@@ -92,6 +92,9 @@ logging:
   skipCacheLogging: true
   # (Optional) Show timestamp in log messages. Default: true
   showTimestamp: true
+  # (Optional) Logged objects with at most this many keys (nested keys included) print inline as JSON;
+  # larger ones print one key per line. Default: 2, Min: 0 (always one key per line)
+  inlineMaxKeys: 2
 
 versionCheck:
   # (Optional) How often to check for new versions, in seconds. Default: 3600 (1 hour), Min: 60, Max: 86400 (24 hours)

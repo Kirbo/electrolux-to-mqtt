@@ -140,7 +140,7 @@ export class ElectroluxAuth implements Disposable {
         return this.tokens
       } catch (error) {
         const delay = computeBackoffDelay(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS)
-        logger.error(`Error logging in: ${describeError(error)}`)
+        logger.error('Error logging in:', ...describeError(error))
         logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${attempt + 1})...`)
         await this.sleep(delay)
       }
@@ -157,7 +157,7 @@ export class ElectroluxAuth implements Disposable {
         logger.info('Tokens refreshed successfully')
         return this.tokens
       } catch (error) {
-        logger.error(`Error refreshing access token: ${describeError(error)}`)
+        logger.error('Error refreshing access token:', ...describeError(error))
         if (error instanceof HttpError && error.status === 401) {
           logger.warn('Refresh token is invalid or expired, falling back to full re-authentication...')
           this.tokens = null

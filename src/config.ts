@@ -95,6 +95,9 @@ const configSchema = z.object({
       showVersionNumber: z.boolean().default(true),
       skipCacheLogging: z.boolean().default(true),
       showTimestamp: z.boolean().default(true),
+      // Objects logged with at most this many keys (nested keys and array items included) print
+      // inline as JSON; larger ones print one key per line. 0 = always one key per line.
+      inlineMaxKeys: z.number().int().min(0, 'must be at least 0 (0 = always one key per line)').default(2),
     })
     // prefault({}): an absent section parses as {} so the field defaults above apply —
     // the defaults live in exactly one place.
@@ -170,6 +173,7 @@ const ENV_FIELDS: ReadonlyArray<{ env: string; path: string; kind: EnvKind }> = 
   { env: 'LOGGING_SHOW_VERSION_NUMBER', path: 'logging.showVersionNumber', kind: 'bool' },
   { env: 'LOGGING_SKIP_CACHE_LOGGING', path: 'logging.skipCacheLogging', kind: 'bool' },
   { env: 'LOGGING_SHOW_TIMESTAMP', path: 'logging.showTimestamp', kind: 'bool' },
+  { env: 'LOGGING_INLINE_MAX_KEYS', path: 'logging.inlineMaxKeys', kind: 'number' },
   { env: 'VERSION_CHECK_INTERVAL', path: 'versionCheck.checkInterval', kind: 'number' },
   { env: 'VERSION_CHECK_NTFY_WEBHOOK_URL', path: 'versionCheck.ntfyWebhookUrl', kind: 'string' },
   { env: 'VERSION_CHECK_UPDATE_CHANNEL', path: 'versionCheck.updateChannel', kind: 'string' },
