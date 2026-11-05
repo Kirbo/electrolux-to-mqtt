@@ -42,3 +42,4 @@
 - [Container recreate keeps the old Cmd](dep_container_recreate_keeps_cmd.md) — Portainer/Watchtower-style recreate copies old Cmd+Healthcheck onto the new image; entry paths are a contract → keep docker/compat shims
 - [Proxmox HA host access](reference_proxmox_ha_host.md) — LXC 100 via root@192.168.1.5 + pct exec; ControlMaster prefix = allow rule, 1Password approves once
 - [README tables](feedback_readme_tables.md) — bare-minimum facts per cell; columns aligned in raw markdown (widen a column, never leave a row sticking out)
+- [Docker credential-helper auto-detect](tool_docker_credstore_autodetect.md) — config.json without auths silently uses Docker Desktop's store; seed an auths entry for a file-based temp config; desktop store once dropped a dhi.io login

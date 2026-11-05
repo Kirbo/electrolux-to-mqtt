@@ -32,16 +32,21 @@ set +a
 ALPINE="${ALPINE_VERSION}"
 VERSION_ARGS=(--build-arg NODE_MAJOR --build-arg ALPINE_VERSION --build-arg COREPACK_VERSION)
 TAG_PREFIX="e2m-buildtest"
+DHI_BASE="dhi.io/node:${NODE_MAJOR}-alpine${ALPINE}"
 FAILED=0
 BUILT_TAGS=()
+TMP_DOCKER_CONFIG=""
 
 cleanup() {
   if [[ ${#BUILT_TAGS[@]} -gt 0 ]]; then
     docker rmi -f "${BUILT_TAGS[@]}" >/dev/null 2>&1 || true
   fi
   rm -f "${REPO_ROOT}/.docker-build-test.Dockerfile"
+  # Holds a registry login in plain form — never leave it behind.
+  if [[ -n "${TMP_DOCKER_CONFIG}" ]]; then rm -rf "${TMP_DOCKER_CONFIG}"; fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 # Missing files surface as these; anything else (config validation) is expected.
 MODULE_ERRORS='Cannot find module|ERR_MODULE_NOT_FOUND|Cannot find package|MODULE_NOT_FOUND|no such file or directory'
@@ -76,16 +81,51 @@ smoke() {
   echo "  OK: builds, starts, and reaches config validation with no missing modules"
 }
 
+dhi_reachable() {
+  docker manifest inspect "${DHI_BASE}" >/dev/null 2>&1
+}
+
+# Maintainer fallback: log in to dhi.io the way CI does (the pull-only token from
+# fnox profile `read`), into a throwaway file-based Docker config. The user's own
+# config is not used for the login: Docker Desktop's credential store can report
+# "Login Succeeded" and still not hand the dhi.io credential back. The current
+# context, buildx builders and CLI plugins are linked in so builds run unchanged.
+# Exports DOCKER_CONFIG for the rest of the script on success.
+dhi_login_via_fnox() {
+  command -v fnox >/dev/null 2>&1 || return 1
+  local src="${DOCKER_CONFIG:-${HOME}/.docker}" context entry
+  context="$(docker context show 2>/dev/null || echo default)"
+  TMP_DOCKER_CONFIG="$(mktemp -d)"
+  for entry in contexts buildx cli-plugins; do
+    if [[ -e "${src}/${entry}" ]]; then ln -s "${src}/${entry}" "${TMP_DOCKER_CONFIG}/${entry}"; fi
+  done
+  # The `auths` entry matters: a config without one makes the CLI silently adopt the
+  # platform credential helper (Docker Desktop's store again), not this file.
+  printf '{"currentContext":"%s","auths":{"dhi.io":{}}}\n' "${context}" >"${TMP_DOCKER_CONFIG}/config.json"
+  # shellcheck disable=SC2016 # expanded by the inner sh, inside fnox's environment
+  if ! DOCKER_CONFIG="${TMP_DOCKER_CONFIG}" fnox exec --no-defaults -P read -- \
+    sh -c 'printf %s "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io' \
+    >/dev/null 2>&1; then
+    return 1
+  fi
+  export DOCKER_CONFIG="${TMP_DOCKER_CONFIG}"
+}
+
 build_prod() {
   echo "== prod image (docker/Dockerfile) =="
   local tag="${TAG_PREFIX}-prod" dockerfile="docker/Dockerfile"
 
-  # The hardened dhi.io base needs a Docker Hardened Images entitlement. CI has it;
-  # most developer machines do not. Rather than skip the most important image, the
-  # FROM lines are rewritten to stock node images so the COPY/install/build logic
-  # is still exercised. The substitution is announced — it is not a full check.
-  if ! docker manifest inspect "dhi.io/node:${NODE_MAJOR}-alpine${ALPINE}" >/dev/null 2>&1; then
-    echo "  NOTE: dhi.io unreachable (no entitlement) — substituting stock node:${NODE_MAJOR}-alpine${ALPINE}."
+  # The hardened dhi.io base needs a Docker login (CI logs in; a maintainer's
+  # machine logs in through fnox, above). Without one, rather than skip the most
+  # important image, the FROM lines are rewritten to stock node images so the
+  # COPY/install/build logic is still exercised. The substitution is announced —
+  # it is not a full check.
+  if dhi_reachable; then
+    :
+  elif dhi_login_via_fnox && dhi_reachable; then
+    echo "  NOTE: logged in to dhi.io with fnox profile \`read\` (temporary Docker config)."
+  else
+    echo "  NOTE: no access to dhi.io (not logged in, no fnox \`read\` access) — substituting stock node:${NODE_MAJOR}-alpine${ALPINE}."
     echo "        Context/COPY/build logic is still verified; the hardened base is not."
     sed -E "s|^FROM \\\$\{NODE_IMAGE\}-dev|FROM node:${NODE_MAJOR}-alpine${ALPINE}|; s|^FROM \\\$\{NODE_IMAGE\}|FROM node:${NODE_MAJOR}-alpine${ALPINE}|" \
       "${dockerfile}" > .docker-build-test.Dockerfile

@@ -64,7 +64,7 @@ Write it to a file and pass the file. Do not inline it into the shell: backticks
 
 Prepend a short **Summary** paragraph above the changelog only when the *why* isn't obvious from the entries — motivation, not a restatement of the diff. For a large batch, group by theme. `.gitlab/merge_request_templates/Default.md` is the structure for ordinary feature-branch MRs; `next` → `main` release MRs use the changelog as the body.
 
-Add a **Notes for reviewer** section for anything non-obvious: assumptions, work deliberately left out, and anything unverifiable locally (e.g. the hardened `dhi.io` prod image can't be built without the entitlement, so CI is the only proof).
+Add a **Notes for reviewer** section for anything non-obvious: assumptions, work deliberately left out, and anything unverifiable locally (e.g. `pnpm docker:test` substituted a stock base because neither a `dhi.io` login nor fnox `read` was available, so CI is the only proof of the hardened image).
 
 ## 4. Upsert
 

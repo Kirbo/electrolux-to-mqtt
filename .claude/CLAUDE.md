@@ -13,7 +13,7 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 | `pnpm test:e2e` | `tests/e2e/*.test.ts` with `E2E_TEST=true`. Override ntfy topic via `E2M_NTFY_TOPIC` |
 | `pnpm sonar` | SonarQube scanner under `fnox exec -P sonar` (token from fnox, see `docs/SECRETS.md`). Skips on any branch but `main` (free tier) |
 | `pnpm osv-scan [root\|backend\|all]` | osv-scanner vuln scan — default `all`; `brew install osv-scanner` or Docker fallback |
-| `pnpm docker:test [prod\|local\|backend\|all]` | Build each image + smoke-run it offline; catches files missing from the build context. Substitutes a stock base when `dhi.io` is unreachable (CI has the entitlement, so it tests the real hardened image) |
+| `pnpm docker:test [prod\|local\|backend\|all]` | Build each image + smoke-run it offline; catches files missing from the build context. Without a `dhi.io` login it logs in with fnox `read` (temp Docker config); only with neither does it substitute a stock base |
 | `pnpm deps:check` / `pnpm deps:update` | `pnpm outdated` + `pnpm audit` + `pnpm osv-scan` / `pnpm update --latest` |
 | `pnpm sync:versions` | Derive the `package.json` version fields (`engines.node` + `@types/node` in both packages, `packageManager`, `alpineVersion`, `corepackVersion`) from `versions.env`, re-resolving lockfiles (also: `mise run sync-versions`) |
 

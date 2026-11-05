@@ -44,6 +44,7 @@ One-time per machine (needs the 1Password CLI): `pnpm secrets:setup`. After that
 | `pnpm secrets:set <profile> <NAME>` | Encrypt one value (stdin) with that profile's provider |
 | `pnpm secrets:env` | Write `telemetry-backend/.env` (0600, gitignored) for `pnpm backend:docker` |
 | `pnpm sonar` | Runs the scanner under `fnox exec -P sonar` |
+| `pnpm docker:test` | Logs in to `dhi.io` with `read` (temporary Docker config) when Docker isn't logged in, so the prod image builds on the hardened base |
 | `pnpm secrets:rotate-ci <tier>` | New identity for `read`/`publish`/`deploy`/`sonar`/`renovate`: rewrites its recipient lines, re-encrypts, proves the tier reads exactly its profiles, and stores it in GitLab. Commit `fnox.toml` afterwards. |
 | `fnox exec --no-defaults -P <profile> -- <cmd>` | Anything else |
 
