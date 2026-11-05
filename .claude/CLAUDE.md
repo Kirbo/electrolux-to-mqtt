@@ -19,16 +19,14 @@ Electrolux→MQTT bridge. TS service: Electrolux appliances → Home Assistant v
 
 ## Architecture — what the code doesn't tell you
 
-- `src/index.ts` wires `ElectroluxAuth` → `ElectroluxApi` → `StateSync`, `Mqtt`, `Orchestrator`.
 - The state cache holds **normalized state only** (`cache.getState` / `setState`) — every republish sends it as-is.
 - Discovery payloads come from the appliance instance (`generateAutoDiscoveryConfig`), never the MQTT layer.
 - Telemetry pings on its own fixed 15-min cadence, decoupled from `checkInterval`. Session id = HMAC-SHA256(key = API key, msg = username) as a UUID — keyed so it can't be confirmed from an email; the badge counts distinct `session_id` over a rolling 26h window.
-- `telemetry-backend/` (own pnpm package: `cd telemetry-backend && pnpm test|typecheck|build`) = badge generator + legacy `POST /telemetry` forwarder. Legacy bridges map to plain `sha256(username)`, so a legacy→direct upgrade gets a new id once. Delete the ingest half once `source=legacy` traffic drops to ~0.
 - Raw API unions in `src/types.d.ts` (pre-normalization) and `src/types/normalized.ts` must match `tests/e2e/snapshots/<model>/`. File checklists: `/engineer`; audits: `/audit`; deps: `/maintain`.
 
 ## Subagents
 
-Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/` work yourself, in-loop, at the session model. The detailed workflows live in skills — follow `/engineer` (TDD + per-change-type checklists) for code work, `/audit` for audits, `/maintain` for dependency work. Spin up generic sub-agents only for genuine parallel fan-out (e.g. independent searches across many files) — spawn built-in `general-purpose` lanes with `model: "sonnet"` for routine work and the session model only when a lane needs deep reasoning (global rule in `~/.claude/CLAUDE.md`). Implementation work itself stays in-loop at the session model — never offload it to a cheaper agent.
+Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/` work yourself, in-loop, at the session model. The detailed workflows live in skills — follow `/engineer` (TDD + per-change-type checklists) for code work, `/audit` for audits, `/maintain` for dependency work. Spin up generic sub-agents only for genuine parallel fan-out (e.g. independent searches across many files) — spawn built-in `general-purpose` lanes with `model: "sonnet"` for routine work and the session model only when a lane needs deep reasoning. Implementation work itself stays in-loop at the session model — never offload it to a cheaper agent.
 
 ## Rules
 
@@ -47,7 +45,7 @@ Single-agent by default: do `src/` / `tests/` / `docker/` / `telemetry-backend/`
 - Every config/schema field functional. No empty directories.
 
 ### Tooling
-- `pnpm` only (never npm/yarn; `pnpm dlx` not npx). Never `pnpm dlx` for locally installed tools — use `pnpm` scripts. Biome lint/format (no ESLint/Prettier), single quotes, semicolons per `biome.jsonc`.
+- `pnpm` only (never npm/yarn; `pnpm dlx` not npx). Never `pnpm dlx` for locally installed tools — use `pnpm` scripts. Biome lint/format (no ESLint/Prettier).
 - `Number.parseInt` / `Number.parseFloat` only, never global forms.
 - SonarQube Cloud: all code must pass — no bugs, vulnerabilities, security hotspots. Cognitive complexity ≤ 15.
 - Conventional Commits. **CalVer** versioning — `YYYY.M.MICRO` stable, `YYYY.M.MICRObN` beta — date-derived in CI (`scripts/compute-calver-*.sh`), **not** type-derived. Changelog format in `cliff.toml` (git-cliff generates per-release notes; `combine-changelogs` aggregates the full `CHANGELOG.md`).
