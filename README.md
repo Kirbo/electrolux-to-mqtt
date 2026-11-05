@@ -72,46 +72,46 @@ Example [config.yml](./config.example.yml) file is included in the repository an
 > - **Booleans** accept `true`/`1`/`yes`/`on` and `false`/`0`/`no`/`off` (any case); any other value is a startup error. An empty value means "unset" (the default applies).
 > - **Docker secrets:** every variable can instead be read from a file by appending `_FILE`, e.g. `MQTT_PASSWORD_FILE=/run/secrets/mqtt_password` (one trailing newline is stripped). Setting both `NAME` and `NAME_FILE` is an error.
 
-| Variable                                              | Description                                                              | Default                 | Required |
-| ----------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------- | -------- |
-| `MQTT_URL`                                            | MQTT broker URL (`mqtt://` or `mqtts://`)                                | —                       | Yes      |
-| `MQTT_USERNAME`                                       | MQTT broker username                                                     | —                       | Yes      |
-| `MQTT_PASSWORD`                                       | MQTT broker password                                                     | —                       | Yes      |
-| `ELECTROLUX_API_KEY`                                  | Electrolux API key                                                       | —                       | Yes      |
-| `ELECTROLUX_USERNAME`                                 | Electrolux account email                                                 | —                       | Yes      |
-| `ELECTROLUX_PASSWORD`                                 | Electrolux account password                                              | —                       | Yes      |
-| `ELECTROLUX_COUNTRY_CODE`                             | Two-letter uppercase country code                                        | —                       | Yes      |
-| `MQTT_TOPIC_PREFIX`                                   | MQTT topic prefix                                                        | `electrolux_`           | No       |
-| `MQTT_CLIENT_ID`                                      | MQTT client identifier                                                   | `electrolux-comfort600` | No       |
-| `MQTT_RETAIN`                                         | Retain MQTT messages                                                     | `false`                 | No       |
-| `MQTT_QOS`                                            | MQTT QoS level (0, 1, or 2)                                              | `2`                     | No       |
-| `ELECTROLUX_REFRESH_INTERVAL`                         | State polling interval in seconds (10–3600)                              | `30`                    | No       |
-| `ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL`             | Appliance discovery interval in seconds (60–3600)                        | `300`                   | No       |
-| `ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY`                | Minutes before token expiry to refresh (5–715)                           | `60`                    | No       |
-| `ELECTROLUX_COMMAND_STATE_DELAY_SECONDS`              | Seconds to wait after a command before re-polling state (5–300)          | `30`                    | No       |
-| `ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES`   | Minutes an appliance must be continuously absent before cleanup (1–1440) | `30`                    | No       |
-| `ELECTROLUX_API_TIMEOUT_SECONDS`                      | HTTP request timeout in seconds for Electrolux API calls (1–120)         | `25`                    | No       |
-| `HOME_ASSISTANT_AUTO_DISCOVERY`                       | Enable HA MQTT auto-discovery                                            | `true`                  | No       |
-| `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION`            | Immediately revert HA state on rejected commands                         | `false`                 | No       |
-| `HA_BIRTH_REPUBLISH`                                  | Re-publish discovery config + state when HA comes online (birth message) | `true`                  | No       |
-| `HA_DISCOVERY_PREFIX`                                 | Home Assistant MQTT discovery prefix (match HA's MQTT integration setting) | `homeassistant`       | No       |
-| `HA_STATUS_TOPIC`                                     | MQTT topic HA publishes its birth/will message to                        | `homeassistant/status`  | No       |
-| `HA_BIRTH_PAYLOAD`                                    | Payload that signals HA is online                                        | `online`                | No       |
-| `LOG_LEVEL`                                           | Log level (silent/fatal/error/warn/info/debug/trace)                     | `info`                  | No       |
-| `LOGGING_SHOW_CHANGES`                                | Log state changes                                                        | `true`                  | No       |
-| `LOGGING_IGNORED_KEYS`                                | Comma-separated keys to ignore in change logs                            | —                       | No       |
-| `LOGGING_SHOW_VERSION_NUMBER`                         | Show version in log prefix                                               | `true`                  | No       |
-| `LOGGING_SKIP_CACHE_LOGGING`                          | Suppress cache debug logs                                                | `true`                  | No       |
-| `LOGGING_SHOW_TIMESTAMP`                              | Show timestamps in logs                                                  | `true`                  | No       |
-| `LOGGING_INLINE_MAX_KEYS`                             | Objects with ≤ N keys (nested too) log inline, else one key per line     | `2`                     | No       |
-| `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                  | No       |
-| `VERSION_CHECK_NOTIFY_GRACE_PERIOD`                   | Minimum age (seconds) a release must reach before you are notified (0–604800) | `3600`            | No       |
-| `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                       | No       |
-| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable` skips pre-release builds; `beta` includes them. Omit to use the image default: `:next` images are built with `beta`, `:latest` images with `stable`. Set only to override the image default. | image-baked | No       |
-| `HEALTH_CHECK_ENABLED`                                | Enable file-based health check for Docker HEALTHCHECK                    | `true`                  | No       |
-| `HEALTH_CHECK_FILE_PATH`                              | Path to health check file                                                | `/tmp/e2m-health`       | No       |
-| `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`              | Minutes of API failure before container self-restarts                    | `45`                    | No       |
-| `E2M_TELEMETRY_ENABLED`                               | Send anonymous telemetry (version, channel, OS, arch, appliance models/count) to self-hosted Aptabase. Opt out with `false`. | `true` | No       |
+| Variable                                              | Description                                                              | Default                                  | Required |
+| ----------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------- | -------- |
+| `MQTT_URL`                                            | MQTT broker URL (`mqtt://` or `mqtts://`)                                | —                                        | Yes      |
+| `MQTT_USERNAME`                                       | MQTT broker username                                                     | —                                        | Yes      |
+| `MQTT_PASSWORD`                                       | MQTT broker password                                                     | —                                        | Yes      |
+| `ELECTROLUX_API_KEY`                                  | Electrolux API key                                                       | —                                        | Yes      |
+| `ELECTROLUX_USERNAME`                                 | Electrolux account email                                                 | —                                        | Yes      |
+| `ELECTROLUX_PASSWORD`                                 | Electrolux account password                                              | —                                        | Yes      |
+| `ELECTROLUX_COUNTRY_CODE`                             | Two-letter uppercase country code                                        | —                                        | Yes      |
+| `MQTT_TOPIC_PREFIX`                                   | MQTT topic prefix                                                        | `electrolux_`                            | No       |
+| `MQTT_CLIENT_ID`                                      | MQTT client identifier                                                   | `electrolux-comfort600`                  | No       |
+| `MQTT_RETAIN`                                         | Retain MQTT messages                                                     | `false`                                  | No       |
+| `MQTT_QOS`                                            | MQTT QoS level (0, 1, or 2)                                              | `2`                                      | No       |
+| `ELECTROLUX_REFRESH_INTERVAL`                         | State polling interval in seconds (10–3600)                              | `30`                                     | No       |
+| `ELECTROLUX_APPLIANCE_DISCOVERY_INTERVAL`             | Appliance discovery interval in seconds (60–3600)                        | `300`                                    | No       |
+| `ELECTROLUX_RENEW_TOKEN_BEFORE_EXPIRY`                | Minutes before token expiry to refresh (5–715)                           | `60`                                     | No       |
+| `ELECTROLUX_COMMAND_STATE_DELAY_SECONDS`              | Seconds to wait after a command before re-polling state (5–300)          | `30`                                     | No       |
+| `ELECTROLUX_APPLIANCE_REMOVAL_GRACE_PERIOD_MINUTES`   | Minutes an appliance must be continuously absent before cleanup (1–1440) | `30`                                     | No       |
+| `ELECTROLUX_API_TIMEOUT_SECONDS`                      | Electrolux API request timeout in seconds (1–120)                        | `25`                                     | No       |
+| `HOME_ASSISTANT_AUTO_DISCOVERY`                       | Enable HA MQTT auto-discovery                                            | `true`                                   | No       |
+| `HOME_ASSISTANT_REVERT_STATE_ON_REJECTION`            | Immediately revert HA state on rejected commands                         | `false`                                  | No       |
+| `HA_BIRTH_REPUBLISH`                                  | Re-publish discovery config + state when HA comes online (birth message) | `true`                                   | No       |
+| `HA_DISCOVERY_PREFIX`                                 | HA MQTT discovery prefix (must match HA's MQTT integration setting)      | `homeassistant`                          | No       |
+| `HA_STATUS_TOPIC`                                     | MQTT topic HA publishes its birth/will message to                        | `homeassistant/status`                   | No       |
+| `HA_BIRTH_PAYLOAD`                                    | Payload that signals HA is online                                        | `online`                                 | No       |
+| `LOG_LEVEL`                                           | Log level (silent/fatal/error/warn/info/debug/trace)                     | `info`                                   | No       |
+| `LOGGING_SHOW_CHANGES`                                | Log state changes                                                        | `true`                                   | No       |
+| `LOGGING_IGNORED_KEYS`                                | Comma-separated keys to ignore in change logs                            | —                                        | No       |
+| `LOGGING_SHOW_VERSION_NUMBER`                         | Show version in log prefix                                               | `true`                                   | No       |
+| `LOGGING_SKIP_CACHE_LOGGING`                          | Suppress cache debug logs                                                | `true`                                   | No       |
+| `LOGGING_SHOW_TIMESTAMP`                              | Show timestamps in logs                                                  | `true`                                   | No       |
+| `LOGGING_INLINE_MAX_KEYS`                             | Objects with ≤ N keys (nested too) log inline, else one key per line     | `2`                                      | No       |
+| `VERSION_CHECK_INTERVAL`                              | Update check interval in seconds (60–86400)                              | `3600`                                   | No       |
+| `VERSION_CHECK_NOTIFY_GRACE_PERIOD`                   | Seconds a release must age before notifying (0–604800)                   | `3600`                                   | No       |
+| `VERSION_CHECK_NTFY_WEBHOOK_URL`                      | ntfy.sh webhook URL for update notifications                             | —                                        | No       |
+| `VERSION_CHECK_UPDATE_CHANNEL`                        | `stable`, or `beta` to include pre-releases                              | `beta` on `:next`, `stable` on `:latest` | No       |
+| `HEALTH_CHECK_ENABLED`                                | Enable file-based health check for Docker HEALTHCHECK                    | `true`                                   | No       |
+| `HEALTH_CHECK_FILE_PATH`                              | Path to health check file                                                | `/tmp/e2m-health`                        | No       |
+| `HEALTH_CHECK_UNHEALTHY_RESTART_MINUTES`              | Minutes of API failure before container self-restarts                    | `45`                                     | No       |
+| `E2M_TELEMETRY_ENABLED`                               | Anonymous telemetry to self-hosted Aptabase                              | `true`                                   | No       |
 </details>
 
 ## But how to start?!
