@@ -11,7 +11,7 @@ A near drop-in for the old telemetry backend — same routes and port (3001) —
    - `peak-24h.svg`, `peak-7d.svg`, `peak-30d.svg`, `peak-182d.svg`, `peak-365d.svg` — trailing-window peak badges (invisible SVG until a sample exists; the root README embeds `30d` + `365d`)
    - `stable.svg` — latest stable release badge
    - `beta.svg` — latest beta release badge (invisible SVG if beta is not newer than stable)
-   - `telemetry.json` — raw aggregated telemetry (total + channels + per-version breakdown + trailing-window peaks)
+   - `telemetry.json` — raw aggregated telemetry (total + channels + per-version breakdown + opt-in per-OS breakdown + trailing-window peaks)
    - `peaks-history.json` — persisted hourly-max samples of the user count that the peaks are computed from (see below)
 
 2. **Dynamic endpoints (served by the container)** — everything the old backend exposed dynamically:
@@ -44,6 +44,7 @@ When `source='legacy'` events in Aptabase drop to ~0 (no more old bridges in the
 | `OUTPUT_DIR` | No | `/app/badge` | Dir the badge files are written to (mounted volume, served static by nginx) |
 | `RELEASES_API_URL` | No | GitLab API | GitLab releases API URL |
 | `RELEASES_PAGE_URL` | No | GitLab page | GitLab releases page URL |
+| `TELEMETRY_OS_BREAKDOWN` | No | `false` | `true` adds the per-OS breakdown (`os`) to `telemetry.json` / `GET /telemetry`; exactly `true` or `false`, anything else is fatal. Off for electrolux-to-mqtt; for other apps that reuse this image |
 | `APTABASE_HOST` | No | `https://aptabase.devaus.eu` | Aptabase ingestion host |
 | `APTABASE_APP_KEY` | No | `A-SH-2414786682` | Aptabase App-Key for forwarding |
 | `RATE_LIMIT_REQUESTS` | No | `10` | Max requests per IP per window |
@@ -54,7 +55,8 @@ When `source='legacy'` events in Aptabase drop to ~0 (no more old bridges in the
 `CLICKHOUSE_URL`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `APTABASE_APP_ID`
 
 **Non-secret** (live in `docker-compose.yml` environment block):
-`APTABASE_HOST`, `APTABASE_APP_KEY`, `PORT`, `OUTPUT_DIR`, `BADGE_INTERVAL_SECONDS`, `RATE_LIMIT_*`
+`APTABASE_HOST`, `APTABASE_APP_KEY`, `PORT`, `OUTPUT_DIR`, `BADGE_INTERVAL_SECONDS`, `RATE_LIMIT_*`, `TELEMETRY_OS_BREAKDOWN`
+(electrolux-to-mqtt's `docker-compose.yml` leaves `TELEMETRY_OS_BREAKDOWN` unset, i.e. off)
 
 ## Reverse proxy wiring
 
@@ -80,6 +82,27 @@ in `clickhouse.ts`), **not** Aptabase's `user_id`:
   window can shrink to ~1h (4× the 15-min ping) for a tighter, more live count.*
 - **`stable`/`beta` are distinct counts** from a dedicated `GROUP BY channel` query — not the
   over-counting sum of the per-version rows.
+
+### Per-OS breakdown (opt-in)
+
+**Opt-in** via `TELEMETRY_OS_BREAKDOWN=true` (meant for other apps that reuse this image;
+electrolux-to-mqtt leaves it off). When off, only the three queries above run and the JSON has
+no `os` key at all. When on, `telemetry.json` / `GET /telemetry` (and the one-shot
+`regenerate-badges.ts`) also group the active installs (same rolling window) by
+Aptabase's `os_name` column, i.e. the `osName` the client sends in its Aptabase `systemProps`
+(e.g. `Linux`, `macOS`, `Windows`). Events without one (legacy forwards) appear as `unknown`.
+
+```json
+"os": [
+  { "name": "Linux", "count": 40, "versions": [{ "version": "2026.6.1", "count": 31 }, { "version": "2026.6.0", "count": 10 }] },
+  { "name": "macOS", "count": 2, "versions": [{ "version": "2026.6.1", "count": 2 }] }
+]
+```
+
+Each OS `count` is a distinct count from its own `GROUP BY os` query, so an install that changed
+version inside the window counts once (the version rows may sum to more, like `Linux` above). The
+`versions` come from a per-OS × version query and are sorted newest first; OS entries are sorted by
+`count` descending, then name. There is no badge for it.
 
 ### Peak user counts
 

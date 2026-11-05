@@ -30,6 +30,8 @@ function buildFakeCh(total = 5): FakeClickHouse {
   fake.onQuery('uniqExact(session_id) AS total', () => [{ total }])
   fake.onQuery('GROUP BY channel', () => [{ channel: 'stable', count: total }])
   fake.onQuery('GROUP BY version, channel', () => [{ version: '2026.6.0', channel: 'stable', count: total }])
+  fake.onQuery('GROUP BY os', () => [{ os: 'Linux', count: total }])
+  fake.onQuery('GROUP BY version, os', () => [{ os: 'Linux', version: '2026.6.0', count: total }])
   return fake
 }
 
@@ -44,6 +46,7 @@ function makeStore(opts: {
   writeFile: FileWriter
   readFile?: FileReader
   now?: () => number
+  osBreakdown?: boolean
 }) {
   return createBadgeStore({
     ch: opts.ch ?? buildFakeCh(),
@@ -54,6 +57,7 @@ function makeStore(opts: {
     writeFile: opts.writeFile,
     readFile: opts.readFile ?? (async () => null),
     now: opts.now ?? (() => T0),
+    ...(opts.osBreakdown === undefined ? {} : { osBreakdown: opts.osBreakdown }),
   })
 }
 
@@ -81,6 +85,24 @@ describe('createBadgeStore', () => {
       const json = files.get(telemetryFile) ?? ''
       expect((JSON.parse(json) as { total: number }).total).toBe(42)
       expect(store.getTelemetryJson()).toBe(json)
+    })
+
+    it('omits the os key from telemetry.json by default', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: buildFakeCh(42), writeFile })
+      await store.regenerate()
+      const json = JSON.parse(files.get(telemetryFile) ?? '') as Record<string, unknown>
+      expect(Object.keys(json)).toEqual(['total', 'channels', 'versions', 'peaks'])
+    })
+
+    it('includes the per-OS breakdown in telemetry.json and GET /telemetry when osBreakdown is on', async () => {
+      const { writeFile, files } = recordingWriter()
+      const store = makeStore({ ch: buildFakeCh(42), writeFile, osBreakdown: true })
+      await store.regenerate()
+      const raw = files.get(telemetryFile) ?? ''
+      const json = JSON.parse(raw) as { os: unknown }
+      expect(json.os).toEqual([{ name: 'Linux', count: 42, versions: [{ version: '2026.6.0', count: 42 }] }])
+      expect(store.getTelemetryJson()).toBe(raw)
     })
 
     it('writes stable.svg with the version and exposes the stable tag', async () => {
@@ -169,6 +191,8 @@ describe('createBadgeStore', () => {
       })
       ch.onQuery('GROUP BY channel', () => [])
       ch.onQuery('GROUP BY version, channel', () => [])
+      ch.onQuery('GROUP BY os', () => [])
+      ch.onQuery('GROUP BY version, os', () => [])
       const store = makeStore({ ch, releasesFetcher: noReleases, writeFile: recordingWriter().writeFile })
 
       await store.regenerate()
@@ -222,6 +246,8 @@ describe('createBadgeStore', () => {
       ch.onQuery('uniqExact(session_id) AS total', () => [{ total }])
       ch.onQuery('GROUP BY channel', () => [])
       ch.onQuery('GROUP BY version, channel', () => [])
+      ch.onQuery('GROUP BY os', () => [])
+      ch.onQuery('GROUP BY version, os', () => [])
       const store = makeStore({ ch, releasesFetcher: noReleases, writeFile, now: () => now })
       await store.regenerate()
       total = 3

@@ -14,6 +14,12 @@ export interface TelemetryResult {
     count: number
     channels: { stable: number; beta: number }
   }>
+  /** Per-OS breakdown — present only when the opt-in `osBreakdown` option is on. */
+  os?: Array<{
+    name: string
+    count: number
+    versions: Array<{ version: string; count: number }>
+  }>
 }
 
 // Raw row shapes returned by ClickHouse queries. ClickHouse serializes UInt64
@@ -31,6 +37,17 @@ interface ChannelRow {
 interface VersionRow {
   version: string
   channel: string
+  count: string | number
+}
+
+interface OsRow {
+  os: string
+  count: string | number
+}
+
+interface OsVersionRow {
+  os: string
+  version: string
   count: string | number
 }
 
@@ -105,18 +122,28 @@ function resolveChannel(channel: string, version: string): 'stable' | 'beta' {
  * salt, so it can't be counted across midnight). The rolling window keeps the count steady
  * around the clock instead of building up from a UTC-midnight reset.
  *
- * Three parameterized queries (app_id is never interpolated):
+ * Three parameterized queries, plus two more with the opt-in `osBreakdown` (app_id is never interpolated):
  *   1. total  — distinct installs (one install on >1 version still counts once).
  *   2. channels — distinct installs per channel (so `stable`/`beta` are real user counts,
  *      not the over-counting sum of the per-version rows).
  *   3. versions — per-version × channel distinct installs for the breakdown.
+ *   4. os (opt-in) — distinct installs per OS (Aptabase's `os_name`, from the SDK's systemProps), so an
+ *      install that upgraded inside the window still counts once per OS.
+ *   5. os versions (opt-in) — per-OS × version distinct installs for the per-OS breakdown.
+ *
+ * With `osBreakdown` off the result has no `os` key at all, so the JSON stays exactly as it was
+ * before the breakdown existed.
  */
-export async function aggregateTelemetry(ch: ClickHouseLike, appId: string): Promise<TelemetryResult> {
+export async function aggregateTelemetry(
+  ch: ClickHouseLike,
+  appId: string,
+  options: { osBreakdown?: boolean } = {},
+): Promise<TelemetryResult> {
   const params: Record<string, unknown> = { app_id: appId }
   // USER_WINDOW_HOURS is a hardcoded integer constant, not user input — safe to inline.
   const windowClause = `app_id={app_id:String} AND event_name='version_check' AND timestamp >= now() - INTERVAL ${USER_WINDOW_HOURS} HOUR`
 
-  const [totalRows, channelRows, versionRows] = await Promise.all([
+  const [totalRows, channelRows, versionRows, osBreakdown] = await Promise.all([
     ch.query<TotalRow>(`SELECT uniqExact(session_id) AS total FROM events WHERE ${windowClause}`, params),
     ch.query<ChannelRow>(
       `SELECT JSONExtractString(string_props,'channel') AS channel, uniqExact(session_id) AS count FROM events WHERE ${windowClause} GROUP BY channel`,
@@ -126,6 +153,7 @@ export async function aggregateTelemetry(ch: ClickHouseLike, appId: string): Pro
       `SELECT app_version AS version, JSONExtractString(string_props,'channel') AS channel, uniqExact(session_id) AS count FROM events WHERE ${windowClause} GROUP BY version, channel`,
       params,
     ),
+    options.osBreakdown === true ? queryOsBreakdown(ch, windowClause, params) : undefined,
   ])
 
   const total = toCount(totalRows[0]?.total ?? 0)
@@ -152,5 +180,63 @@ export async function aggregateTelemetry(ch: ClickHouseLike, appId: string): Pro
     .sort((a, b) => compareVersionsDescending(a.version, b.version))
     .slice(0, 100)
 
-  return { total, channels, versions }
+  return osBreakdown === undefined ? { total, channels, versions } : { total, channels, versions, os: osBreakdown }
+}
+
+async function queryOsBreakdown(
+  ch: ClickHouseLike,
+  windowClause: string,
+  params: Record<string, unknown>,
+): Promise<NonNullable<TelemetryResult['os']>> {
+  const [osRows, osVersionRows] = await Promise.all([
+    ch.query<OsRow>(
+      `SELECT os_name AS os, uniqExact(session_id) AS count FROM events WHERE ${windowClause} GROUP BY os`,
+      params,
+    ),
+    ch.query<OsVersionRow>(
+      `SELECT os_name AS os, app_version AS version, uniqExact(session_id) AS count FROM events WHERE ${windowClause} GROUP BY version, os`,
+      params,
+    ),
+  ])
+  return buildOsBreakdown(osRows, osVersionRows)
+}
+
+/** Display name for an `os_name` value — events without one (e.g. legacy forwards) are "unknown". */
+function osName(value: string): string {
+  return value === '' ? 'unknown' : value
+}
+
+/**
+ * Per-OS breakdown: `count` comes from the distinct per-OS query (an install seen on two versions
+ * counts once), `versions` from the per-OS × version query. Versions sort newest first; OS entries
+ * sort by count desc, then name.
+ */
+function buildOsBreakdown(osRows: OsRow[], osVersionRows: OsVersionRow[]): NonNullable<TelemetryResult['os']> {
+  const byOs = new Map<string, { count: number; versions: Map<string, number> }>()
+  const entryFor = (name: string) => {
+    let entry = byOs.get(name)
+    if (entry === undefined) {
+      entry = { count: 0, versions: new Map() }
+      byOs.set(name, entry)
+    }
+    return entry
+  }
+
+  for (const row of osRows) {
+    entryFor(osName(row.os)).count += toCount(row.count)
+  }
+  for (const row of osVersionRows) {
+    const versions = entryFor(osName(row.os)).versions
+    versions.set(row.version, (versions.get(row.version) ?? 0) + toCount(row.count))
+  }
+
+  return Array.from(byOs.entries())
+    .map(([name, entry]) => ({
+      name,
+      count: entry.count,
+      versions: Array.from(entry.versions.entries())
+        .map(([version, count]) => ({ version, count }))
+        .sort((a, b) => compareVersionsDescending(a.version, b.version)),
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 }

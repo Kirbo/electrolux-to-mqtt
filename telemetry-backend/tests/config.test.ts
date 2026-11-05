@@ -55,6 +55,10 @@ describe('readConfig', () => {
     it('defaults RATE_LIMIT_WINDOW_MS to 60000', () => {
       expect(readConfig(BASE_ENV).rateLimitWindowMs).toBe(60_000)
     })
+
+    it('defaults TELEMETRY_OS_BREAKDOWN to off', () => {
+      expect(readConfig(BASE_ENV).osBreakdown).toBe(false)
+    })
   })
 
   describe('explicit values', () => {
@@ -97,6 +101,11 @@ describe('readConfig', () => {
       const config = readConfig({ ...BASE_ENV, PORT: '4000' })
       expect(config.port).toBe(4000)
     })
+
+    it('reads TELEMETRY_OS_BREAKDOWN "true" and "false"', () => {
+      expect(readConfig({ ...BASE_ENV, TELEMETRY_OS_BREAKDOWN: 'true' }).osBreakdown).toBe(true)
+      expect(readConfig({ ...BASE_ENV, TELEMETRY_OS_BREAKDOWN: 'false' }).osBreakdown).toBe(false)
+    })
   })
 
   describe('required field errors', () => {
@@ -114,6 +123,14 @@ describe('readConfig', () => {
       expect(() => readConfig({ ...BASE_ENV, BADGE_INTERVAL_SECONDS: 'abc' })).toThrow('BADGE_INTERVAL_SECONDS')
       expect(() => readConfig({ ...BASE_ENV, BADGE_INTERVAL_SECONDS: '0' })).toThrow('BADGE_INTERVAL_SECONDS')
       expect(() => readConfig({ ...BASE_ENV, BADGE_INTERVAL_SECONDS: '-10' })).toThrow('BADGE_INTERVAL_SECONDS')
+    })
+  })
+
+  describe('invalid TELEMETRY_OS_BREAKDOWN', () => {
+    it.each(['', '1', 'yes', 'TRUE', ' true'])('throws on %j', (value) => {
+      expect(() => readConfig({ ...BASE_ENV, TELEMETRY_OS_BREAKDOWN: value })).toThrow(
+        'FATAL: TELEMETRY_OS_BREAKDOWN must be "true" or "false"',
+      )
     })
   })
 

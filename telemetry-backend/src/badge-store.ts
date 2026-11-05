@@ -56,6 +56,8 @@ export interface BadgeStoreDeps {
   appId: string
   releasesApiUrl: string
   outputDir: string
+  /** Include the per-OS breakdown in telemetry.json / GET /telemetry (default off). */
+  osBreakdown?: boolean
   releasesFetcher?: ReleasesFetcher
   writeFile?: FileWriter
   readFile?: FileReader
@@ -84,7 +86,7 @@ const defaultReadFile: FileReader = async (filePath) => {
 }
 
 export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
-  const { ch, appId, releasesApiUrl, outputDir } = deps
+  const { ch, appId, releasesApiUrl, outputDir, osBreakdown = false } = deps
   const releasesFetcher: ReleasesFetcher = deps.releasesFetcher ?? ((url) => fetchLatestReleases(url))
   const writeFile: FileWriter = deps.writeFile ?? defaultWriteFile
   const readFile: FileReader = deps.readFile ?? defaultReadFile
@@ -125,7 +127,7 @@ export function createBadgeStore(deps: BadgeStoreDeps): BadgeStore {
 
   async function regenerateTelemetry(): Promise<boolean> {
     try {
-      const result = await aggregateTelemetry(ch, appId)
+      const result = await aggregateTelemetry(ch, appId, { osBreakdown })
       const nowMs = now()
       const loaded = await loadPeakHistory()
       const history = loaded === null ? null : recordSample(loaded, result.total, nowMs)

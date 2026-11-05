@@ -3,22 +3,36 @@ import { aggregateTelemetry } from '../src/clickhouse.js'
 import { FakeClickHouse } from './fake-clickhouse.js'
 
 const APP_ID = 'test-app-guid'
+const WITH_OS = { osBreakdown: true }
 
-// Helper: build a FakeClickHouse for the three-query setup (total / channels / versions).
-// Patterns disambiguate the three SQL statements:
+type OsRow = { os: string; count: number | string }
+type OsVersionRow = { os: string; version: string; count: number | string }
+
+// Helper: build a FakeClickHouse for the five-query setup (total / channels / versions / os / os versions).
+// Patterns disambiguate the five SQL statements:
 //   - 'uniqExact(session_id) AS total' → total query
 //   - 'GROUP BY channel'              → channel-only query (NOT a substring of the next)
 //   - 'GROUP BY version, channel'     → per-version query
+//   - 'GROUP BY os'                   → OS-only query (NOT a substring of the next)
+//   - 'GROUP BY version, os'          → per-OS × version query
 function buildFake(
   totalRows: Array<{ total: number | string }>,
   channelRows: Array<{ channel: string; count: number | string }>,
   versionRows: Array<{ version: string; channel: string; count: number | string }>,
+  osRows: OsRow[] = [],
+  osVersionRows: OsVersionRow[] = [],
 ): FakeClickHouse {
   const fake = new FakeClickHouse()
   fake.onQuery('uniqExact(session_id) AS total', () => totalRows)
   fake.onQuery('GROUP BY channel', () => channelRows)
   fake.onQuery('GROUP BY version, channel', () => versionRows)
+  fake.onQuery('GROUP BY os', () => osRows)
+  fake.onQuery('GROUP BY version, os', () => osVersionRows)
   return fake
+}
+
+function buildOsFake(osRows: OsRow[], osVersionRows: OsVersionRow[]): FakeClickHouse {
+  return buildFake([{ total: 0 }], [], [], osRows, osVersionRows)
 }
 
 describe('aggregateTelemetry', () => {
@@ -133,24 +147,31 @@ describe('aggregateTelemetry', () => {
     expect(result.versions).toHaveLength(100)
   })
 
-  it('passes app_id as a query param, never interpolated into SQL', async () => {
-    let capturedParams: Record<string, unknown> | null = null
-    const fake = new FakeClickHouse()
-    fake.onQuery('uniqExact(session_id) AS total', (params) => {
-      capturedParams = params
-      return [{ total: 0 }]
-    })
-    fake.onQuery('GROUP BY channel', () => [])
-    fake.onQuery('GROUP BY version, channel', () => [])
+  it.each([
+    { label: 'off', options: {}, queries: 3 },
+    { label: 'on', options: WITH_OS, queries: 5 },
+  ])(
+    'passes app_id as a query param to every query (os breakdown $label), never interpolated',
+    async ({ options, queries }) => {
+      const captured: Array<{ sql: string; params: Record<string, unknown> }> = []
+      const fake = buildFake([{ total: 0 }], [], [])
+      const query = fake.query.bind(fake)
+      fake.query = async <T>(sql: string, params: Record<string, unknown>): Promise<T[]> => {
+        captured.push({ sql, params })
+        return query<T>(sql, params)
+      }
 
-    await aggregateTelemetry(fake, APP_ID)
+      await aggregateTelemetry(fake, APP_ID, options)
 
-    expect(capturedParams).not.toBeNull()
-    const params = capturedParams
-    if (params === null) throw new Error('capturedParams must not be null')
-    // biome-ignore lint/complexity/useLiteralKeys: bracket access required for Record<string, unknown> with noUncheckedIndexedAccess
-    expect(params['app_id']).toBe(APP_ID)
-  })
+      expect(captured).toHaveLength(queries)
+      for (const { sql, params } of captured) {
+        // biome-ignore lint/complexity/useLiteralKeys: bracket access required for Record<string, unknown> with noUncheckedIndexedAccess
+        expect(params['app_id']).toBe(APP_ID)
+        expect(sql).toContain('app_id={app_id:String}')
+        expect(sql).not.toContain(APP_ID)
+      }
+    },
+  )
 
   it('returns zero totals and empty versions list when no data', async () => {
     const fake = buildFake([{ total: 0 }], [], [])
@@ -160,6 +181,7 @@ describe('aggregateTelemetry', () => {
     expect(result.channels.stable).toBe(0)
     expect(result.channels.beta).toBe(0)
     expect(result.versions).toHaveLength(0)
+    expect(result).not.toHaveProperty('os')
   })
 
   it('coerces ClickHouse string-serialized UInt64 counts to numbers (no "01" concatenation)', async () => {
@@ -204,5 +226,134 @@ describe('aggregateTelemetry', () => {
     expect(vEntry?.count).toBe(3)
     expect(vEntry?.channels.stable).toBe(2)
     expect(vEntry?.channels.beta).toBe(1)
+  })
+
+  describe('os breakdown', () => {
+    it('is off by default: runs only the three original queries and omits the os key', async () => {
+      // No OS handlers registered: FakeClickHouse throws if an OS query runs.
+      const fake = new FakeClickHouse()
+      fake.onQuery('uniqExact(session_id) AS total', () => [{ total: 1 }])
+      fake.onQuery('GROUP BY channel', () => [{ channel: 'stable', count: 1 }])
+      fake.onQuery('GROUP BY version, channel', () => [{ version: '1.0.0', channel: 'stable', count: 1 }])
+
+      for (const options of [undefined, {}, { osBreakdown: false }]) {
+        const result = await aggregateTelemetry(fake, APP_ID, options)
+        expect(Object.keys(result)).toEqual(['total', 'channels', 'versions'])
+        expect(JSON.stringify(result)).toBe(
+          '{"total":1,"channels":{"stable":1,"beta":0},"versions":[{"version":"1.0.0","count":1,"channels":{"stable":1,"beta":0}}]}',
+        )
+      }
+    })
+
+    it('includes an empty os list when on and there is no data', async () => {
+      const result = await aggregateTelemetry(buildOsFake([], []), APP_ID, WITH_OS)
+      expect(result.os).toEqual([])
+    })
+
+    it('takes each OS count from the distinct per-OS query, not the sum of its version rows', async () => {
+      // One Linux install upgraded inside the window: it shows under both versions, but the
+      // distinct per-OS query reports it once.
+      const fake = buildOsFake(
+        [{ os: 'Linux', count: 1 }],
+        [
+          { os: 'Linux', version: '1.2.0', count: 1 },
+          { os: 'Linux', version: '1.1.0', count: 1 },
+        ],
+      )
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os).toEqual([
+        {
+          name: 'Linux',
+          count: 1,
+          versions: [
+            { version: '1.2.0', count: 1 },
+            { version: '1.1.0', count: 1 },
+          ],
+        },
+      ])
+    })
+
+    it('sorts OS entries by count descending, then by name', async () => {
+      const fake = buildOsFake(
+        [
+          { os: 'Windows', count: 2 },
+          { os: 'macOS', count: 5 },
+          { os: 'Linux', count: 2 },
+        ],
+        [],
+      )
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os?.map((o) => [o.name, o.count])).toEqual([
+        ['macOS', 5],
+        ['Linux', 2],
+        ['Windows', 2],
+      ])
+    })
+
+    it('sorts each OS version list newest first', async () => {
+      const fake = buildOsFake(
+        [{ os: 'Linux', count: 3 }],
+        [
+          { os: 'Linux', version: '2026.5.0', count: 1 },
+          { os: 'Linux', version: '2026.6.0b1', count: 1 },
+          { os: 'Linux', version: '2026.6.0', count: 1 },
+        ],
+      )
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os?.[0]?.versions.map((v) => v.version)).toEqual(['2026.6.0', '2026.6.0b1', '2026.5.0'])
+    })
+
+    it('keeps versions under the OS they were reported on', async () => {
+      const fake = buildOsFake(
+        [
+          { os: 'Linux', count: 2 },
+          { os: 'Windows', count: 1 },
+        ],
+        [
+          { os: 'Linux', version: '1.0.0', count: 2 },
+          { os: 'Windows', version: '1.1.0', count: 1 },
+        ],
+      )
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os).toEqual([
+        { name: 'Linux', count: 2, versions: [{ version: '1.0.0', count: 2 }] },
+        { name: 'Windows', count: 1, versions: [{ version: '1.1.0', count: 1 }] },
+      ])
+    })
+
+    it('maps an empty os_name to "unknown" and merges it with a literal "unknown"', async () => {
+      const fake = buildOsFake(
+        [
+          { os: '', count: 2 },
+          { os: 'unknown', count: 1 },
+        ],
+        [
+          { os: '', version: '1.0.0', count: 2 },
+          { os: 'unknown', version: '1.0.0', count: 1 },
+        ],
+      )
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os).toEqual([{ name: 'unknown', count: 3, versions: [{ version: '1.0.0', count: 3 }] }])
+    })
+
+    it('lists an OS seen only in the version query with a zero count', async () => {
+      const fake = buildOsFake([], [{ os: 'macOS', version: '1.0.0', count: 1 }])
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os).toEqual([{ name: 'macOS', count: 0, versions: [{ version: '1.0.0', count: 1 }] }])
+    })
+
+    it('coerces string-serialized UInt64 counts', async () => {
+      const fake = buildOsFake([{ os: 'Linux', count: '4' }], [{ os: 'Linux', version: '1.0.0', count: '04' }])
+
+      const result = await aggregateTelemetry(fake, APP_ID, WITH_OS)
+      expect(result.os).toEqual([{ name: 'Linux', count: 4, versions: [{ version: '1.0.0', count: 4 }] }])
+      expect(JSON.stringify(result.os)).not.toMatch(/"0?4"/)
+    })
   })
 })

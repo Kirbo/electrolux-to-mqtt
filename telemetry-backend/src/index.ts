@@ -49,6 +49,7 @@ async function main(): Promise<void> {
     appId: config.aptabaseAppId,
     releasesApiUrl: config.releasesApiUrl,
     outputDir: config.outputDir,
+    osBreakdown: config.osBreakdown,
   })
 
   // First regeneration before the server starts so badges are ready on first request.

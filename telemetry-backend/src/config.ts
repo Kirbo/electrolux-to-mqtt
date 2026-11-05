@@ -19,6 +19,8 @@ export interface BackendConfig {
   outputDir: string
   releasesApiUrl: string
   releasesPageUrl: string
+  /** Opt-in per-OS breakdown in telemetry.json / GET /telemetry (`TELEMETRY_OS_BREAKDOWN`, default off). */
+  osBreakdown: boolean
   // Legacy ingest: Aptabase forwarding (non-secret)
   aptabaseHost: string
   aptabaseAppKey: string
@@ -45,6 +47,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   const rateLimitRequests = parsePositiveInt(env.RATE_LIMIT_REQUESTS, 'RATE_LIMIT_REQUESTS', 10)
   const rateLimitWindowMs = parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 'RATE_LIMIT_WINDOW_MS', 60_000)
   const port = parsePort(env.PORT)
+  const osBreakdown = parseBoolean(env.TELEMETRY_OS_BREAKDOWN, 'TELEMETRY_OS_BREAKDOWN', false)
 
   return {
     clickhouseUrl,
@@ -56,6 +59,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     outputDir: env.OUTPUT_DIR ?? '/app/badge',
     releasesApiUrl: env.RELEASES_API_URL ?? 'https://gitlab.com/api/v4/projects/kirbodev%2Felectrolux-to-mqtt/releases',
     releasesPageUrl: env.RELEASES_PAGE_URL ?? 'https://gitlab.com/kirbodev/electrolux-to-mqtt/-/releases',
+    osBreakdown,
     aptabaseHost: env.APTABASE_HOST ?? 'https://aptabase.devaus.eu',
     aptabaseAppKey: env.APTABASE_APP_KEY ?? 'A-SH-2414786682',
     rateLimitRequests,
@@ -75,6 +79,13 @@ function parsePositiveInt(raw: string | undefined, name: string, defaultValue: n
     throw new Error(`${PREFIX} FATAL: ${name} must be a positive integer, got: "${raw}"`)
   }
   return parsed
+}
+
+function parseBoolean(raw: string | undefined, name: string, defaultValue: boolean): boolean {
+  if (raw === undefined) return defaultValue
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  throw new Error(`${PREFIX} FATAL: ${name} must be "true" or "false", got: "${raw}"`)
 }
 
 function parsePort(raw: string | undefined): number {

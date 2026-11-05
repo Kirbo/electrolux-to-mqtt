@@ -17,6 +17,7 @@ async function main(): Promise<void> {
     appId: config.aptabaseAppId,
     releasesApiUrl: config.releasesApiUrl,
     outputDir: config.outputDir,
+    osBreakdown: config.osBreakdown,
   })
 
   console.log('[telemetry-backend] One-shot badge regeneration starting...')
