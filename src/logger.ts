@@ -66,8 +66,8 @@ const highlightJson = (value: unknown, colors: JsonColors): string => {
     return `{${entries.join(',')}}`
   }
   if (typeof value === 'string') return colors.green(JSON.stringify(value))
-  if (value === null) return colors.gray('null')
-  return colors.yellow(String(value))
+  if (typeof value === 'number' || typeof value === 'boolean') return colors.yellow(String(value))
+  return colors.gray('null') // the only JSON value left
 }
 
 // Same set pino-pretty strips from messages: C0/C1 controls except tab and newline. A function

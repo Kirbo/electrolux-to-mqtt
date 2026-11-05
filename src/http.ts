@@ -44,7 +44,8 @@ export class HttpError extends Error {
   describe(): string {
     let text = this.message
     if (this.status !== undefined) {
-      text += ` (${this.status}${this.statusText ? ` ${this.statusText}` : ''})`
+      const statusText = this.statusText ? ` ${this.statusText}` : ''
+      text += ` (${this.status}${statusText})`
     }
     return `${text} [${this.method} ${urlPath(this.url)}]`
   }

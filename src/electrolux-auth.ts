@@ -142,7 +142,7 @@ export class ElectroluxAuth implements Disposable {
         const delay = computeBackoffDelay(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS)
         logger.error('Error logging in:', ...describeError(error))
         logger.warn(`Retrying login in ${Math.round(delay / 1000)}s (attempt ${attempt + 1})...`)
-        await this.sleep(delay)
+        await this.sleep(delay) // NOSONAR — sequential retry: the next attempt must wait out the backoff
       }
     }
   }
@@ -165,7 +165,7 @@ export class ElectroluxAuth implements Disposable {
         }
         const delay = computeBackoffDelay(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS)
         logger.warn(`Retrying token refresh in ${Math.round(delay / 1000)}s (attempt ${attempt + 1})...`)
-        await this.sleep(delay)
+        await this.sleep(delay) // NOSONAR — sequential retry: the next attempt must wait out the backoff
       }
     }
   }

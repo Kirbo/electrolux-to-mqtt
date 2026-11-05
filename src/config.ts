@@ -208,7 +208,8 @@ export class ConfigError extends Error {
   readonly details: readonly string[]
 
   constructor(heading: string, details: readonly string[]) {
-    super(`${heading}\n${details.map((d) => `  - ${d}`).join('\n')}`)
+    const lines = details.map((d) => `  - ${d}`).join('\n')
+    super(`${heading}\n${lines}`)
     this.name = 'ConfigError'
     this.heading = heading
     this.details = details
