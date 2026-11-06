@@ -282,6 +282,8 @@ docker build test:
         - docker/Dockerfile.local
         - telemetry-backend/Dockerfile
         - scripts/docker-build-test.sh
+        # its bake file, smoke Dockerfile and in-image harness
+        - docker/build-test/**/*
         - versions.env
         # its before_script (.docker_build_base) runs ci/secrets.sh + ci/install-fnox.sh:
         # the only branch job that exercises them before a release/deploy does
@@ -297,8 +299,9 @@ docker build test:
     - when: never
   needs: []
   before_script:
-    # Keep the base's buildx setup and dhi.io login, then add bash — the image is
-    # docker:latest (alpine, sh only) and the script needs bash arrays/[[ ]].
+    # Keep the base's remote-BuildKit builder and dhi.io login, then add bash — the image
+    # is docker:*-cli (alpine, sh only) and the script needs bash arrays/[[ ]]. The script
+    # runs its smoke checks inside BuildKit (docker buildx bake), never `docker run`.
     - !reference [.docker_build_base, before_script]
     - apk add --no-cache bash
   script:

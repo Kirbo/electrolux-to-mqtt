@@ -58,6 +58,8 @@ if command -v osv-scanner >/dev/null 2>&1; then
   # shellcheck disable=SC2086 # intentional word splitting of the argument list
   osv-scanner scan $ARGS
 elif command -v docker >/dev/null 2>&1; then
+  # Maintainer fallback only: CI's audit jobs install the osv-scanner binary (template
+  # .osv_scanner) and never get here — CI jobs have no Docker engine.
   # Paths are repo-relative, so prefix them with the container mount point.
   DOCKER_ARGS=$(echo "$ARGS" | sed 's#-L \(pnpm-lock\.yaml:\)\{0,1\}#-L \1/src/#g')
   # shellcheck disable=SC2086 # intentional word splitting of the argument list

@@ -35,3 +35,6 @@ MR.md
 .osv-scan-split/
 # CI job `renovate` working/cache dir (RENOVATE_BASE_DIR)
 renovate/
+
+# scripts/docker-build-test.sh scratch dir (smoke results, stock-base Dockerfile rewrite)
+.docker-build-test/

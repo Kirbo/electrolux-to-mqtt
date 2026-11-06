@@ -6,7 +6,8 @@
 # that may read it (docs/SECRETS.md). A job's GitLab environment (ci/read, ci/sonar,
 # release/publish, release/deploy) scopes exactly ONE File-type variable to it:
 # FNOX_AGE_KEY_FILE, that tier's age identity. fnox decrypts with it; GitLab stores
-# nothing else.
+# no other secret of this repo (the BUILDKIT_* client certificates of the docker jobs
+# belong to the runner machine — docs/SECRETS.md § CI).
 #
 # GitLab masks none of these values in the job log (they are not GitLab variables):
 # never `set -x`, never echo them.

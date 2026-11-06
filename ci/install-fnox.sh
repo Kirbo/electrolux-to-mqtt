@@ -7,7 +7,7 @@
 # unpacked into $BIN (default $HOME/.local/bin). fnox reaches the project's
 # post-quantum age keys through age-plugin-pq, which ships in the age tarball.
 #
-# Works on alpine (docker:latest, alpine:latest) and Amazon Linux (sonar-scanner),
+# Works on alpine (docker:*-cli, alpine) and Amazon Linux (sonar-scanner),
 # as root or not, on x86_64 (shared runners) and aarch64 (the macOS runner's
 # Linux containers). Needs curl or wget, tar, sha256sum.
 #

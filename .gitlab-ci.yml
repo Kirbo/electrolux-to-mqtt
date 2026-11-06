@@ -29,7 +29,6 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "web"'
 
 variables:
-  DOCKER_TLS_CERTDIR: ""
   # Runner tag for every job — see `workflow:` (protected refs override it).
   MAC_DOCKER: "macos"
   # Docker Hub hosts the published images. Its credentials (and every other CI secret)
@@ -123,8 +122,23 @@ default:
 # Registry credentials come from fnox. The default tier is ci/read (pull-only token, also
 # on unprotected branches); the release jobs override the environment to release/publish
 # and set DOCKER_LOGIN_TIER: publish to log in to Docker Hub with the push password.
+#
+# No Docker engine: the jobs get no Docker socket, no DOCKER_HOST, no docker-container
+# builder and no Docker-in-Docker. They build on a BuildKit server on the Mac Mini over
+# mutual TLS (a buildx `remote` builder), reached from the job container at
+# host.docker.internal: protected refs (main, next) use the protected server (:12340,
+# client cert in the PROTECTED File variables BUILDKIT_PROTECTED_CA/_CERT/_KEY), every
+# other ref the branch server (:12341, BUILDKIT_CA/_CERT/_KEY). Their caches are separate,
+# so a branch build can never feed a release build. `docker login` and
+# `docker buildx imagetools` need no daemon: the logins land in the job's
+# ~/.docker/config.json and buildx hands them to BuildKit for each build.
+# The client certificates expire 2029-02-08 (1Password "Kirbo Mini BuildKit protected
+# mTLS" / "… branch mTLS"; rotation: docs/CONTRIBUTING.md § CI runners and BuildKit).
+#
+# The image is pinned by digest — it holds the publish tier's Docker Hub password on
+# main/next. Bump it (and every other pinned CI image) per .claude/skills/maintain.
 .docker_build_base:
-  image: docker:latest
+  image: docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb
   retry: 1
   interruptible: true
   allow_failure: false
@@ -133,11 +147,24 @@ default:
     name: ci/read
     action: prepare
   variables:
-    DOCKER_HOST: "unix:///var/run/docker.sock"
     DOCKER_LOGIN_TIER: read
   before_script:
-    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-shared-ci-builder}"
-    - docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1 || docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
+    - export BUILDER_NAME="${DOCKER_BUILDER_NAME:-builder-${CI_JOB_ID}}"
+    - |
+      if [ "${CI_COMMIT_REF_PROTECTED}" = "true" ]; then
+        BUILDKIT_PORT=12340 BK_CA="${BUILDKIT_PROTECTED_CA:-}" BK_CERT="${BUILDKIT_PROTECTED_CERT:-}" BK_KEY="${BUILDKIT_PROTECTED_KEY:-}"
+      else
+        BUILDKIT_PORT=12341 BK_CA="${BUILDKIT_CA:-}" BK_CERT="${BUILDKIT_CERT:-}" BK_KEY="${BUILDKIT_KEY:-}"
+      fi
+      if [ -z "${BK_CA}" ] || [ -z "${BK_CERT}" ] || [ -z "${BK_KEY}" ]; then
+        echo "No BuildKit client certificate for this ref (protected=${CI_COMMIT_REF_PROTECTED:-false}) — check the BUILDKIT_* File variables." >&2
+        exit 1
+      fi
+      docker buildx create --name "${BUILDER_NAME}" --driver remote \
+        --driver-opt "cacert=${BK_CA},cert=${BK_CERT},key=${BK_KEY}" \
+        "tcp://host.docker.internal:${BUILDKIT_PORT}" --use
+      docker buildx inspect --bootstrap "${BUILDER_NAME}" >/dev/null
+      unset BK_CA BK_CERT BK_KEY
     - . ci/secrets.sh
     - secrets_load read
     - echo "${DOCKERHUB_PASSWORD_READ}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin dhi.io
@@ -149,10 +176,10 @@ default:
       fi
     - unset DOCKERHUB_PASSWORD_READ
   after_script:
-    # after_script runs in a fresh shell — BUILDER_NAME exported in before_script
-    # is NOT visible here; use the pipeline-level variable directly or every job
-    # leaks a buildkit container on the runner.
-    - docker buildx rm "${DOCKER_BUILDER_NAME:-shared-ci-builder}" || true
+    # after_script runs in a fresh shell — BUILDER_NAME exported in before_script is NOT
+    # visible here, so use the pipeline-level variable. A remote builder is only a local
+    # client entry (nothing runs on the Mac per job); removing it is tidiness.
+    - docker buildx rm "${DOCKER_BUILDER_NAME:-builder-${CI_JOB_ID}}" || true
 
 ################################################################### INCLUDES ######################################################################
 
