@@ -30,13 +30,14 @@ initialise variables:
       dotenv: variables.env
   script:
     # versions.env is the single source of truth for every version: its KEY=value lines
-    # become dotenv variables for every later job (NODE_MAJOR, ALPINE_VERSION,
+    # become dotenv variables for every later job (NODE_VERSION, ALPINE_VERSION,
     # COREPACK_VERSION, GIT_CLIFF_VERSION, …) — the same names the Dockerfiles take as
     # build-args. sync-versions.sh (job `versions in sync`) guarantees the format.
     - grep -E '^[A-Z][A-Z0-9_]*=' versions.env > variables.env
     - . ./variables.env
-    # NODE_IMAGE_TAG: the <major>-alpine<ver> tag of the CI job images (stock node).
-    - echo "NODE_IMAGE_TAG=${NODE_MAJOR:?}-alpine${ALPINE_VERSION:?}" >> variables.env
+    # NODE_CI_IMAGE: the node job image — stock node:<NODE_VERSION>-alpine<ALPINE_VERSION>,
+    # pinned by digest (scripts/check-version-sync.mjs holds every node job to it).
+    - echo "NODE_CI_IMAGE=node:${NODE_VERSION:?}-alpine${ALPINE_VERSION:?}@${NODE_STOCK_DIGEST:?}" >> variables.env
     - cat variables.env
 
 bump version:
@@ -96,7 +97,7 @@ generate release notes:
 
 install dependencies:
   stage: init
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   interruptible: true
   extends: .rules_node_changes_or_schedule
   cache:
@@ -114,7 +115,7 @@ install dependencies:
   before_script:
     - sh scripts/bootstrap-pnpm.sh
     - pnpm config set store-dir .pnpm-store
-    - echo "Node major from versions.env = ${NODE_MAJOR}"
+    - echo "Node from versions.env = ${NODE_VERSION} (${NODE_CI_IMAGE})"
     - node --version
     - npm --version
     - pnpm --version

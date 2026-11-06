@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:latest
 
-# NODE_MAJOR / ALPINE_VERSION / COREPACK_VERSION build-args — REQUIRED, no defaults.
-# The values come from versions.env (mise exports it; compose passes them through).
-# The build fails loudly if one is unset.
-ARG NODE_MAJOR
+# NODE_VERSION / ALPINE_VERSION / NODE_STOCK_DIGEST / COREPACK_VERSION build-args —
+# REQUIRED, no defaults. The values come from versions.env (mise exports it; compose
+# passes them through). The build fails loudly if one is unset. The base is pinned by
+# digest: the tag documents the version, the digest is what is pulled.
+ARG NODE_VERSION
 ARG ALPINE_VERSION
-ARG NODE_IMAGE=node:${NODE_MAJOR:?"NODE_MAJOR build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG NODE_STOCK_DIGEST
+ARG NODE_IMAGE=node:${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}@${NODE_STOCK_DIGEST:?"NODE_STOCK_DIGEST build-arg is required"}
 
 # Use official Node image
 FROM ${NODE_IMAGE}

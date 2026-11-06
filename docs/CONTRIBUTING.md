@@ -40,21 +40,29 @@ Every toolchain and base-image version lives in **one file, `versions.env`** at 
 
 | Consumer | How it reads `versions.env` |
 |---|---|
-| mise (local toolchain) | `[env] _.file = "versions.env"`; `[tools]` use `{{ env.NODE_MAJOR }}` etc. |
-| Dockerfiles + compose | build-args with the **same names** (`NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`) — no defaults, fail loudly when unset; an activated mise shell exports them |
-| GitLab CI | job `initialise variables` turns its lines into dotenv variables for every later job |
+| mise (local toolchain) | `[env] _.file = "versions.env"`; `[tools]` use `{{ env.NODE_VERSION }}` etc.; the committed `mise.lock` records each tool's URL + sha256 per platform, and `mise install --locked` installs only what it names |
+| Dockerfiles + compose | build-args with the **same names** (`NODE_VERSION`, `ALPINE_VERSION`, `NODE_DHI_DIGEST` / `NODE_DHI_DEV_DIGEST` or `NODE_STOCK_DIGEST`, `COREPACK_VERSION`) — no defaults, fail loudly when unset; every `FROM` is `<image>:<NODE_VERSION>-alpine<ALPINE_VERSION>@<digest>`; an activated mise shell exports them |
+| GitLab CI | job `initialise variables` turns its lines into dotenv variables for every later job, plus `NODE_CI_IMAGE` (`node:<NODE_VERSION>-alpine<ALPINE_VERSION>@<NODE_STOCK_DIGEST>`), the image of every Node job |
 | Scripts, git hooks, deploy jobs | `set -a; . ./versions.env; set +a` (or a `sed` lookup) |
 
-Keys: `NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (these change the shipped images), `FNOX_VERSION`, `AGE_VERSION` (+ their sha256 pins for CI), `GIT_CLIFF_VERSION`, `RENOVATE_VERSION` (dev/CI tooling only). Each line carries a `# renovate:` annotation on the line above it so Renovate can track it. The minimum mise is `min_version` in `mise.toml`.
+Keys: `NODE_VERSION` (exact, e.g. `26.13.0`), `NODE_DHI_DIGEST`, `NODE_DHI_DEV_DIGEST`, `NODE_STOCK_DIGEST` (the three Node images' index digests), `ALPINE_VERSION`, `COREPACK_VERSION`, `PNPM_VERSION` (these change the shipped images), `FNOX_VERSION`, `AGE_VERSION` (+ their sha256 pins for CI), `GIT_CLIFF_VERSION`, `RENOVATE_VERSION` (dev/CI tooling only). Each version line carries a `# renovate:` annotation on the line above it so Renovate can track it; the digests and sha256 pins have none (Renovate cannot compute them). The minimum mise is `min_version` in `mise.toml`.
 
-After editing `versions.env`, run `pnpm sync:versions`. It writes the derived copies into `package.json` — `engines.node` and `@types/node` in both packages, `packageManager` (with Corepack's integrity hash), `alpineVersion`, `corepackVersion` — and re-resolves the lockfiles when the `@types/node` range moves. Never edit those fields by hand; CI job `versions in sync` fails on any drift. They exist because `package.json` is the release-gated path: bumping Node, Alpine, Corepack or pnpm changes `package.json` and so cuts a release, while a dev-tool bump (fnox, age, git-cliff) does not. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
+Every version is exact, never a bare major or a range. Bumping one:
+
+1. Edit `versions.env`.
+2. A mise tool (node, pnpm, fnox, age, git-cliff): run `mise lock`. `mise.lock` is committed (`[settings] lockfile_platforms` linux-x64 / linux-arm64 / macos-arm64 / windows-x64, `minimum_release_age = "1d"`): `mise install` takes every tool's URL and sha256 from it, and `mise install --locked` refuses a version the lock does not name. (Locked mode is not a project setting: it would also lock your global mise tools inside this directory.) CI does not use mise: its jobs run digest-pinned images and verify the fnox/age downloads against the sha256 pins.
+3. Node or Alpine: confirm the `<NODE_VERSION>-alpine<ALPINE_VERSION>` tag exists on both `dhi.io/node` (with its `-dev` variant) and stock `node`, then `bash scripts/node-images.sh pin` (needs a `dhi.io` login). Run it again whenever you want a rebuilt base (dhi.io rebuilds its images for CVE fixes).
+4. `pnpm sync:versions`, then `mise install`.
+
+`pnpm sync:versions` writes the derived copies into `package.json` — `engines.node` (`>=<NODE_VERSION> <next major>`) and `@types/node` in both packages, `packageManager` (with Corepack's integrity hash), `alpineVersion`, `corepackVersion`, `nodeImageDigest` and `nodeDevImageDigest` (the prod image's bases) — and re-resolves the lockfiles when the `@types/node` range moves. Then `scripts/check-version-sync.mjs` checks that nothing else can drift: every `mise.toml` tool reads an exact `versions.env` version and `mise.lock` locks exactly that version with a sha256 for every listed platform, every Dockerfile `FROM` is the digest-pinned image built from `versions.env`, and every Node CI job runs `${NODE_CI_IMAGE}`. Never edit the derived fields by hand; CI job `versions in sync` fails on any drift, and CI job `docker build test` runs `scripts/node-images.sh check` (each pinned digest must be an image of exactly `NODE_VERSION`). The derived fields exist because `package.json` is the release-gated path: bumping Node, Alpine, Corepack, pnpm or a prod base digest changes `package.json` and so cuts a release, while a dev-tool bump (fnox, age, git-cliff) does not. `@types/node` is listed under `updateConfig.ignoreDependencies` in both `pnpm-workspace.yaml` files so `pnpm update --latest` cannot drag it ahead of the runtime.
 
 ### Dependency updates
 
 Renovate opens weekly merge requests against `next` (`renovate.json`): one grouped MR for npm minor/patch updates, one per npm major, and one per `versions.env` entry. Releases younger than 14 days are held back (security fixes skip the wait). It runs as the CI job `renovate` from a pipeline schedule — there is no hosted bot. Some MRs need a manual step that Renovate cannot do; the MR description says which:
 
-- **pnpm, Corepack, Node, Alpine** feed derived `package.json` fields: check out the branch, run `pnpm sync:versions`, commit and push (CI job `versions in sync` fails until then).
-- **fnox, age** carry sha256 pins: copy the new release assets' digests into the `*_SHA256_LINUX_*` lines (CI fails `install-fnox: sha256 mismatch` until then).
+- **pnpm, Corepack, Node, Alpine** feed derived `package.json` fields: check out the branch, run `mise lock` (node, pnpm), `bash scripts/node-images.sh pin` (Node, Alpine) and `pnpm sync:versions`, commit and push (CI jobs `versions in sync` / `docker build test` fail until then).
+- **fnox, age** carry sha256 pins: copy the new release assets' digests into the `*_SHA256_LINUX_*` lines (CI fails `install-fnox: sha256 mismatch` until then), and run `mise lock`.
+- **git-cliff**: run `mise lock`.
 
 `/maintain` (see [AI-Assisted Development](#ai-assisted-development)) covers what Renovate does not: vulnerability triage, overrides, breakage fixes.
 
@@ -72,7 +80,7 @@ The pipeline runs on the maintainer's Mac Mini GitLab runners (Linux containers,
 - **No Docker engine in jobs.** There is no Docker socket, no `DOCKER_HOST`, no `docker-container` builder and no Docker-in-Docker. `.docker_build_base` (`.gitlab-ci.yml`) creates a buildx `remote` builder against a BuildKit server on the Mac, over mutual TLS. Protected refs (`$CI_COMMIT_REF_PROTECTED == "true"`) use `tcp://host.docker.internal:12340` with the protected File variables `BUILDKIT_PROTECTED_CA` / `_CERT` / `_KEY`. Every other ref uses `:12341` with `BUILDKIT_CA` / `_CERT` / `_KEY`. The two servers have separate CAs and caches, so a branch build never feeds a release build. `docker login` and `docker buildx imagetools` need no daemon. A job that must *run* an image does it inside BuildKit, like `docker build test` below, or as a GitLab `services:` entry. It never uses `docker run`, `--load` or `docker pull`.
 - **`docker build test` / `pnpm docker:test`** (`scripts/docker-build-test.sh`) bakes `docker/build-test/docker-bake.hcl`. Each `smoke-<image>` target builds the image as a linked `target:` context, then runs `docker/build-test/smoke.Dockerfile` on top of it. That Dockerfile has one `RUN --network=none` step: `smoke.mjs` runs each check (the default CMD, the legacy `node dist/index.js` entry, the legacy HEALTHCHECK commands), and the script asserts on the exported output. This works with any buildx builder: Docker Desktop's default one locally, the remote server in CI.
 - **Smoke-step cache rule.** BuildKit replays cached `RUN` steps, so a test step could "pass" on an old result. Every `RUN` whose result IS the test takes a per-run cache-bust build arg (`SMOKE_RUN_ID`), sits in a stage listed in the bake target's `no-cache-filter`, and writes the per-run value into its result. The script rejects any result without this run's id.
-- **Pinned CI images.** A job image not derived from `versions.env` is pinned as `name:tag@sha256:<digest>`: `docker:*-cli`, `alpine` and `sonarsource/sonar-scanner-cli`. Pick a release at least 7 days old and take the digest from `docker buildx imagetools inspect <name:tag>`. Every `alpine` job carries the same pin, so bump them together. The tools that secret-holding jobs add (`curl`, `jq`, `openssh-client`) come from `apk add` on the pinned Alpine; apk verifies those packages' signatures. `/maintain` covers the bumps.
+- **Pinned CI images.** Every Node job runs `${NODE_CI_IMAGE}`, the digest-pinned stock image from `versions.env` (above). A job image not derived from `versions.env` is pinned as `name:tag@sha256:<digest>`: `docker:*-cli`, `alpine` and `sonarsource/sonar-scanner-cli`. Pick a release at least 7 days old and take the digest from `docker buildx imagetools inspect <name:tag>`. Every `alpine` job carries the same pin, so bump them together. The tools that secret-holding jobs add (`curl`, `jq`, `openssh-client`) come from `apk add` on the pinned Alpine; apk verifies those packages' signatures. `/maintain` covers the bumps.
 - **Certificates.** The BuildKit client certificates expire **2029-02-08**. They live in 1Password ("Kirbo Mini BuildKit protected mTLS" / "Kirbo Mini BuildKit branch mTLS"). To rotate, issue a new pair from the CA kept in the item (the Mac Mini's BuildKit runbook has the commands), restart that BuildKit server, then replace the project's six `BUILDKIT_*` File variables.
 - **Local-only `docker run`.** Two helpers fall back to `docker run` when their tool is missing: `scripts/osv-scan.sh` (CI's `audit` jobs install the `osv-scanner` binary, so they never reach it) and `scripts/mr-description.sh` (never run in CI). Both are maintainer conveniences.
 
@@ -85,7 +93,7 @@ Release, deploy and SonarCloud secrets live in `fnox.toml` as age ciphertext, re
 These steps make every environment resolve the same Node, pnpm, and image versions. Skipping any of them is the usual cause of "works on my machine".
 
 1. **Install mise, at least the `min_version` in `mise.toml`.** Follow https://mise.jdx.dev/getting-started.html, then check with `mise --version`. An older mise refuses to load the project config with `mise version X is required`. Upgrade it the way you installed it (`brew upgrade mise`, `mise self-update`, …).
-2. **Activate mise in your shell.** This is required, not optional: `mise.toml` `[env]` loads `versions.env`, exporting `NODE_MAJOR`, `ALPINE_VERSION` and `COREPACK_VERSION`, which `pnpm dev:docker`, `pnpm backend:docker` and every `docker compose` build need. Shims alone do **not** export them (only an activated shell does), so compose fails with `NODE_MAJOR is not set`.
+2. **Activate mise in your shell.** This is required, not optional: `mise.toml` `[env]` loads `versions.env`, exporting `NODE_VERSION`, `ALPINE_VERSION`, the image digests and `COREPACK_VERSION`, which `pnpm dev:docker`, `pnpm backend:docker` and every `docker compose` build need. Shims alone do **not** export them (only an activated shell does), so compose fails with `NODE_VERSION is not set`.
    ```bash
    echo 'eval "$(mise activate zsh)"' >> ~/.zshrc     # zsh
    echo 'eval "$(mise activate bash)"' >> ~/.bashrc   # bash
@@ -97,7 +105,7 @@ These steps make every environment resolve the same Node, pnpm, and image versio
    cd electrolux-to-mqtt
    mise trust
    ```
-4. **Install the toolchain**, and re-run it after pulling a commit that changes `versions.env`:
+4. **Install the toolchain** (exactly the versions and checksums in `mise.lock`), and re-run it after pulling a commit that changes `versions.env`:
    ```bash
    mise install
    ```
@@ -106,12 +114,12 @@ These steps make every environment resolve the same Node, pnpm, and image versio
 7. **Verify:**
    ```bash
    mise doctor                              # "No problems found", activated: yes
-   node --version                           # major == versions.env NODE_MAJOR
+   node --version                           # == versions.env NODE_VERSION
    pnpm --version                           # == versions.env PNPM_VERSION
-   echo "$NODE_MAJOR $ALPINE_VERSION"       # both set, e.g. "26 3.24"
+   echo "$NODE_VERSION $ALPINE_VERSION"     # both set, e.g. "26.13.0 3.24"
    ```
 
-**Without mise** (not recommended): install the Node major from `versions.env`, run `npm i -g corepack && corepack enable && corepack install` for pnpm (Node 25+ no longer bundles Corepack), and export the build-args yourself before any compose command:
+**Without mise** (not recommended): install the exact Node version from `versions.env`, run `npm i -g corepack && corepack enable && corepack install` for pnpm (Node 25+ no longer bundles Corepack), and export the build-args yourself before any compose command:
 ```bash
 set -a; . ./versions.env; set +a
 ```

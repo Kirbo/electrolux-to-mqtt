@@ -3,18 +3,22 @@
 #
 # Source of truth: versions.env (repo root). Derived (never hand-edit):
 #   package.json + telemetry-backend/package.json
-#     engines.node                  ">=<NODE_MAJOR>.0.0 <<NODE_MAJOR+1>.0.0"
-#     devDependencies['@types/node'] major = NODE_MAJOR (an in-major floor is kept)
+#     engines.node                  ">=<NODE_VERSION> <<major+1>.0.0"
+#     devDependencies['@types/node'] major = NODE_VERSION's major (an in-major floor is kept)
 #   package.json only
 #     packageManager                pnpm@<PNPM_VERSION>+sha512.… (via Corepack, which adds the hash)
 #     alpineVersion                 <ALPINE_VERSION>
 #     corepackVersion               <COREPACK_VERSION>
+#     nodeImageDigest               <NODE_DHI_DIGEST>      (the prod image's base)
+#     nodeDevImageDigest            <NODE_DHI_DEV_DIGEST>  (the prod image's build stages)
 # These copies exist because package.json is the release-gated CI path (an image-
 # affecting bump must cut a release) and because Corepack/engine-strict read
 # package.json. Lockfiles are re-resolved when the @types/node range moves.
 #
 # Also validates versions.env: it is SOURCED as shell by CI, hooks and scripts, so
-# only plain KEY=value lines are allowed.
+# only plain KEY=value lines are allowed. Then scripts/check-version-sync.mjs checks
+# that mise.toml + mise.lock, the Dockerfiles and the CI files all take Node (and the
+# other tools) from versions.env, exactly pinned and locked — so they cannot drift.
 #
 # Idempotent. The CI job `versions in sync` runs it on a bare alpine image (bash,
 # git, nodejs — no pnpm) and fails on any resulting `git diff`.
@@ -25,12 +29,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSIONS="${REPO_ROOT}/versions.env"
-REQUIRED=(NODE_MAJOR ALPINE_VERSION COREPACK_VERSION PNPM_VERSION)
+REQUIRED=(NODE_VERSION NODE_DHI_DIGEST NODE_DHI_DEV_DIGEST NODE_STOCK_DIGEST ALPINE_VERSION COREPACK_VERSION PNPM_VERSION)
 
 # ── 0. Validate + load versions.env ──────────────────────────────────────────
-bad=$(grep -nvE '^([[:space:]]*(#.*)?|[A-Z][A-Z0-9_]*=[A-Za-z0-9._-]+)$' "${VERSIONS}" || true)
+bad=$(grep -nvE '^([[:space:]]*(#.*)?|[A-Z][A-Z0-9_]*=[A-Za-z0-9._:-]+)$' "${VERSIONS}" || true)
 if [[ -n "${bad}" ]]; then
-  echo "ERROR: versions.env allows only comments, blank lines and KEY=value (value: [A-Za-z0-9._-]):" >&2
+  echo "ERROR: versions.env allows only comments, blank lines and KEY=value (value: [A-Za-z0-9._:-]):" >&2
   echo "${bad}" >&2
   exit 1
 fi
@@ -44,16 +48,26 @@ for key in "${REQUIRED[@]}"; do
     exit 1
   fi
 done
-if ! [[ "${NODE_MAJOR}" =~ ^[0-9]+$ ]]; then
-  echo "ERROR: NODE_MAJOR must be a bare major (got '${NODE_MAJOR}')" >&2
+if ! [[ "${NODE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: NODE_VERSION must be an exact X.Y.Z (got '${NODE_VERSION}')" >&2
   exit 1
 fi
+for key in NODE_DHI_DIGEST NODE_DHI_DEV_DIGEST NODE_STOCK_DIGEST; do
+  if ! [[ "${!key}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "ERROR: ${key} must be sha256:<64 hex> (got '${!key}')" >&2
+    exit 1
+  fi
+done
+NODE_MAJOR="${NODE_VERSION%%.*}"
+export NODE_MAJOR
 
-ENGINES=">=${NODE_MAJOR}.0.0 <$((NODE_MAJOR + 1)).0.0"
+# engines.node: the pinned release up to the next major — engine-strict (.npmrc) then
+# refuses an older Node, the major line stays the supported range.
+ENGINES=">=${NODE_VERSION} <$((NODE_MAJOR + 1)).0.0"
 types_node() { node -p "require('${REPO_ROOT}/package.json').devDependencies?.['@types/node'] ?? ''"; }
 TYPES_BEFORE=$(types_node)
 
-echo "Syncing from versions.env: node=${NODE_MAJOR} alpine=${ALPINE_VERSION} corepack=${COREPACK_VERSION} pnpm=${PNPM_VERSION}"
+echo "Syncing from versions.env: node=${NODE_VERSION} alpine=${ALPINE_VERSION} corepack=${COREPACK_VERSION} pnpm=${PNPM_VERSION}"
 
 # Run a command that rewrites $1 and report whether it changed.
 changed() {
@@ -75,7 +89,8 @@ write_pkg() {
   # shellcheck disable=SC2016 # single-quoted on purpose: a JS template literal, not shell
   PKG_PATH="$1" ROOT_PKG="$2" ENGINES="${ENGINES}" node -e '
     const fs = require("fs");
-    const { PKG_PATH, ROOT_PKG, ENGINES, NODE_MAJOR, ALPINE_VERSION, COREPACK_VERSION } = process.env;
+    const { PKG_PATH, ROOT_PKG, ENGINES, NODE_MAJOR, ALPINE_VERSION, COREPACK_VERSION, NODE_DHI_DIGEST, NODE_DHI_DEV_DIGEST } =
+      process.env;
     const pkg = JSON.parse(fs.readFileSync(PKG_PATH, "utf8"));
     pkg.engines = { ...pkg.engines, node: ENGINES };
     const typesNode = pkg.devDependencies?.["@types/node"];
@@ -85,6 +100,8 @@ write_pkg() {
     if (ROOT_PKG === "1") {
       pkg.alpineVersion = ALPINE_VERSION;
       pkg.corepackVersion = COREPACK_VERSION;
+      pkg.nodeImageDigest = NODE_DHI_DIGEST;
+      pkg.nodeDevImageDigest = NODE_DHI_DEV_DIGEST;
     }
     fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + "\n");
   '
@@ -126,5 +143,8 @@ if [[ "${TYPES_BEFORE}" != "${TYPES_AFTER}" ]]; then
     echo "  pnpm not available — skipping lockfile re-resolve; run 'pnpm install' in both packages."
   fi
 fi
+
+# ── 4. mise / Dockerfiles / CI take every version from versions.env ─────────
+node "${REPO_ROOT}/scripts/check-version-sync.mjs" "${REPO_ROOT}"
 
 echo "Done."

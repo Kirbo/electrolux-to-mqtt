@@ -2,7 +2,11 @@
 #
 # This file holds NO version numbers: every version lives in versions.env (the single
 # source of truth for the whole repo), loaded below via [env] _.file and read by
-# [tools] through {{ env.* }}. Bump a version there, then run `pnpm sync:versions`.
+# [tools] through {{ env.* }}. Every one of them is an EXACT X.Y.Z, and mise.lock
+# (committed) records each tool's download URL + sha256 for every platform in
+# `lockfile_platforms`. Bump a version there, then run `mise lock` and
+# `pnpm sync:versions` — scripts/check-version-sync.mjs (CI job `versions in sync`)
+# fails a fuzzy pin, a lock that disagrees with versions.env, or a missing platform.
 #
 # Requires a trusted config (`mise trust`).
 
@@ -11,14 +15,14 @@
 min_version = "2026.9.9"
 
 [env]
-# Exports NODE_MAJOR, ALPINE_VERSION, COREPACK_VERSION, … into an ACTIVATED shell
+# Exports NODE_VERSION, ALPINE_VERSION, COREPACK_VERSION, … into an ACTIVATED shell
 # (`mise activate`) and `mise exec`. `docker compose` passes them through as the
 # build-args of the same names — compose/Dockerfiles have no defaults and fail loudly
 # when they are unset.
 _.file = "versions.env"
 
 [tools]
-node = "{{ env.NODE_MAJOR }}"
+node = "{{ env.NODE_VERSION }}"
 # Aqua backend (GitHub-release binary) on purpose: pnpm 12+ ships a native binary
 # fetched by an npm postinstall hook, and mise's idiomatic package.json support
 # hardcodes the npm: backend, which installs with --ignore-scripts and leaves a
@@ -33,6 +37,22 @@ age = "{{ env.AGE_VERSION }}"
 # `scripts/mr-description.sh` and the release-notes job agree.
 git-cliff = "{{ env.GIT_CLIFF_VERSION }}"
 
+[settings]
+# mise.lock: `mise install` takes each tool's URL + sha256 from it, so a re-published
+# upstream asset fails the checksum instead of being installed; `mise install --locked`
+# (or MISE_LOCKED=1) additionally refuses anything the lock does not name. Locked mode
+# is NOT set here: as a project setting it would also lock the user's GLOBAL mise tools
+# inside this directory (any `foo = "latest"` there stops resolving). After a bump,
+# `mise lock` refreshes the lock.
+lockfile = true
+# Every platform a contributor installs the toolchain on. CI does not use mise (its
+# jobs run digest-pinned images and verify their downloads against versions.env).
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
+# Release-age quarantine for a version mise RESOLVES (`mise latest`, `mise upgrade
+# --bump`): nothing published in the last day. Exact pins are not filtered; pick
+# bumps at least a day old (Renovate holds them for 14 days).
+minimum_release_age = "1d"
+
 [tasks.sync-versions]
-description = "Derive package.json versions (engines, @types/node, packageManager, alpineVersion, corepackVersion) from versions.env"
+description = "Derive package.json versions (engines, @types/node, packageManager, alpineVersion, corepackVersion, node image digests) from versions.env"
 run = "bash scripts/sync-versions.sh"

@@ -3,7 +3,8 @@
 ### Build and publish the Docker image
 # docker buildx build \
 #   --platform linux/arm64,linux/amd64 \
-#   --build-arg NODE_MAJOR --build-arg ALPINE_VERSION --build-arg COREPACK_VERSION \  # from versions.env, REQUIRED
+#   --build-arg NODE_VERSION --build-arg ALPINE_VERSION --build-arg COREPACK_VERSION \  # from versions.env, REQUIRED
+#   --build-arg NODE_DHI_DIGEST --build-arg NODE_DHI_DEV_DIGEST \                       # from versions.env, REQUIRED
 #   --build-arg VERSION=$(git describe --tags --always) \
 #   --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
 #   --build-arg VCS_REF=$(git rev-parse --short HEAD) \
@@ -15,12 +16,18 @@
 # Check the base images from: https://hub.docker.com/hardened-images/catalog/dhi/node/images
 
 # Define build arguments
-# NODE_MAJOR / ALPINE_VERSION / COREPACK_VERSION: REQUIRED, no defaults — the values
-# come from versions.env (CI loads it as dotenv, mise exports it locally); a missing
-# one fails the build loudly.
-ARG NODE_MAJOR
+# NODE_VERSION / ALPINE_VERSION / NODE_DHI_DIGEST / NODE_DHI_DEV_DIGEST /
+# COREPACK_VERSION: REQUIRED, no defaults — the values come from versions.env (CI loads
+# it as dotenv, mise exports it locally); a missing one fails the build loudly. Both
+# base images are pinned by digest: the tag documents the version, the digest is what
+# BuildKit pulls (scripts/node-images.sh refreshes the digests).
+ARG NODE_VERSION
 ARG ALPINE_VERSION
-ARG NODE_IMAGE=dhi.io/node:${NODE_MAJOR:?"NODE_MAJOR build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG NODE_DHI_DIGEST
+ARG NODE_DHI_DEV_DIGEST
+ARG NODE_TAG=${NODE_VERSION:?"NODE_VERSION build-arg is required"}-alpine${ALPINE_VERSION:?"ALPINE_VERSION build-arg is required"}
+ARG NODE_IMAGE=dhi.io/node:${NODE_TAG}@${NODE_DHI_DIGEST:?"NODE_DHI_DIGEST build-arg is required"}
+ARG NODE_DEV_IMAGE=dhi.io/node:${NODE_TAG}-dev@${NODE_DHI_DEV_DIGEST:?"NODE_DHI_DEV_DIGEST build-arg is required"}
 ARG COREPACK_VERSION
 ARG VERSION=development
 ARG BUILD_DATE
@@ -29,7 +36,7 @@ ARG VCS_REF
 ################## Stamp the version
 # Node runs src/*.ts directly (built-in type stripping) — there is no compile step.
 # This stage only writes the release version into package.json (read at runtime).
-FROM ${NODE_IMAGE}-dev AS builder
+FROM ${NODE_DEV_IMAGE} AS builder
 
 ARG VERSION
 ARG NODE_IMAGE
@@ -53,7 +60,7 @@ RUN if [ -n "${VERSION}" ]; then \
 
 
 ################## Install production dependencies + the source
-FROM ${NODE_IMAGE}-dev AS purge
+FROM ${NODE_DEV_IMAGE} AS purge
 
 # Set environment for production
 ENV NODE_ENV=production

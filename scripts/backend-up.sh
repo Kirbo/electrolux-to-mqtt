@@ -21,7 +21,7 @@ set -a
 set +a
 
 docker build --network host -f telemetry-backend/Dockerfile \
-  --build-arg NODE_MAJOR --build-arg ALPINE_VERSION --build-arg COREPACK_VERSION \
+  --build-arg NODE_VERSION --build-arg ALPINE_VERSION --build-arg NODE_STOCK_DIGEST --build-arg COREPACK_VERSION \
   -t telemetry-backend:local .
 
 if [ "${1:-}" = "-d" ]; then

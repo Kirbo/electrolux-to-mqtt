@@ -21,4 +21,4 @@ FROM ${NODE_IMAGE}
 
 Compose uses the same modifier and handles spaces fine: `${NODE_VERSION:?NODE_VERSION is not set - activate mise ...}`.
 
-**How to apply:** any new Dockerfile/compose stage gets the same pattern — no version defaults; test both paths (`docker build` without the arg → loud error; `docker build --check --build-arg ...` → clean). `scripts/docker-build-test.sh` and CI pass the args (`NODE_MAJOR`, `ALPINE_VERSION`, `COREPACK_VERSION`) from `versions.env`.json` `engines.node` (+ `alpineVersion`); see [[dep_alpine_hardened_images]].
+**How to apply:** any new Dockerfile/compose stage gets the same pattern — no version defaults; test both paths (`docker build` without the arg → loud error; `docker build --check --build-arg ...` → clean). `scripts/docker-build-test.sh` and CI pass the args (`NODE_VERSION`, `ALPINE_VERSION`, `NODE_*_DIGEST`, `COREPACK_VERSION`) from `versions.env`.json` `engines.node` (+ `alpineVersion`); see [[dep_alpine_hardened_images]].

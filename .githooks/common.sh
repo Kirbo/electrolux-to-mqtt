@@ -65,15 +65,15 @@ find_node() {
     return 0
   fi
   
-  # Node major from versions.env (the single source of truth)
+  # Exact Node version from versions.env (the single source of truth)
   NODE_VERSION=""
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/versions.env" ]; then
-    NODE_VERSION=$(sed -n 's/^NODE_MAJOR=//p' "$REPO_ROOT/versions.env")
+    NODE_VERSION=$(sed -n 's/^NODE_VERSION=//p' "$REPO_ROOT/versions.env")
   fi
 
   # mise is the project toolchain: prefer its shims, then the versioned install
-  # (installs/node/<major>/bin — the major dir is a symlink mise maintains).
+  # (installs/node/<version>/bin).
   if [ -x "$HOME/.local/share/mise/shims/node" ]; then
     echo "$HOME/.local/share/mise/shims/node"
     return 0

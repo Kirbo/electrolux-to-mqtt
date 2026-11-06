@@ -49,8 +49,15 @@
       "matchDepNames": ["pnpm", "corepack", "node", "alpine"],
       "labels": ["dependencies", "toolchain"],
       "prBodyNotes": [
-        "⚠️ Derived fields: check out this branch, run `pnpm sync:versions` (then `mise install`), commit, and push. For node/alpine, first confirm the `<NODE_MAJOR>-alpine<ALPINE_VERSION>` tag exists on BOTH `dhi.io/node` and stock `node`."
+        "⚠️ Derived fields: check out this branch, run `mise lock` (node/pnpm are locked in `mise.lock`), then `pnpm sync:versions` and `mise install`, commit, and push. For node/alpine, first confirm the `<NODE_VERSION>-alpine<ALPINE_VERSION>` tag exists on BOTH `dhi.io/node` and stock `node`, then run `bash scripts/node-images.sh pin` (needs a dhi.io login) — the image digests in `versions.env` must move with it (CI job `docker build test` fails until then)."
       ]
+    },
+    {
+      "description": "git-cliff is locked in mise.lock: CI job `versions in sync` fails until it is refreshed.",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["orhunp/git-cliff"],
+      "labels": ["dependencies", "toolchain"],
+      "prBodyNotes": ["⚠️ Check out this branch, run `mise lock`, commit, and push."]
     },
     {
       "description": "fnox / age carry sha256 pins that Renovate cannot compute: CI fails `install-fnox: sha256 mismatch` until they are updated.",
@@ -58,7 +65,7 @@
       "matchDepNames": ["jdx/fnox", "FiloSottile/age"],
       "labels": ["dependencies", "toolchain"],
       "prBodyNotes": [
-        "⚠️ Update the matching `*_SHA256_LINUX_X86_64` / `*_SHA256_LINUX_AARCH64` pins in `versions.env` from the release assets' digests, then run `mise install`."
+        "⚠️ Update the matching `*_SHA256_LINUX_X86_64` / `*_SHA256_LINUX_AARCH64` pins in `versions.env` from the release assets' digests, run `mise lock` (CI job `versions in sync` fails until `mise.lock` agrees), then `mise install`."
       ]
     }
   ],

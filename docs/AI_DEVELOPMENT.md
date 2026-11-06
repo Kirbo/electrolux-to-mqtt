@@ -55,7 +55,7 @@ Skills are predefined workflows invoked as slash commands in Claude Code:
 | `/engineer` | TDD workflow + per-change-type file checklists. The agent follows it in-loop when implementing, refactoring, or fixing bugs in `src/`, `tests/`, `docker/`, or `telemetry-backend/`. |
 | `/audit` | Full codebase audit: lint, typecheck, tests, then manual review against the checklist. The agent runs it in-loop and reports findings; it only fixes on explicit approval. |
 | `/audit-fix` | Full pipeline, all in-loop: audit → save report to `audit-report.md` → triage → fix → verify → user approves commit batches → commit. |
-| `/maintain` | Update all dependencies and pnpm, finish open Renovate MRs, fix any breakage from updates; bump the digest-pinned CI job images and watch the CI rules (runner routing, remote BuildKit, smoke-test cache-bust, BuildKit certificate expiry). |
+| `/maintain` | Update all dependencies and pnpm, finish open Renovate MRs, fix any breakage from updates; refresh the Node base-image digests (`scripts/node-images.sh pin`) and `mise.lock`, bump the digest-pinned CI job images and watch the CI rules (runner routing, remote BuildKit, smoke-test cache-bust, BuildKit certificate expiry). |
 | `/merge-request` | Sync the single `next` → `main` merge request: recomputes the CalVer title from today's date (so it rolls `2026.7.3` → `2026.8.0` across a month boundary), regenerates the description as the full `main..next` changelog, then updates the open MR or creates one. Safe to re-run after every batch of commits. Never pushes, commits, or merges. |
 
 ### Ad-hoc prompting

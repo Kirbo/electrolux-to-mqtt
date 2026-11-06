@@ -5,7 +5,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.local
       args:
-        - NODE_MAJOR=${NODE_MAJOR:?NODE_MAJOR is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
+        - NODE_VERSION=${NODE_VERSION:?NODE_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
+        - NODE_STOCK_DIGEST=${NODE_STOCK_DIGEST:?NODE_STOCK_DIGEST is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
         - ALPINE_VERSION=${ALPINE_VERSION:?ALPINE_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
         - COREPACK_VERSION=${COREPACK_VERSION:?COREPACK_VERSION is not set - activate mise (it loads versions.env) or source it (set -a; . ./versions.env; set +a)}
     mem_limit: 128mb

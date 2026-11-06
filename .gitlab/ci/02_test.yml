@@ -13,7 +13,7 @@
 
 test:
   stage: test
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   interruptible: true
   extends: .rules_node_changes
   cache:
@@ -49,7 +49,7 @@ test:
 
 lint:
   stage: test
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   interruptible: true
   extends: .rules_node_changes
   cache:
@@ -76,7 +76,7 @@ lint:
 
 typecheck:
   stage: test
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   interruptible: true
   extends: .rules_node_changes
   cache:
@@ -104,7 +104,7 @@ typecheck:
 audit:
   extends: .osv_scanner
   stage: test
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   needs:
     - job: initialise variables
       artifacts: true
@@ -131,7 +131,7 @@ audit:
 audit:telemetry-backend:
   extends: .osv_scanner
   stage: test
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   needs:
     - job: initialise variables
       artifacts: true
@@ -210,7 +210,7 @@ sonarcloud-check:
 
 telemetry-backend test:
   stage: test
-  image: node:${NODE_IMAGE_TAG}
+  image: ${NODE_CI_IMAGE}
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -243,9 +243,18 @@ versions in sync:
       changes:
         - package.json
         - telemetry-backend/package.json
-        # the scripts this job runs — editing it must re-run the drift check
+        # the scripts this job runs — editing either must re-run the drift check
         - scripts/sync-versions.sh
+        - scripts/check-version-sync.mjs
         - versions.env
+        # check-version-sync.mjs: mise pins + lock, the Dockerfiles' FROM, the CI node images
+        - mise.toml
+        - mise.lock
+        - docker/Dockerfile
+        - docker/Dockerfile.local
+        - telemetry-backend/Dockerfile
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
       when: on_success
     - when: never
   needs: []
@@ -284,6 +293,8 @@ docker build test:
         - scripts/docker-build-test.sh
         # its bake file, smoke Dockerfile and in-image harness
         - docker/build-test/**/*
+        # the base-image digest check below
+        - scripts/node-images.sh
         - versions.env
         # its before_script (.docker_build_base) runs ci/secrets.sh + ci/install-fnox.sh:
         # the only branch job that exercises them before a release/deploy does
@@ -305,5 +316,7 @@ docker build test:
     - !reference [.docker_build_base, before_script]
     - apk add --no-cache bash
   script:
+    # versions.env's Node image digests must be images of exactly NODE_VERSION.
+    - sh scripts/node-images.sh check
     - bash scripts/docker-build-test.sh all
   allow_failure: false

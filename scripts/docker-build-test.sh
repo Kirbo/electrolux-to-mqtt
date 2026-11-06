@@ -33,10 +33,13 @@ set -a
 # shellcheck source=/dev/null
 . ./versions.env
 set +a
-: "${NODE_MAJOR:?versions.env has no NODE_MAJOR}" "${ALPINE_VERSION:?versions.env has no ALPINE_VERSION}" \
+: "${NODE_VERSION:?versions.env has no NODE_VERSION}" "${ALPINE_VERSION:?versions.env has no ALPINE_VERSION}" \
+  "${NODE_DHI_DIGEST:?versions.env has no NODE_DHI_DIGEST}" "${NODE_DHI_DEV_DIGEST:?versions.env has no NODE_DHI_DEV_DIGEST}" \
+  "${NODE_STOCK_DIGEST:?versions.env has no NODE_STOCK_DIGEST}" \
   "${COREPACK_VERSION:?versions.env has no COREPACK_VERSION}"
 ALPINE="${ALPINE_VERSION}"
-DHI_BASE="dhi.io/node:${NODE_MAJOR}-alpine${ALPINE}"
+DHI_BASE="dhi.io/node:${NODE_VERSION}-alpine${ALPINE}@${NODE_DHI_DIGEST}"
+STOCK_BASE="node:${NODE_VERSION}-alpine${ALPINE}@${NODE_STOCK_DIGEST}"
 BAKE_FILE="docker/build-test/docker-bake.hcl"
 # Gitignored scratch dir under the repo (bake writes local outputs there without an
 # fs entitlement): the smoke results and the stock-base rewrite of the prod Dockerfile.
@@ -205,15 +208,15 @@ build_prod() {
   elif dhi_login_via_fnox && dhi_reachable; then
     echo "  NOTE: logged in to dhi.io with fnox profile \`read\` (temporary Docker config)."
   else
-    echo "  NOTE: no access to dhi.io (not logged in, no fnox \`read\` access) — substituting stock node:${NODE_MAJOR}-alpine${ALPINE}."
+    echo "  NOTE: no access to dhi.io (not logged in, no fnox \`read\` access) — substituting stock ${STOCK_BASE}."
     echo "        Context/COPY/build logic is still verified; the hardened base is not."
     mkdir -p "${WORK_DIR}"
-    sed -E "s|^FROM \\\$\{NODE_IMAGE\}-dev|FROM node:${NODE_MAJOR}-alpine${ALPINE}|; s|^FROM \\\$\{NODE_IMAGE\}|FROM node:${NODE_MAJOR}-alpine${ALPINE}|" \
+    sed -E "s|^FROM \\\$\{NODE_(DEV_)?IMAGE\}|FROM ${STOCK_BASE}|" \
       "${dockerfile}" > "${WORK_DIR}/prod.Dockerfile"
     dockerfile="${WORK_DIR}/prod.Dockerfile"
   fi
   # The version build-args are required by the Dockerfile (no defaults); in the
-  # substituted stock-image path NODE_MAJOR/ALPINE_VERSION are simply unused.
+  # substituted stock-image path the dhi.io ones are simply unused.
   export PROD_DOCKERFILE="${dockerfile}"
 
   load_default_cmd "${dockerfile}" || { FAILED=1; return; }

@@ -345,7 +345,7 @@ cp docker/docker-compose.local.example.yml docker/docker-compose.local.yml
 # Modify as needed
 code docker/docker-compose.local.yml
 
-# Run the stack — the build-args (NODE_MAJOR, ALPINE_VERSION, COREPACK_VERSION) come
+# Run the stack — the build-args (NODE_VERSION, ALPINE_VERSION, NODE_STOCK_DIGEST, COREPACK_VERSION) come
 # from versions.env, exported by an ACTIVATED mise shell; without it, see
 # docs/CONTRIBUTING.md ("Without mise") — the build fails loudly when unset
 docker compose -f docker/docker-compose.local.yml down ; docker compose -f docker/docker-compose.local.yml up --build

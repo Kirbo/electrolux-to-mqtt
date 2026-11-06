@@ -10,8 +10,11 @@
 # SMOKE_OUT (inside the repo — bake needs no fs entitlement there).
 
 # versions.env — the Dockerfiles' required build-args (no defaults anywhere).
-variable "NODE_MAJOR" {}
+variable "NODE_VERSION" {}
 variable "ALPINE_VERSION" {}
+variable "NODE_DHI_DIGEST" {}
+variable "NODE_DHI_DEV_DIGEST" {}
+variable "NODE_STOCK_DIGEST" {}
 variable "COREPACK_VERSION" {}
 # The prod Dockerfile; the script points it at a stock-node rewrite when dhi.io is
 # unreachable.
@@ -26,9 +29,12 @@ variable "SMOKE_OUT" {}
 target "_image" {
   context = "."
   args = {
-    NODE_MAJOR       = NODE_MAJOR
-    ALPINE_VERSION   = ALPINE_VERSION
-    COREPACK_VERSION = COREPACK_VERSION
+    NODE_VERSION        = NODE_VERSION
+    ALPINE_VERSION      = ALPINE_VERSION
+    NODE_DHI_DIGEST     = NODE_DHI_DIGEST
+    NODE_DHI_DEV_DIGEST = NODE_DHI_DEV_DIGEST
+    NODE_STOCK_DIGEST   = NODE_STOCK_DIGEST
+    COREPACK_VERSION    = COREPACK_VERSION
   }
 }
 

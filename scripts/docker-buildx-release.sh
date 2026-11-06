@@ -19,7 +19,8 @@
 # promoted-stable version (e.g. 2026.6.4, no bN) would previously derive
 # 'stable' from the version string; now it always gets 'beta' from the image.
 #
-# Inputs (env): BUILDER_NAME, NODE_MAJOR + ALPINE_VERSION + COREPACK_VERSION (versions.env, via the CI dotenv), CI_COMMIT_SHORT_SHA, CI_COMMIT_BRANCH,
+# Inputs (env): BUILDER_NAME, NODE_VERSION + ALPINE_VERSION + NODE_DHI_DIGEST + NODE_DHI_DEV_DIGEST + COREPACK_VERSION
+#   (versions.env, via the CI dotenv), CI_COMMIT_SHORT_SHA, CI_COMMIT_BRANCH,
 #   DOCKER_REGISTRY, DOCKERHUB_REPOSITORY; VERSION from build.env.
 set -eu
 
@@ -58,7 +59,9 @@ esac
 # shellcheck disable=SC2086
 docker buildx build \
   --builder "${BUILDER_NAME}" \
-  --build-arg NODE_MAJOR="${NODE_MAJOR:?}" \
+  --build-arg NODE_VERSION="${NODE_VERSION:?}" \
+  --build-arg NODE_DHI_DIGEST="${NODE_DHI_DIGEST:?}" \
+  --build-arg NODE_DHI_DEV_DIGEST="${NODE_DHI_DEV_DIGEST:?}" \
   --build-arg ALPINE_VERSION="${ALPINE_VERSION:?}" \
   --build-arg COREPACK_VERSION="${COREPACK_VERSION:?}" \
   --build-arg VERSION=${VERSION} \

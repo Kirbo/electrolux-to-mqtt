@@ -22,4 +22,4 @@ Tag format for prod: `24-alpine3.XX` (non-dev, non-fips, non-sfw).
 
 **Why:** catalog is paginated; Node 24 appears on page 2 as of June 2026.
 
-**How to apply:** When Alpine bumps, edit `versions.env` `ALPINE_VERSION` and run `pnpm sync:versions` (writes the derived package.json `alpineVersion`, which trips the release gate — see [[project_versions_env]]). Every Node image (dhi prod + stock local/backend/CI) is `<NODE_MAJOR>-alpine<ALPINE_VERSION>`, so the tag must exist on BOTH dhi.io and Docker Hub `node`.
+**How to apply:** When Alpine bumps, edit `versions.env` `ALPINE_VERSION` and run `pnpm sync:versions` (writes the derived package.json `alpineVersion`, which trips the release gate — see [[project_versions_env]]). Every Node image (dhi prod + stock local/backend/CI) is `<NODE_VERSION>-alpine<ALPINE_VERSION>@<digest>` (versions.env `NODE_*_DIGEST`, refreshed by `bash scripts/node-images.sh pin`), so the tag must exist on BOTH dhi.io (+ `-dev`) and Docker Hub `node`.
