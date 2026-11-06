@@ -233,7 +233,7 @@ telemetry-backend test:
 
 versions in sync:
   stage: test
-  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+  image: registry.gitlab.com/kirbodev/agentic-coding/ci-images/alpine-node:20261106-c7036b18@sha256:b43f7cdb01ea3e596783fd5fedc72a91508952bff6b5f4eb9c2e01e3851c13cb
   interruptible: true
   cache: []
   rules:
@@ -259,7 +259,6 @@ versions in sync:
     - when: never
   needs: []
   before_script:
-    - apk add --no-cache bash git nodejs
   script:
     - bash scripts/sync-versions.sh
     - |
@@ -273,6 +272,8 @@ versions in sync:
 
 docker build test:
   extends: .docker_build_base
+  # The base's docker:*-cli plus bash (the script needs bash arrays/[[ ]]): ci-images docker-cli.
+  image: registry.gitlab.com/kirbodev/agentic-coding/ci-images/docker-cli:20261106-c7036b18@sha256:38c279c970b876d7a3abb0452adc1e21a58615795b5716fee1d549bb143b7204
   stage: test
   # Runs in the TEST stage, before build/release, and on every branch including
   # main/next — the point is to fail before a release ships an image that is
@@ -310,11 +311,9 @@ docker build test:
     - when: never
   needs: []
   before_script:
-    # Keep the base's remote-BuildKit builder and dhi.io login, then add bash — the image
-    # is docker:*-cli (alpine, sh only) and the script needs bash arrays/[[ ]]. The script
-    # runs its smoke checks inside BuildKit (docker buildx bake), never `docker run`.
+    # The base's remote-BuildKit builder and dhi.io login. The script runs its smoke checks
+    # inside BuildKit (docker buildx bake), never `docker run`.
     - !reference [.docker_build_base, before_script]
-    - apk add --no-cache bash
   script:
     # versions.env's Node image digests must be images of exactly NODE_VERSION.
     - sh scripts/node-images.sh check

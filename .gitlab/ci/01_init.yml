@@ -42,7 +42,7 @@ initialise variables:
 
 bump version:
   stage: init
-  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+  image: registry.gitlab.com/kirbodev/agentic-coding/ci-images/alpine-tools:20261106-c7036b18@sha256:781dd3d2ab58988bfe4d24d0096c2b69e0ccd4bc73d95106fe97134b2db623e9
   interruptible: true
   extends: .rules_code_changes
   cache: []
@@ -53,7 +53,6 @@ bump version:
       - sonar-project.properties
     expire_in: never
   before_script:
-    - apk add --no-cache git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git remote set-url origin "$CI_REPOSITORY_URL" || echo 'Not a git repository; skipping'
     # Fail hard: computing a CalVer from a stale local tag list could reuse an
