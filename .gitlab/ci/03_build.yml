@@ -38,7 +38,7 @@ try to build docker images:
     - sh scripts/docker-buildx-release.sh try
 
 generate changelog:
-  image: kirbownz/combine-changelogs:latest
+  image: kirbownz/combine-changelogs:1.5.0@sha256:3cbad5e930a42ace6ce187099226aa4215b5bd53b4aa51822f9538bc7034a340
   stage: build
   interruptible: true
   allow_failure: false
