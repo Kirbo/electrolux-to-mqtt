@@ -29,6 +29,7 @@
 - [esbuild vulns GHSA-gv7w-rqvm-qjhr + GHSA-g7r4-m6w7-qqqr](vuln_esbuild_GHSA-gv7w-rqvm-qjhr.md) — override esbuild>=0.28.1 in both pnpm-workspace.yaml; remove when vite/tsx/vitest bump floor
 - [dhi.io/node hardened image tags](dep_alpine_hardened_images.md) — prod 26-alpine3.24 since 2026-11-02; no Alpine 3.25 yet; catalog paginated ?page=N, revisit on Alpine bump
 - [TypeScript 7 native compiler adopted](dep_typescript7_native.md) — 7.0.2 applied 2026-07-24; static Go binaries, Alpine-safe; re-verify checklist on future TS majors
+- [CI on remote BuildKit, no Docker engine](ci_remote_buildkit.md) — since 2026-11-06: buildx remote builder over mTLS, `$MAC_DOCKER` routing, docker:test smoke runs as a BuildKit RUN step; gotchas (no shell in dhi → exec-form RUN, TOKEN-named ARGs warn, bake fs entitlements, bash 3.2)
 - [.dockerignore is an allowlist](dep_dockerignore_allowlist.md) — `*` then `!path`; anything that must reach an image needs an explicit `!entry` or it's silently absent; verify with a real build
 - [Dockerfile required-arg guard placement](dep_dockerfile_required_arg_guard.md) — `${VAR:?"msg"}` must be quoted AND live in an ARG line, never FROM (space tokenization); NODE_VERSION has no defaults anywhere
 - [vitest 4 vi.doMock race](dep_vitest_domock_race.md) — doMock + dynamic import flaky; use vi.hoisted mutable mock object + resetModules; loop single file 10x to catch

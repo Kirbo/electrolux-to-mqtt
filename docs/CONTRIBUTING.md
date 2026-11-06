@@ -64,6 +64,18 @@ One-time setup (maintainer):
 2. `pnpm secrets:rotate-ci renovate` — generates the `ci-renovate` identity, re-encrypts to it, stores it in GitLab (environment `ci/renovate`, protected). Commit `fnox.toml`.
 3. CI/CD → Pipeline schedules: weekly on `main`, variable `SCHEDULE=RENOVATE`.
 
+### CI runners and BuildKit
+
+The pipeline runs on the maintainer's Mac Mini GitLab runners (Linux containers, aarch64).
+
+- **Runner routing.** Every job takes `tags: [$MAC_DOCKER]`, through `default:`. `MAC_DOCKER` is `macos` (the shared runner) unless `workflow:` sets `macos-protected` for the `main` and `next` pipelines. That is "Kirbo Mini Protected": ref-protected, with its own cache, and it runs protected-ref jobs only. No job names either tag literally.
+- **No Docker engine in jobs.** There is no Docker socket, no `DOCKER_HOST`, no `docker-container` builder and no Docker-in-Docker. `.docker_build_base` (`.gitlab-ci.yml`) creates a buildx `remote` builder against a BuildKit server on the Mac, over mutual TLS. Protected refs (`$CI_COMMIT_REF_PROTECTED == "true"`) use `tcp://host.docker.internal:12340` with the protected File variables `BUILDKIT_PROTECTED_CA` / `_CERT` / `_KEY`. Every other ref uses `:12341` with `BUILDKIT_CA` / `_CERT` / `_KEY`. The two servers have separate CAs and caches, so a branch build never feeds a release build. `docker login` and `docker buildx imagetools` need no daemon. A job that must *run* an image does it inside BuildKit, like `docker build test` below, or as a GitLab `services:` entry. It never uses `docker run`, `--load` or `docker pull`.
+- **`docker build test` / `pnpm docker:test`** (`scripts/docker-build-test.sh`) bakes `docker/build-test/docker-bake.hcl`. Each `smoke-<image>` target builds the image as a linked `target:` context, then runs `docker/build-test/smoke.Dockerfile` on top of it. That Dockerfile has one `RUN --network=none` step: `smoke.mjs` runs each check (the default CMD, the legacy `node dist/index.js` entry, the legacy HEALTHCHECK commands), and the script asserts on the exported output. This works with any buildx builder: Docker Desktop's default one locally, the remote server in CI.
+- **Smoke-step cache rule.** BuildKit replays cached `RUN` steps, so a test step could "pass" on an old result. Every `RUN` whose result IS the test takes a per-run cache-bust build arg (`SMOKE_RUN_ID`), sits in a stage listed in the bake target's `no-cache-filter`, and writes the per-run value into its result. The script rejects any result without this run's id.
+- **Pinned CI images.** A job image not derived from `versions.env` is pinned as `name:tag@sha256:<digest>`: `docker:*-cli`, `alpine` and `sonarsource/sonar-scanner-cli`. Pick a release at least 7 days old and take the digest from `docker buildx imagetools inspect <name:tag>`. Every `alpine` job carries the same pin, so bump them together. The tools that secret-holding jobs add (`curl`, `jq`, `openssh-client`) come from `apk add` on the pinned Alpine; apk verifies those packages' signatures. `/maintain` covers the bumps.
+- **Certificates.** The BuildKit client certificates expire **2029-02-08**. They live in 1Password ("Kirbo Mini BuildKit protected mTLS" / "Kirbo Mini BuildKit branch mTLS"). To rotate, issue a new pair from the CA kept in the item (the Mac Mini's BuildKit runbook has the commands), restart that BuildKit server, then replace the project's six `BUILDKIT_*` File variables.
+- **Local-only `docker run`.** Two helpers fall back to `docker run` when their tool is missing: `scripts/osv-scan.sh` (CI's `audit` jobs install the `osv-scanner` binary, so they never reach it) and `scripts/mr-description.sh` (never run in CI). Both are maintainer conveniences.
+
 ### Secrets (maintainers only)
 
 Release, deploy and SonarCloud secrets live in `fnox.toml` as age ciphertext, readable only by the maintainer key and the CI tier that needs each one. Contributors need no key: tests, lint and image builds run without one. Setup, commands and the CI design are in [`docs/SECRETS.md`](SECRETS.md).
@@ -104,7 +116,7 @@ These steps make every environment resolve the same Node, pnpm, and image versio
 set -a; . ./versions.env; set +a
 ```
 
-Other prerequisites: **Git**, plus **Docker** for `pnpm dev:docker` / `pnpm docker:test`. Optionally install `osv-scanner` (`brew install osv-scanner`) for `pnpm osv-scan`, which otherwise falls back to Docker.
+Other prerequisites: **Git**, plus **Docker** for `pnpm dev:docker` / `pnpm docker:test` (`docker:test` needs only a buildx builder — Docker Desktop's default one is fine). Optionally install `osv-scanner` (`brew install osv-scanner`) for `pnpm osv-scan`, which otherwise falls back to Docker.
 
 ### Installation
 

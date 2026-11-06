@@ -1,6 +1,6 @@
 # Secrets
 
-Every secret this repo needs, for local maintainer work and for GitLab CI, lives in **`fnox.toml`** as [age](https://age-encryption.org) ciphertext and is read with [fnox](https://fnox.jdx.dev). Nothing else stores secrets: no committed `.env.enc`, no plaintext `.env` in git, and GitLab holds only one age identity per CI tier. fnox and age are pinned in [`versions.env`](../versions.env) like every other tool.
+Every secret this repo needs, for local maintainer work and for GitLab CI, lives in **`fnox.toml`** as [age](https://age-encryption.org) ciphertext and is read with [fnox](https://fnox.jdx.dev). Nothing else stores secrets: no committed `.env.enc`, no plaintext `.env` in git, and GitLab holds only one age identity per CI tier (plus the Mac Mini's BuildKit client certificates — runner credentials, not repo secrets; see [CI](#ci)). fnox and age are pinned in [`versions.env`](../versions.env) like every other tool.
 
 Contributors need none of this. The app has no build-time secrets, and every check, test and image build except the release and deploy jobs runs without a key.
 
@@ -64,6 +64,7 @@ A job's `environment:` (`action: prepare`) selects its tier, and so the one `FNO
 
 - **Images:** registry logins pipe the password straight into `docker login --password-stdin`.
 - **Deploy:** the SSH key goes into `ssh-agent`, never a file. The host key is pinned (`SSH_KNOWN_HOSTS`, no `ssh-keyscan`). The backend's `.env` is piped over ssh into a 0600 file on the server, so it is never written on the runner.
+- **BuildKit (image builds):** the one value GitLab holds outside fnox. The docker jobs build on the Mac Mini's BuildKit servers over mutual TLS, with client certificates in GitLab File variables: `BUILDKIT_CA` / `BUILDKIT_CERT` / `BUILDKIT_KEY` (branch server, unprotected) and `BUILDKIT_PROTECTED_CA` / `_CERT` / `_KEY` (protected server, **protected** variables). They are credentials of the runner machine, shared by every project on it and kept in 1Password ("Kirbo Mini BuildKit protected mTLS" / "… branch mTLS"), not secrets of this repo. GitLab's protected flag is also what keeps the protected server's certificate out of branch pipelines — fnox could not: `docker build test` reads only the unprotected `ci/read` tier, also on `main`/`next`. They expire **2029-02-08**; rotation: [CONTRIBUTING § CI runners and BuildKit](CONTRIBUTING.md#ci-runners-and-buildkit).
 
 ## Rotation and leaks
 
