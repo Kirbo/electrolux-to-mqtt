@@ -39,7 +39,7 @@ build and deploy docker images:
 
 create gitlab release:
   stage: release
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -112,7 +112,7 @@ build and deploy beta docker images:
 
 create gitlab prerelease:
   stage: release
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -144,6 +144,10 @@ create gitlab prerelease:
     # Same API call as "create gitlab release" — one shared script.
     - sh scripts/create-gitlab-release.sh
 
+# Jobs that hold a release/deploy secret run in digest-pinned images (alpine here,
+# docker:*-cli for the image pushes); the few tools they add come from `apk add`, whose
+# packages apk verifies against the pinned image's signing keys. Bump pins per /maintain.
+#
 # Deploy tier (environment release/deploy → its FNOX_AGE_KEY_FILE): the server address,
 # SSH key and pinned host key come from fnox profile `deploy`. The key goes straight into
 # ssh-agent (never a file on the runner); the host key is pinned (no ssh-keyscan TOFU).
@@ -172,7 +176,7 @@ create gitlab prerelease:
 
 deploy telemetry-backend:
   stage: release
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   rules:
     - if: $SCHEDULE
       when: never
@@ -209,7 +213,7 @@ deploy telemetry-backend:
 # beta badge went stale after a beta-only release.)
 refresh telemetry badges:
   stage: release
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   rules:
     - if: $SCHEDULE
       when: never
@@ -245,7 +249,7 @@ refresh telemetry badges:
 
 prepare dockerhub readme:
   stage: release
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   interruptible: true
   rules:
     - if: $SCHEDULE
@@ -269,7 +273,7 @@ prepare dockerhub readme:
 
 update dockerhub description:
   stage: release
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   interruptible: true
   environment:
     name: release/publish

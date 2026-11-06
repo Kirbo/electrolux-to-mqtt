@@ -177,7 +177,7 @@ sonarcloud-check:
   interruptible: true
   allow_failure: false
   image:
-    name: sonarsource/sonar-scanner-cli:latest
+    name: sonarsource/sonar-scanner-cli:12.3.0.4285_8.1.0@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7
     entrypoint: [""]
   cache:
     key: sonar-${CI_DEFAULT_BRANCH}
@@ -233,7 +233,7 @@ telemetry-backend test:
 
 versions in sync:
   stage: test
-  image: alpine:latest
+  image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   interruptible: true
   cache: []
   rules:
