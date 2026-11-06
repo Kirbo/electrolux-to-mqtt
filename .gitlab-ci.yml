@@ -8,12 +8,21 @@ stages:
   - build
   - release
 
+# MAC_DOCKER — which Mac Mini Docker runner the jobs use (`default: tags` below). The
+# protected `main` / `next` pipelines get `macos-protected` ("Kirbo Mini Protected":
+# ref-protected, its own cache, protected-ref jobs only); every other pipeline keeps the
+# shared `macos` runner (the global default under `variables:`). No job names either tag
+# itself — always `$MAC_DOCKER`.
 workflow:
   rules:
     # Run pipeline for pushes to default branch
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+      variables:
+        MAC_DOCKER: macos-protected
     # Run pipeline for pushes to next (pre-release) branch
     - if: '$CI_COMMIT_BRANCH == "next"'
+      variables:
+        MAC_DOCKER: macos-protected
     # Run pipeline for all other branch pushes
     - if: "$CI_COMMIT_BRANCH"
     # Run pipeline for web/api triggers
@@ -21,6 +30,8 @@ workflow:
 
 variables:
   DOCKER_TLS_CERTDIR: ""
+  # Runner tag for every job — see `workflow:` (protected refs override it).
+  MAC_DOCKER: "macos"
   # Docker Hub hosts the published images. Its credentials (and every other CI secret)
   # live in fnox.toml, decrypted per job tier — see ci/secrets.sh and docs/SECRETS.md.
   DOCKER_REGISTRY: docker.io
@@ -32,10 +43,10 @@ variables:
 
 # Default configuration for all jobs
 default:
-  # Prefer private runner (macos tag), fallback to shared runners if unavailable
-  # Jobs without the macos tag will use shared runners automatically
+  # The owner's Mac Mini runners (Linux containers, aarch64): `macos` (shared) or
+  # `macos-protected` on main/next — chosen by MAC_DOCKER in `workflow:`.
   tags:
-    - macos
+    - $MAC_DOCKER
 
 ################################################################### SHARED RULES ######################################################################
 
